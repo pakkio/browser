@@ -703,7 +703,7 @@ class EpubRenderer {
                         <img src="/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(epubData.coverImage)}" 
                              alt="Book cover" 
                              style="max-width: 120px; max-height: 160px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3);" 
-                             onerror="this.style.display='none'">
+                             onerror="this.parentNode.innerHTML='<div style=&quot;width: 120px; height: 160px; background: rgba(78, 205, 196, 0.1); border: 2px dashed #4ecdc4; border-radius: 8px; display: flex; align-items: center; justify-content: center; color: #4ecdc4; font-size: 0.8rem; text-align: center; padding: 10px;&quot;>Cover image<br>not found</div>'">
                     </div>
                 `;
             }
@@ -868,6 +868,17 @@ class EpubRenderer {
                             el.style.margin = '20px auto';
                             el.style.borderRadius = '8px';
                             el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
+                            
+                            // Fix EPUB image paths
+                            const src = el.src || el.getAttribute('src');
+                            if (src && !src.startsWith('http') && !src.startsWith('/')) {
+                                // Convert relative EPUB image paths to use our images endpoint
+                                const filename = src.split('/').pop();
+                                el.src = `/images/${filename}?epub=${encodeURIComponent(filePath)}`;
+                                el.onerror = function() {
+                                    this.style.display = 'none';
+                                };
+                            }
                         }
                         if (el.tagName === 'BLOCKQUOTE') {
                             el.style.borderLeft = '4px solid #4ecdc4';
