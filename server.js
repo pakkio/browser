@@ -282,9 +282,99 @@ async function extractFromCBR(filePath, page, res) {
         const targetFile = imageFiles[page - 1];
         const extracted = extractor.extract({ files: [targetFile.name] });
         
-        const file = extracted.files[0];
-        if (!file) {
-            throw new Error('Could not extract file');
+        console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Full extracted object:`, JSON.stringify(extracted, null, 2));
+        console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Extracted keys:`, Object.keys(extracted));
+        
+        // Handle Generator object for files
+        let filesArray = [];
+        if (extracted.files) {
+            if (Array.isArray(extracted.files)) {
+                filesArray = extracted.files;
+            } else if (extracted.files[Symbol.iterator]) {
+                filesArray = Array.from(extracted.files);
+            }
+        }
+        
+        console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Files array length:`, filesArray.length);
+        
+        // Try different ways to access the file data
+        let fileBuffer = null;
+        
+        if (filesArray.length > 0) {
+            const file = filesArray[0];
+            console.log(`[${new Date().toISOString()}] 📖 CBR extraction: File object keys:`, Object.keys(file));
+            console.log(`[${new Date().toISOString()}] 📖 CBR extraction: File type:`, typeof file);
+            
+            // Check various possible properties for file data
+            if (file.extraction) {
+                console.log(`[${new Date().toISOString()}] ✅ CBR extraction: Using file.extraction property (${file.extraction.length} bytes)`);
+                fileBuffer = Buffer.from(file.extraction);
+            } else if (file.fileData) {
+                console.log(`[${new Date().toISOString()}] ✅ CBR extraction: Using file.fileData property (${file.fileData.length} bytes)`);
+                fileBuffer = Buffer.from(file.fileData);
+            } else if (file.data) {
+                console.log(`[${new Date().toISOString()}] ✅ CBR extraction: Using file.data property (${file.data.length} bytes)`);
+                fileBuffer = Buffer.from(file.data);
+            } else if (file instanceof Uint8Array || file instanceof Buffer) {
+                console.log(`[${new Date().toISOString()}] ✅ CBR extraction: File is direct buffer (${file.length} bytes)`);
+                fileBuffer = Buffer.from(file);
+            }
+        }
+        
+        // If files array is empty, try to use extractToMem
+        if (!fileBuffer && filesArray.length === 0) {
+            console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Files array is empty, trying extractToMem`);
+            try {
+                const memExtracted = extractor.extractToMem({ files: [targetFile.name] });
+                console.log(`[${new Date().toISOString()}] 📖 CBR extraction: extractToMem result:`, Object.keys(memExtracted));
+                
+                if (memExtracted.files && memExtracted.files.length > 0) {
+                    const memFile = memExtracted.files[0];
+                    console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Memory file keys:`, Object.keys(memFile));
+                    
+                    if (memFile.extraction) {
+                        fileBuffer = Buffer.from(memFile.extraction);
+                    } else if (memFile.fileData) {
+                        fileBuffer = Buffer.from(memFile.fileData);
+                    } else if (memFile.data) {
+                        fileBuffer = Buffer.from(memFile.data);
+                    }
+                }
+            } catch (memError) {
+                console.log(`[${new Date().toISOString()}] ⚠️ CBR extraction: extractToMem failed:`, memError.message);
+            }
+        }
+        
+        // If we still don't have data, check if files were extracted to disk
+        if (!fileBuffer) {
+            console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Checking for extracted files on disk`);
+            const extractedFilePath = path.join(__dirname, targetFile.name);
+            console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Looking for file at: ${extractedFilePath}`);
+            
+            try {
+                if (fs.existsSync(extractedFilePath)) {
+                    console.log(`[${new Date().toISOString()}] ✅ CBR extraction: Found extracted file on disk`);
+                    fileBuffer = fs.readFileSync(extractedFilePath);
+                    console.log(`[${new Date().toISOString()}] ✅ CBR extraction: Read ${fileBuffer.length} bytes from disk`);
+                    
+                    // Clean up the extracted file
+                    try {
+                        fs.unlinkSync(extractedFilePath);
+                        console.log(`[${new Date().toISOString()}] 🧹 CBR extraction: Cleaned up extracted file`);
+                    } catch (cleanupError) {
+                        console.log(`[${new Date().toISOString()}] ⚠️ CBR extraction: Failed to cleanup file: ${cleanupError.message}`);
+                    }
+                } else {
+                    console.log(`[${new Date().toISOString()}] ❌ CBR extraction: File not found on disk`);
+                }
+            } catch (diskError) {
+                console.log(`[${new Date().toISOString()}] ❌ CBR extraction: Error reading from disk: ${diskError.message}`);
+            }
+        }
+        
+        if (!fileBuffer) {
+            console.error(`[${new Date().toISOString()}] ❌ CBR extraction: No recognizable data format found after all attempts`);
+            throw new Error('Could not extract file data');
         }
         
         const ext = path.extname(targetFile.name).toLowerCase();
@@ -297,7 +387,8 @@ async function extractFromCBR(filePath, page, res) {
         }[ext] || 'image/jpeg';
         
         res.setHeader('Content-Type', mimeType);
-        res.send(Buffer.from(file.extraction));
+        res.send(fileBuffer);
+        
     } catch (error) {
         throw error;
     }
