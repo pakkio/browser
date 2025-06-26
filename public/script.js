@@ -1,36 +1,100 @@
-
+console.log('FileRenderer type:', typeof FileRenderer);
 document.addEventListener('DOMContentLoaded', () => {
     const fileList = document.getElementById('file-list');
     const contentCode = document.getElementById('content-code');
     const contentOther = document.getElementById('content-other');
+    const fileDetails = document.getElementById('file-details');
+    const fileTypeFilter = document.getElementById('file-type-filter');
     let currentPath = '';
+    let currentFiles = [];
+    let filteredFiles = [];
+    let selectedIndex = -1;
+    const fileRenderer = new FileRenderer();
 
     function loadFiles(path) {
+        console.log('Loading files for path:', path);
         fetch(`/api/browse?path=${encodeURIComponent(path)}`)
-            .then(response => response.json())
-            .then(data => {
-                fileList.innerHTML = '';
-                if (path !== '') {
-                    const parentLi = document.createElement('li');
-                    parentLi.textContent = '..';
-                    parentLi.classList.add('parent-dir');
-                    parentLi.addEventListener('click', () => {
-                        currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
-                        loadFiles(currentPath);
-                    });
-                    fileList.appendChild(parentLi);
+            .then(response => {
+                console.log('Response status:', response.status);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                data.forEach(file => {
+                return response.json();
+            })
+            .then(data => {
+                console.log('Received data:', data);
+                currentFiles = data.files;
+                displayFiles(data.files, path);
+                updateCurrentPathDisplay(data.currentPath);
+            })
+            .catch(error => {
+                console.error('Error loading files:', error);
+                document.getElementById('current-path-display').textContent = 'Error loading directory';
+                fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
+            });
+    }
+    
+    function displayFiles(data, path) {
+        fileList.innerHTML = '';
+        
+        if (path !== '') {
+            const parentLi = document.createElement('li');
+            parentLi.textContent = '..';
+            parentLi.classList.add('parent-dir');
+            parentLi.addEventListener('click', () => {
+                currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                loadFiles(currentPath);
+            });
+            fileList.appendChild(parentLi);
+        }
+        
+        const selectedFilter = fileTypeFilter.value;
+        // Show loading indicator
+        // Hide loading indicator after filtering
+        // (Place this line at the end of the filtering process)
+        document.getElementById('loading-indicator').style.display = 'none';
+        // Perform filtering
+        filteredFiles = selectedFilter === 'all' ? data : data.filter(file => {
+            if (file.isDirectory) {
+                return selectedFilter === 'directory';
+            }
+            
+            const extension = file.name.split('.').pop().toLowerCase();
+            const fileType = getFileTypeFromExtension(extension);
+            return fileType === selectedFilter;
+        });
+        
+        selectedIndex = -1;
+        
+        filteredFiles.forEach((file, index) => {
                     const li = document.createElement('li');
-                    li.textContent = file.name;
+                    li.classList.add('file-item');
+                    li.setAttribute('data-index', index);
+                    
+                    const fileIcon = document.createElement('span');
+                    fileIcon.classList.add('file-icon');
+                    
+                    const fileName = document.createElement('span');
+                    fileName.classList.add('file-name');
+                    fileName.textContent = file.name;
+                    
+                    const fileSize = document.createElement('span');
+                    fileSize.classList.add('file-size');
+                    if (file.size) {
+                        fileSize.textContent = formatFileSize(file.size);
+                    }
+                    
+                    li.appendChild(fileIcon);
+                    li.appendChild(fileName);
+                    li.appendChild(fileSize);
                     
                     // Add file type data attribute for styling
                     if (file.isDirectory) {
-                        li.textContent += '/';
                         li.setAttribute('data-type', 'directory');
                         li.addEventListener('click', () => {
                             currentPath = path ? `${path}/${file.name}` : file.name;
                             loadFiles(currentPath);
+                            updateDetails(null);
                         });
                     } else {
                         const extension = file.name.split('.').pop().toLowerCase();
@@ -45,151 +109,197 @@ document.addEventListener('DOMContentLoaded', () => {
                             li.setAttribute('data-type', 'video');
                         } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
                             li.setAttribute('data-type', 'audio');
-                        } else if (['txt', 'md', 'js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs'].includes(extension)) {
+                        } else if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
                             li.setAttribute('data-type', 'code');
+                        } else if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) {
+                            li.setAttribute('data-type', 'text');
+                        } else if (['csv', 'xlsx', 'xls', 'ods'].includes(extension)) {
+                            li.setAttribute('data-type', 'table');
+                        } else if (['pptx', 'ppt', 'odp'].includes(extension)) {
+                            li.setAttribute('data-type', 'presentation');
+                        } else if (extension === 'srt') {
+                            li.setAttribute('data-type', 'subtitle');
+                        } else if (extension === 'epub') {
+                            li.setAttribute('data-type', 'ebook');
+                        } else {
+                            li.setAttribute('data-type', 'file');
                         }
                         
-                        li.addEventListener('click', () => showContent(path, file.name));
+                        li.addEventListener('click', () => {
+                            const filePath = path ? `${path}/${file.name}` : file.name;
+                            selectFile(index, filePath, file.name);
+                            showContent(path, file.name);
+                            updateDetails(file);
+                        });
+                        
                     }
                     fileList.appendChild(li);
                 });
-            });
     }
 
     function showContent(path, fileName) {
         const filePath = path ? `${path}/${fileName}` : fileName;
-        const extension = fileName.split('.').pop().toLowerCase();
-
-        contentCode.innerHTML = '';
-        contentOther.innerHTML = '';
-        contentCode.parentElement.style.display = 'none';
-        contentOther.style.display = 'none';
-
-        if (['txt', 'md', 'js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs'].includes(extension)) {
-            fetch(`/files?path=${encodeURIComponent(filePath)}`)
-                .then(response => response.text())
-                .then(text => {
-                    contentCode.textContent = text;
-                    contentCode.className = `language-${extension}`;
-                    hljs.highlightElement(contentCode);
-                    contentCode.parentElement.style.display = 'block';
-                });
-        } else if (extension === 'pdf') {
-            showPdfContent(filePath);
-        } else if (['cbz', 'cbr'].includes(extension)) {
-            showComicContent(filePath);
-        } else if (['jpg', 'jpeg', 'png', 'gif'].includes(extension)) {
-            const img = document.createElement('img');
-            img.src = `/files?path=${encodeURIComponent(filePath)}`;
-            img.style.maxWidth = '100%';
-            contentOther.appendChild(img);
-            contentOther.style.display = 'block';
-        } else if (['mp3'].includes(extension)) {
-            const audio = document.createElement('audio');
-            audio.controls = true;
-            audio.src = `/files?path=${encodeURIComponent(filePath)}`;
-            contentOther.appendChild(audio);
-            contentOther.style.display = 'block';
-        } else if (['mp4'].includes(extension)) {
-            const video = document.createElement('video');
-            video.controls = true;
-            video.src = `/files?path=${encodeURIComponent(filePath)}`;
-            video.style.maxWidth = '100%';
-            contentOther.appendChild(video);
-            contentOther.style.display = 'block';
-        } else {
-            contentOther.textContent = 'File type not supported for preview.';
-            contentOther.style.display = 'block';
-        }
+        fileRenderer.render(filePath, fileName, contentCode, contentOther);
     }
-
-    function showPdfContent(filePath) {
-        const pdfContainer = document.createElement('div');
-        pdfContainer.className = 'pdf-container';
+    
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+    
+    function updateDetails(file) {
+        if (!file) {
+            fileDetails.innerHTML = '<p>Select a file to view details</p>';
+            return;
+        }
         
-        const controls = document.createElement('div');
-        controls.className = 'pdf-controls';
-        controls.innerHTML = `
-            <button id="pdf-prev">Previous</button>
-            <span id="pdf-page-info">Page 1</span>
-            <button id="pdf-next">Next</button>
+        const extension = file.name.split('.').pop().toLowerCase();
+        const fileType = getFileTypeDescription(extension);
+        
+        fileDetails.innerHTML = `
+            <div class="detail-item">
+                <span class="detail-label">Name:</span>
+                <span class="detail-value" title="${file.name}">${file.name}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Type:</span>
+                <span class="detail-value">${fileType}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Extension:</span>
+                <span class="detail-value">.${extension}</span>
+            </div>
+            ${file.size ? `
+            <div class="detail-item">
+                <span class="detail-label">Size:</span>
+                <span class="detail-value">${formatFileSize(file.size)}</span>
+            </div>
+            ` : ''}
+            ${file.modified ? `
+            <div class="detail-item">
+                <span class="detail-label">Modified:</span>
+                <span class="detail-value">${new Date(file.modified).toLocaleDateString()}</span>
+            </div>
+            ` : ''}
         `;
-        
-        const pageImg = document.createElement('img');
-        pageImg.style.maxWidth = '100%';
-        pageImg.style.border = '1px solid #ccc';
-        
-        pdfContainer.appendChild(controls);
-        pdfContainer.appendChild(pageImg);
-        contentOther.appendChild(pdfContainer);
-        contentOther.style.display = 'block';
-        
-        let currentPage = 1;
-        
-        function loadPage(page) {
-            pageImg.src = `/pdf-preview?path=${encodeURIComponent(filePath)}&page=${page}`;
-            document.getElementById('pdf-page-info').textContent = `Page ${page}`;
-        }
-        
-        document.getElementById('pdf-prev').addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                loadPage(currentPage);
-            }
-        });
-        
-        document.getElementById('pdf-next').addEventListener('click', () => {
-            currentPage++;
-            loadPage(currentPage);
-        });
-        
-        loadPage(currentPage);
     }
+    
+    function getFileTypeFromExtension(extension) {
+        if (extension === 'pdf') return 'pdf';
+        if (['cbz', 'cbr'].includes(extension)) return 'comic';
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
+        if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
+        if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
+        if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
+        if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) return 'text';
+        if (['csv', 'xlsx', 'xls', 'ods'].includes(extension)) return 'table';
+        if (['pptx', 'ppt', 'odp'].includes(extension)) return 'presentation';
+        if (extension === 'srt') return 'subtitle';
+        if (extension === 'epub') return 'ebook';
+        return 'file';
+    }
+    
+    function getFileTypeDescription(extension) {
+        const types = {
+            'pdf': 'PDF Document',
+            'jpg': 'JPEG Image', 'jpeg': 'JPEG Image', 'png': 'PNG Image', 'gif': 'GIF Image', 'webp': 'WebP Image',
+            'mp4': 'MP4 Video', 'avi': 'AVI Video', 'mov': 'QuickTime Video', 'mkv': 'Matroska Video',
+            'mp3': 'MP3 Audio', 'wav': 'WAV Audio', 'flac': 'FLAC Audio', 'ogg': 'OGG Audio',
+            'txt': 'Text File', 'md': 'Markdown', 'rtf': 'Rich Text Format',
+            'doc': 'Word Document', 'docx': 'Word Document', 'odt': 'OpenDocument Text',
+            'csv': 'CSV Spreadsheet', 'xls': 'Excel Spreadsheet', 'xlsx': 'Excel Spreadsheet', 'ods': 'OpenDocument Spreadsheet',
+            'ppt': 'PowerPoint Presentation', 'pptx': 'PowerPoint Presentation', 'odp': 'OpenDocument Presentation',
+            'srt': 'Subtitle File',
+            'js': 'JavaScript', 'html': 'HTML Document', 'css': 'CSS Stylesheet', 'json': 'JSON Data',
+            'py': 'Python Script', 'java': 'Java Source', 'c': 'C Source', 'cpp': 'C++ Source',
+            'xml': 'XML Document', 'yaml': 'YAML Config', 'yml': 'YAML Config',
+            'cbz': 'Comic Book Archive', 'cbr': 'Comic Book Archive',
+            'epub': 'EPUB E-book'
+        };
+        return types[extension] || 'Unknown File';
+    }
+    
+    function updateCurrentPathDisplay(fullPath) {
+        const pathDisplay = document.getElementById('current-path-display');
+        pathDisplay.textContent = fullPath;
+    }
+    
+    function selectFile(index, filePath, fileName) {
+        const items = document.querySelectorAll('.file-item');
+        items.forEach(item => item.classList.remove('selected'));
 
-    function showComicContent(filePath) {
-        const comicContainer = document.createElement('div');
-        comicContainer.className = 'comic-container';
-        
-        const controls = document.createElement('div');
-        controls.className = 'comic-controls';
-        controls.innerHTML = `
-            <button id="comic-prev">Previous</button>
-            <span id="comic-page-info">Page 1</span>
-            <button id="comic-next">Next</button>
-        `;
-        
-        const pageImg = document.createElement('img');
-        pageImg.style.maxWidth = '100%';
-        pageImg.style.border = '1px solid #ccc';
-        pageImg.style.display = 'block';
-        pageImg.style.margin = '0 auto';
-        
-        comicContainer.appendChild(controls);
-        comicContainer.appendChild(pageImg);
-        contentOther.appendChild(comicContainer);
-        contentOther.style.display = 'block';
-        
-        let currentPage = 1;
-        
-        function loadPage(page) {
-            pageImg.src = `/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`;
-            document.getElementById('comic-page-info').textContent = `Page ${page}`;
+        if (index >= 0 && index < filteredFiles.length) {
+            selectedIndex = index;
+            items[index].classList.add('selected');
+            // Update details instantly upon navigation
+            // Render file instantly upon navigation
+            fileRenderer.render(filePath, fileName, contentCode, contentOther);
+
+            // Scroll into view if needed
+            items[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
-        
-        document.getElementById('comic-prev').addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                loadPage(currentPage);
-            }
-        });
-        
-        document.getElementById('comic-next').addEventListener('click', () => {
-            currentPage++;
-            loadPage(currentPage);
-        });
-        
-        loadPage(currentPage);
     }
+    
+    function handleKeyNavigation(event) {
+        if (filteredFiles.length === 0) return;
+
+        let newIndex = selectedIndex;
+        switch(event.key) {
+            case 'ArrowUp':
+                event.preventDefault();
+                newIndex = selectedIndex > 0 ? selectedIndex - 1 : filteredFiles.length - 1;
+                break;
+            case 'ArrowDown':
+                event.preventDefault();
+                newIndex = selectedIndex < filteredFiles.length - 1 ? selectedIndex + 1 : 0;
+                break;
+            case 'PageUp':
+                event.preventDefault();
+                newIndex = Math.max(0, selectedIndex - 10);
+                break;
+            case 'PageDown':
+                event.preventDefault();
+                newIndex = Math.min(filteredFiles.length - 1, selectedIndex + 10);
+                break;
+            case 'Home':
+                event.preventDefault();
+                newIndex = 0;
+                break;
+            case 'End':
+                event.preventDefault();
+                newIndex = filteredFiles.length - 1;
+                break;
+            case 'Enter':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    const file = filteredFiles[selectedIndex];
+                    if (file.isDirectory) {
+                        currentPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                        loadFiles(currentPath);
+                        updateDetails(null);
+                    } else {
+                        showContent(currentPath, file.name);
+                    }
+                }
+                return;
+        }
+        if (newIndex !== selectedIndex) {
+            const file = filteredFiles[newIndex];
+            const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+            selectFile(newIndex, filePath, file.name);
+            updateDetails(file);
+        }
+    }
+    
+    // Event listeners
+    document.addEventListener('keydown', handleKeyNavigation);
+    
+    fileTypeFilter.addEventListener('change', () => {
+        displayFiles(currentFiles, currentPath);
+    });
 
     loadFiles(currentPath);
 });

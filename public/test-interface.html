@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Renderer Test Interface</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-controls {
+            margin-bottom: 20px;
+        }
+        .test-controls input, .test-controls select, .test-controls button {
+            margin: 5px;
+            padding: 8px;
+        }
+        .test-controls input[type="text"] {
+            width: 300px;
+        }
+        #test-container {
+            border: 2px solid #007bff;
+            padding: 20px;
+            margin-top: 20px;
+            min-height: 200px;
+        }
+        .log {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 10px;
+            margin-top: 10px;
+            max-height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            white-space: pre-wrap;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+        }
+        .status.success { background: #d4edda; color: #155724; }
+        .status.error { background: #f8d7da; color: #721c24; }
+        .status.info { background: #d1ecf1; color: #0c5460; }
+    </style>
+</head>
+<body>
+    <h1>File Renderer Test Interface</h1>
+    
+    <div class="test-section">
+        <h2>Quick Tests</h2>
+        <div class="test-controls">
+            <button onclick="testPDF()">Test PDF Rendering</button>
+            <button onclick="testImage()">Test Image Rendering</button>
+            <button onclick="testComic()">Test Comic Rendering</button>
+            <button onclick="testText()">Test Text Rendering</button>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Custom File Test</h2>
+        <div class="test-controls">
+            <label>File Type: 
+                <select id="fileType">
+                    <option value="pdf">PDF</option>
+                    <option value="image">Image</option>
+                    <option value="comic">Comic</option>
+                    <option value="text">Text</option>
+                    <option value="audio">Audio</option>
+                    <option value="video">Video</option>
+                </select>
+            </label>
+            <br>
+            <label>File Path: 
+                <input type="text" id="filePath" placeholder="Enter relative file path">
+            </label>
+            <br>
+            <label>File Name: 
+                <input type="text" id="fileName" placeholder="Enter file name with extension">
+            </label>
+            <br>
+            <button onclick="testCustomFile()">Test Custom File</button>
+            <button onclick="clearTest()">Clear Test Area</button>
+        </div>
+    </div>
+
+    <div id="status" class="status info" style="display: none;"></div>
+    <div id="test-container"></div>
+    <div id="log" class="log"></div>
+
+    <script>
+        let fileRenderer;
+        let logContainer;
+
+        function log(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            logContainer.textContent += `[${timestamp}] ${message}\n`;
+            logContainer.scrollTop = logContainer.scrollHeight;
+        }
+
+        function showStatus(message, type = 'info') {
+            const status = document.getElementById('status');
+            status.textContent = message;
+            status.className = `status ${type}`;
+            status.style.display = 'block';
+            setTimeout(() => {
+                status.style.display = 'none';
+            }, 5000);
+        }
+
+        function clearTest() {
+            document.getElementById('test-container').innerHTML = '';
+            log('Test area cleared');
+        }
+
+        async function testPDF() {
+            const testFiles = [
+                { path: 'test.pdf', name: 'test.pdf' },
+                { path: 'sample.pdf', name: 'sample.pdf' },
+                { path: 'document.pdf', name: 'document.pdf' }
+            ];
+            
+            log('Starting PDF tests...');
+            for (const file of testFiles) {
+                log(`Attempting to test PDF: ${file.name}`);
+                const success = await fileRenderer.testRender('pdf', file.path, file.name);
+                if (success) {
+                    showStatus(`PDF test successful: ${file.name}`, 'success');
+                    break;
+                } else {
+                    log(`PDF test failed for: ${file.name}`);
+                }
+            }
+        }
+
+        async function testImage() {
+            const testFiles = [
+                { path: 'test.png', name: 'test.png' },
+                { path: 'sample.jpg', name: 'sample.jpg' },
+                { path: 'image.webp', name: 'image.webp' }
+            ];
+            
+            log('Starting Image tests...');
+            for (const file of testFiles) {
+                log(`Attempting to test Image: ${file.name}`);
+                const success = await fileRenderer.testRender('image', file.path, file.name);
+                if (success) {
+                    showStatus(`Image test successful: ${file.name}`, 'success');
+                    break;
+                }
+            }
+        }
+
+        async function testComic() {
+            const testFiles = [
+                { path: 'test.cbz', name: 'test.cbz' },
+                { path: 'comic.cbr', name: 'comic.cbr' }
+            ];
+            
+            log('Starting Comic tests...');
+            for (const file of testFiles) {
+                log(`Attempting to test Comic: ${file.name}`);
+                const success = await fileRenderer.testRender('comic', file.path, file.name);
+                if (success) {
+                    showStatus(`Comic test successful: ${file.name}`, 'success');
+                    break;
+                }
+            }
+        }
+
+        async function testText() {
+            const testFiles = [
+                { path: 'test.txt', name: 'test.txt' },
+                { path: 'README.md', name: 'README.md' },
+                { path: 'script.js', name: 'script.js' }
+            ];
+            
+            log('Starting Text tests...');
+            for (const file of testFiles) {
+                log(`Attempting to test Text: ${file.name}`);
+                const success = await fileRenderer.testRender('text', file.path, file.name);
+                if (success) {
+                    showStatus(`Text test successful: ${file.name}`, 'success');
+                    break;
+                }
+            }
+        }
+
+        async function testCustomFile() {
+            const fileType = document.getElementById('fileType').value;
+            const filePath = document.getElementById('filePath').value;
+            const fileName = document.getElementById('fileName').value;
+            
+            if (!filePath || !fileName) {
+                showStatus('Please enter both file path and file name', 'error');
+                return;
+            }
+            
+            log(`Testing custom file: ${fileName} (${fileType})`);
+            const success = await fileRenderer.testRender(fileType, filePath, fileName);
+            
+            if (success) {
+                showStatus(`Custom file test successful: ${fileName}`, 'success');
+            } else {
+                showStatus(`Custom file test failed: ${fileName}`, 'error');
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            logContainer = document.getElementById('log');
+            
+            // Check if file-renderer.js is loaded
+            if (typeof FileRenderer === 'undefined') {
+                showStatus('Error: file-renderer.js not loaded. Please include it in your HTML.', 'error');
+                log('ERROR: FileRenderer class not found');
+                return;
+            }
+            
+            fileRenderer = new FileRenderer();
+            log('File renderer initialized');
+            showStatus('Test interface ready', 'success');
+        });
+    </script>
+    
+    <!-- Include the file renderer -->
+    <script src="file-renderer.js"></script>
+    <!-- Include highlight.js for text rendering -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+</body>
+</html>
