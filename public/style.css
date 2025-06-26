@@ -24,9 +24,66 @@ body {
     backdrop-filter: blur(20px);
     border-right: 1px solid rgba(255, 255, 255, 0.2);
     padding: 25px;
-    overflow-y: auto;
+    overflow: hidden;
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
     transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+}
+
+.tree-view {
+    flex: 1;
+    overflow-y: auto;
+    margin-bottom: 20px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    min-height: 200px;
+}
+
+.details-pane {
+    height: 200px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    padding: 15px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    overflow-y: auto;
+}
+
+.details-pane h3 {
+    margin: 0 0 15px 0;
+    color: #4ecdc4;
+    font-size: 1.1rem;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 1px solid rgba(78, 205, 196, 0.3);
+    padding-bottom: 8px;
+}
+
+.detail-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    padding: 5px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.detail-label {
+    font-weight: 600;
+    color: #4ecdc4;
+    font-size: 0.85rem;
+    min-width: 70px;
+}
+
+.detail-value {
+    color: #ffffff;
+    font-size: 0.85rem;
+    text-align: right;
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
 }
 
 .browser h2 {
@@ -36,9 +93,87 @@ body {
     background-clip: text;
     font-size: 1.8rem;
     font-weight: 700;
-    margin-bottom: 25px;
+    margin-bottom: 10px;
     text-align: center;
     text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+}
+
+.current-path {
+    margin-bottom: 20px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    border-left: 4px solid #4ecdc4;
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.path-label {
+    font-weight: 600;
+    color: #4ecdc4;
+    font-size: 0.85rem;
+    display: block;
+    margin-bottom: 4px;
+}
+
+#current-path-display {
+    font-family: 'Fira Code', 'Consolas', monospace;
+    color: #ffffff;
+    font-size: 0.8rem;
+    word-break: break-all;
+    background: rgba(0, 0, 0, 0.2);
+    padding: 6px 8px;
+    border-radius: 5px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filter-section {
+    margin-bottom: 20px;
+    padding: 15px;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(10px);
+}
+
+.filter-section label {
+    display: block;
+    color: #4ecdc4;
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+}
+
+.filter-select {
+    width: 100%;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    color: #ffffff;
+    font-size: 0.9rem;
+    font-weight: 500;
+    backdrop-filter: blur(10px);
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.filter-select:hover {
+    background: rgba(255, 255, 255, 0.15);
+    border-color: rgba(78, 205, 196, 0.4);
+}
+
+.filter-select:focus {
+    outline: none;
+    background: rgba(255, 255, 255, 0.2);
+    border-color: #4ecdc4;
+    box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+}
+
+.filter-select option {
+    background: rgba(30, 30, 50, 0.95);
+    color: #ffffff;
+    padding: 8px;
 }
 
 .content-viewer {
@@ -56,16 +191,53 @@ body {
 
 #file-list li {
     cursor: pointer;
-    padding: 12px 16px;
-    margin: 8px 0;
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.1);
+    padding: 8px 12px;
+    margin: 2px 0;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.05);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(255, 255, 255, 0.1);
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
     font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.file-item {
+    display: flex;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+}
+
+.file-icon {
+    flex-shrink: 0;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.file-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.file-size {
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    color: rgba(255, 255, 255, 0.6);
+    text-align: right;
+    min-width: 50px;
 }
 
 #file-list li::before {
@@ -82,14 +254,26 @@ body {
 }
 
 #file-list li:hover {
-    background: rgba(255, 255, 255, 0.2);
-    transform: translateX(8px) translateY(-2px);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+    background: rgba(255, 255, 255, 0.15);
+    transform: translateX(4px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
     border-color: rgba(255, 255, 255, 0.3);
 }
 
 #file-list li:hover::before {
     opacity: 1;
+}
+
+#file-list li.selected {
+    background: rgba(78, 205, 196, 0.2);
+    border-color: #4ecdc4;
+    transform: translateX(4px);
+    box-shadow: 0 6px 20px rgba(78, 205, 196, 0.3);
+}
+
+#file-list li.selected::before {
+    opacity: 1;
+    background: linear-gradient(45deg, rgba(78, 205, 196, 0.2), rgba(78, 205, 196, 0.1));
 }
 
 #file-list li.parent-dir {
@@ -100,44 +284,61 @@ body {
 }
 
 #file-list li.parent-dir:hover {
-    transform: translateX(12px) translateY(-3px);
-    box-shadow: 0 15px 35px rgba(78, 205, 196, 0.3);
+    transform: translateX(6px);
+    box-shadow: 0 8px 25px rgba(78, 205, 196, 0.3);
 }
 
 /* File type icons */
-#file-list li[data-type="directory"]::before {
+#file-list li[data-type="directory"] .file-icon::before {
     content: "📁";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="pdf"]::before {
+#file-list li[data-type="pdf"] .file-icon::before {
     content: "📄";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="comic"]::before {
+#file-list li[data-type="comic"] .file-icon::before {
     content: "📚";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="image"]::before {
+#file-list li[data-type="ebook"] .file-icon::before {
+    content: "📖";
+}
+
+#file-list li[data-type="image"] .file-icon::before {
     content: "🖼️";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="video"]::before {
+#file-list li[data-type="video"] .file-icon::before {
     content: "🎬";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="audio"]::before {
+#file-list li[data-type="audio"] .file-icon::before {
     content: "🎵";
-    margin-right: 8px;
 }
 
-#file-list li[data-type="code"]::before {
+#file-list li[data-type="code"] .file-icon::before {
     content: "💻";
-    margin-right: 8px;
+}
+
+#file-list li[data-type="table"] .file-icon::before {
+    content: "📊";
+}
+
+#file-list li[data-type="subtitle"] .file-icon::before {
+    content: "💬";
+}
+
+#file-list li[data-type="text"] .file-icon::before {
+    content: "📝";
+}
+
+#file-list li[data-type="presentation"] .file-icon::before {
+    content: "📊";
+}
+
+#file-list li[data-type="file"] .file-icon::before {
+    content: "📄";
 }
 
 pre {
@@ -273,6 +474,14 @@ img:hover {
     .content-viewer {
         height: 60vh;
     }
+    
+    .details-pane {
+        height: 120px;
+    }
+    
+    .file-size {
+        display: none;
+    }
 }
 
 /* Animation keyframes */
@@ -316,4 +525,42 @@ audio, video {
     border-radius: 15px;
     background: rgba(0, 0, 0, 0.3);
     backdrop-filter: blur(10px);
+}
+
+/* CSV table styling */
+.csv-container {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.csv-container table {
+    font-size: 0.85rem;
+}
+
+.csv-container th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+/* SRT subtitle styling */
+.srt-container {
+    font-family: 'Segoe UI', sans-serif;
+}
+
+.srt-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.srt-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.srt-container::-webkit-scrollbar-thumb {
+    background: rgba(78, 205, 196, 0.3);
+    border-radius: 3px;
+}
+
+.srt-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(78, 205, 196, 0.5);
 }

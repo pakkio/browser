@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple File Renderer Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .test-result { margin: 10px 0; padding: 10px; border-radius: 4px; }
+        .success { background: #d4edda; color: #155724; }
+        .error { background: #f8d7da; color: #721c24; }
+        .info { background: #d1ecf1; color: #0c5460; }
+        button { padding: 8px 16px; margin: 5px; }
+        #mock-content { border: 2px solid #007bff; padding: 20px; margin: 20px 0; min-height: 100px; }
+    </style>
+</head>
+<body>
+    <h1>Simple File Renderer Test</h1>
+    
+    <div class="test-section">
+        <h2>File Type Detection Tests</h2>
+        <button onclick="testFileTypeDetection()">Test File Type Detection</button>
+        <div id="detection-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Handler Instantiation Tests</h2>
+        <button onclick="testHandlerCreation()">Test Handler Creation</button>
+        <div id="handler-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Mock Render Tests</h2>
+        <button onclick="testMockRender()">Test Mock Rendering</button>
+        <div id="mock-content"></div>
+        <div id="render-results"></div>
+    </div>
+
+    <script>
+        // Mock fetch for testing
+        window.fetch = function(url) {
+            console.log('Mock fetch called with:', url);
+            
+            // Simulate different responses based on URL
+            if (url.includes('/pdf-preview')) {
+                return Promise.resolve({
+                    ok: false,
+                    status: 500,
+                    statusText: 'PDF conversion failed',
+                    blob: () => Promise.resolve(new Blob())
+                });
+            } else if (url.includes('/files')) {
+                if (url.includes('.txt') || url.includes('.js')) {
+                    return Promise.resolve({
+                        ok: true,
+                        text: () => Promise.resolve('// Mock file content\nconsole.log("Hello World");')
+                    });
+                } else {
+                    return Promise.resolve({
+                        ok: true,
+                        blob: () => Promise.resolve(new Blob())
+                    });
+                }
+            }
+            
+            return Promise.reject(new Error('Unknown URL'));
+        };
+
+        // Mock hljs for testing
+        window.hljs = {
+            highlightElement: function(element) {
+                console.log('Mock hljs highlight called');
+                element.style.backgroundColor = '#f8f8f8';
+            }
+        };
+
+        let fileRenderer;
+
+        function addResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.textContent = message;
+            container.appendChild(div);
+        }
+
+        function clearResults(containerId) {
+            document.getElementById(containerId).innerHTML = '';
+        }
+
+        function testFileTypeDetection() {
+            clearResults('detection-results');
+            
+            const testCases = [
+                { file: 'test.pdf', expected: 'pdf' },
+                { file: 'image.jpg', expected: 'image' },
+                { file: 'image.webp', expected: 'image' },
+                { file: 'comic.cbz', expected: 'comic' },
+                { file: 'code.js', expected: 'text' },
+                { file: 'document.txt', expected: 'text' },
+                { file: 'audio.mp3', expected: 'audio' },
+                { file: 'video.mp4', expected: 'video' },
+                { file: 'unknown.xyz', expected: 'unsupported' }
+            ];
+
+            let passed = 0;
+            let failed = 0;
+
+            testCases.forEach(test => {
+                try {
+                    const result = fileRenderer.getFileType(test.file);
+                    if (result === test.expected) {
+                        addResult('detection-results', `✓ ${test.file} → ${result}`, 'success');
+                        passed++;
+                    } else {
+                        addResult('detection-results', `✗ ${test.file} → ${result} (expected ${test.expected})`, 'error');
+                        failed++;
+                    }
+                } catch (error) {
+                    addResult('detection-results', `✗ ${test.file} → Error: ${error.message}`, 'error');
+                    failed++;
+                }
+            });
+
+            addResult('detection-results', `Summary: ${passed} passed, ${failed} failed`, passed === testCases.length ? 'success' : 'error');
+        }
+
+        function testHandlerCreation() {
+            clearResults('handler-results');
+            
+            const expectedHandlers = ['text', 'image', 'pdf', 'comic', 'audio', 'video'];
+            let passed = 0;
+            let failed = 0;
+
+            expectedHandlers.forEach(handlerType => {
+                try {
+                    const handler = fileRenderer.handlers.get(handlerType);
+                    if (handler && typeof handler.render === 'function') {
+                        addResult('handler-results', `✓ ${handlerType} handler created with render method`, 'success');
+                        passed++;
+                    } else {
+                        addResult('handler-results', `✗ ${handlerType} handler missing or invalid`, 'error');
+                        failed++;
+                    }
+                } catch (error) {
+                    addResult('handler-results', `✗ ${handlerType} handler error: ${error.message}`, 'error');
+                    failed++;
+                }
+            });
+
+            addResult('handler-results', `Summary: ${passed} passed, ${failed} failed`, passed === expectedHandlers.length ? 'success' : 'error');
+        }
+
+        async function testMockRender() {
+            clearResults('render-results');
+            const mockContent = document.getElementById('mock-content');
+            mockContent.innerHTML = '';
+
+            const testCases = [
+                { file: 'test.txt', type: 'text' },
+                { file: 'test.pdf', type: 'pdf' },
+                { file: 'test.jpg', type: 'image' }
+            ];
+
+            for (const test of testCases) {
+                try {
+                    addResult('render-results', `Testing ${test.type} render for ${test.file}...`, 'info');
+                    
+                    // Create mock elements
+                    const mockCodeElement = document.createElement('pre');
+                    const mockOtherElement = document.createElement('div');
+                    mockCodeElement.parentElement = { style: { display: 'none' } };
+                    
+                    await fileRenderer.render(test.file, test.file, mockCodeElement, mockOtherElement);
+                    
+                    addResult('render-results', `✓ ${test.type} render completed without errors`, 'success');
+                } catch (error) {
+                    addResult('render-results', `✗ ${test.type} render failed: ${error.message}`, 'error');
+                    console.error(`${test.type} render error:`, error);
+                }
+            }
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            try {
+                fileRenderer = new FileRenderer();
+                addResult('render-results', '✓ FileRenderer initialized successfully', 'success');
+            } catch (error) {
+                addResult('render-results', `✗ FileRenderer initialization failed: ${error.message}`, 'error');
+            }
+        });
+    </script>
+    
+    <script src="file-renderer.js"></script>
+</body>
+</html>
