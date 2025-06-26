@@ -13,13 +13,16 @@ A sleek, modern web-based file browser with support for multiple file types incl
 
 ### 📄 Document Support
 - **PDF Viewer** - Page-by-page PDF navigation with image conversion
+- **EPUB Reader** - E-book support with page navigation
+- **Office Documents** - DOCX, XLSX, PPTX preview and rendering
 - **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats
 - **Code Highlighting** - Syntax highlighting for programming languages
+- **Subtitles** - SRT subtitle file support
 
 ### 🎨 Media Support
-- **Images** - JPG, JPEG, PNG, GIF, WebP preview
-- **Video** - MP4 playback with controls
-- **Audio** - MP3 playback with controls
+- **Images** - JPG, JPEG, PNG, GIF, WebP, BMP, SVG preview
+- **Video** - MP4, AVI, MOV, MKV, WebM playback with controls
+- **Audio** - MP3, WAV, FLAC, OGG, AAC playback with controls
 
 ### 🎯 Modern UI
 - **Glassmorphism Design** - Translucent panels with backdrop blur
@@ -35,12 +38,31 @@ A sleek, modern web-based file browser with support for multiple file types incl
 
 ### Installation
 
+#### System Dependencies (Linux/Ubuntu/Debian)
+```bash
+# Install ImageMagick for PDF processing
+sudo apt update
+sudo apt install imagemagick
+
+# Alternative: Install GraphicsMagick
+# sudo apt install graphicsmagick
+```
+
+#### System Dependencies (macOS)
+```bash
+# Using Homebrew
+brew install imagemagick
+# or
+brew install graphicsmagick
+```
+
+#### Application Setup
 ```bash
 # Clone the repository
 git clone <repository-url>
 cd browser
 
-# Install dependencies
+# Install Node.js dependencies
 npm install
 
 # Start the server
@@ -61,11 +83,14 @@ node server.js /path/to/your/directory
 | Type | Extensions | Features |
 |------|------------|----------|
 | **Documents** | PDF | Page navigation, image conversion |
+| **E-books** | EPUB | Page navigation, chapter support |
+| **Office** | DOCX, XLSX, PPTX | Document rendering, spreadsheet viewing |
 | **Comics** | CBZ, CBR | Page navigation, archive extraction |
-| **Images** | JPG, JPEG, PNG, GIF, WebP | Full-size preview, hover effects |
-| **Videos** | MP4 | HTML5 video player with controls |
-| **Audio** | MP3 | HTML5 audio player with controls |
-| **Code** | JS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT | Syntax highlighting |
+| **Images** | JPG, JPEG, PNG, GIF, WebP, BMP, SVG | Full-size preview, hover effects |
+| **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls |
+| **Audio** | MP3, WAV, FLAC, OGG, AAC | HTML5 audio player with controls |
+| **Subtitles** | SRT | Text overlay support |
+| **Code** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | Syntax highlighting |
 
 ## 🎨 UI Features
 
@@ -97,19 +122,23 @@ node server.js /path/to/your/directory
 
 ### Frontend
 - **highlight.js** - Code syntax highlighting
+- **mammoth.js** - DOCX document processing
+- **xlsx.js** - Excel spreadsheet processing
+- **jszip.js** - ZIP file handling
 - **Modern CSS** - Glassmorphism and animations
 
 ## 📁 Project Structure
 
 ```
 browser/
-├── public/           # Frontend assets
-│   ├── index.html   # Main HTML file
-│   ├── script.js    # Client-side JavaScript
-│   └── style.css    # Modern glassmorphism styles
-├── server.js        # Express server with file handling
-├── package.json     # Dependencies and scripts
-└── README.md        # This file
+├── public/                    # Frontend assets
+│   ├── index.html            # Main HTML file
+│   ├── script.js             # Client-side JavaScript
+│   ├── style.css             # Modern glassmorphism styles
+│   └── file-renderer.js      # File type rendering logic
+├── server.js                 # Express server with file handling
+├── package.json              # Dependencies and scripts
+└── README.md                 # This file
 ```
 
 ## 🔧 API Endpoints
@@ -120,6 +149,7 @@ browser/
 | `/files` | GET | Serve file content |
 | `/pdf-preview` | GET | Convert PDF page to image |
 | `/comic-preview` | GET | Extract comic page from archive |
+| `/epub-preview` | GET | Extract EPUB page content |
 
 ## 🎯 Usage Examples
 
@@ -171,6 +201,26 @@ The theme uses a purple gradient scheme with glassmorphism effects. Main colors:
 ## 📄 License
 
 This project is licensed under the ISC License.
+
+## 💡 WSL Drive Mounting
+
+For WSL users working with network drives (like RaiDrive):
+
+```bash
+# Create mount point
+sudo mkdir /mnt/z
+
+# Mount Windows drive in WSL
+sudo mount -t drvfs Z: /mnt/z
+
+# For permanent mounting (add to /etc/fstab)
+echo 'Z: /mnt/z drvfs defaults 0 0' | sudo tee -a /etc/fstab
+
+# Unmount when done
+sudo umount /mnt/z
+```
+
+This allows seamless access to Windows network drives from your WSL environment.
 
 ## 🙏 Acknowledgments
 
