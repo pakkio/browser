@@ -13,6 +13,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function loadFiles(path) {
         console.log('Loading files for path:', path);
+        
+        // Show loading indicator
+        const loadingIndicator = document.getElementById('loading-indicator');
+        loadingIndicator.style.display = 'block';
+        loadingIndicator.textContent = 'Loading directory...';
+        
+        // Clear current file list
+        fileList.innerHTML = '<li style="color: #666;">Loading...</li>';
+        
         fetch(`/api/browse?path=${encodeURIComponent(path)}`)
             .then(response => {
                 console.log('Response status:', response.status);
@@ -25,12 +34,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 console.log('Received data:', data);
                 currentFiles = data.files;
                 displayFiles(data.files, path);
-                updateCurrentPathDisplay(data.currentPath);
+                updateCurrentPathDisplay(data.currentPath, data.files.length);
             })
             .catch(error => {
                 console.error('Error loading files:', error);
                 document.getElementById('current-path-display').textContent = 'Error loading directory';
                 fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
+            })
+            .finally(() => {
+                // Hide loading indicator
+                loadingIndicator.style.display = 'none';
             });
     }
     
@@ -49,10 +62,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const selectedFilter = fileTypeFilter.value;
-        // Show loading indicator
-        // Hide loading indicator after filtering
-        // (Place this line at the end of the filtering process)
-        document.getElementById('loading-indicator').style.display = 'none';
+        
         // Perform filtering
         filteredFiles = selectedFilter === 'all' ? data : data.filter(file => {
             if (file.isDirectory) {
@@ -63,6 +73,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const fileType = getFileTypeFromExtension(extension);
             return fileType === selectedFilter;
         });
+        
+        // Update path display with filtered count if different from total
+        if (selectedFilter !== 'all') {
+            const pathDisplay = document.getElementById('current-path-display');
+            const currentText = pathDisplay.textContent;
+            const baseText = currentText.replace(/ \(\d+ items\).*/, '');
+            pathDisplay.textContent = `${baseText} (${filteredFiles.length} of ${data.length} items)`;
+        }
         
         selectedIndex = -1;
         
@@ -222,9 +240,9 @@ document.addEventListener('DOMContentLoaded', () => {
         return types[extension] || 'Unknown File';
     }
     
-    function updateCurrentPathDisplay(fullPath) {
+    function updateCurrentPathDisplay(fullPath, fileCount) {
         const pathDisplay = document.getElementById('current-path-display');
-        pathDisplay.textContent = fullPath;
+        pathDisplay.textContent = `${fullPath} (${fileCount} items)`;
     }
     
     function selectFile(index, filePath, fileName) {
@@ -298,7 +316,19 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', handleKeyNavigation);
     
     fileTypeFilter.addEventListener('change', () => {
-        displayFiles(currentFiles, currentPath);
+        // Show brief loading for filtering large directories
+        if (currentFiles.length > 100) {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.style.display = 'block';
+            loadingIndicator.textContent = 'Filtering files...';
+            
+            setTimeout(() => {
+                displayFiles(currentFiles, currentPath);
+                loadingIndicator.style.display = 'none';
+            }, 50);
+        } else {
+            displayFiles(currentFiles, currentPath);
+        }
     });
 
     loadFiles(currentPath);
