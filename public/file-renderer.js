@@ -1,9 +1,9 @@
-
 // Enhanced file renderer supporting PDFs, images, videos, audio, and text files
 
 class FileRenderer {
     constructor() {
         this.handlers = new Map();
+        this.currentHandler = null; // To keep track of the active renderer
         this.setupHandlers();
     }
 
@@ -89,9 +89,15 @@ class FileRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
+        // Cleanup previous renderer's specific event listeners or states
+        if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
+            this.currentHandler.cleanup();
+        }
+
         const fileType = this.getFileType(fileName);
         const handler = this.handlers.get(fileType);
-        
+        this.currentHandler = handler; // Set the new handler
+
         contentCode.innerHTML = '';
         contentOther.innerHTML = '';
         contentCode.parentElement.style.display = 'none';
@@ -135,21 +141,107 @@ class FileRenderer {
 }
 
 class TextRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.currentPage = 1;
+        this.pages = [];
+        this.linesPerPage = 50;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
         const extension = fileName.split('.').pop().toLowerCase();
         const response = await fetch(`/files?path=${encodeURIComponent(filePath)}`);
         const text = await response.text();
-        
+
         if (extension === 'csv') {
             this.renderCSV(text, contentOther);
         } else if (extension === 'srt') {
             this.renderSRT(text, contentOther);
         } else {
-            contentCode.textContent = text;
-            contentCode.className = `language-${extension}`;
-            hljs.highlightElement(contentCode);
-            contentCode.parentElement.style.display = 'block';
+            this.renderPaginatedText(text, contentOther, extension);
         }
+    }
+
+    renderPaginatedText(text, contentOther, extension) {
+        const lines = text.split('\n');
+        this.pages = [];
+        for (let i = 0; i < lines.length; i += this.linesPerPage) {
+            this.pages.push(lines.slice(i, i + this.linesPerPage).join('\n'));
+        }
+        this.currentPage = 1;
+
+        const textContainer = document.createElement('div');
+        textContainer.className = 'text-container';
+
+        const controls = document.createElement('div');
+        controls.className = 'text-controls';
+        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px;`;
+        controls.innerHTML = `
+            <button id="text-prev">Previous</button>
+            <span id="text-page-info" style="margin: 0 10px;"></span>
+            <button id="text-next">Next</button>
+            <input type="number" id="text-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
+            <button id="text-jump-btn" style="margin-left: 5px;">Go</button>
+        `;
+
+        const pageContent = document.createElement('pre');
+        const codeContent = document.createElement('code');
+        pageContent.appendChild(codeContent);
+
+        textContainer.appendChild(controls);
+        textContainer.appendChild(pageContent);
+        contentOther.appendChild(textContainer);
+        contentOther.style.display = 'block';
+
+        const prevBtn = controls.querySelector('#text-prev');
+        const nextBtn = controls.querySelector('#text-next');
+        const pageInfo = controls.querySelector('#text-page-info');
+        const jumpInput = controls.querySelector('#text-page-jump');
+        const jumpBtn = controls.querySelector('#text-jump-btn');
+
+        const showPage = (page) => {
+            if (page < 1 || page > this.pages.length) {
+                return;
+            }
+            this.currentPage = page;
+            codeContent.textContent = this.pages[this.currentPage - 1];
+            codeContent.className = `language-${extension}`;
+            hljs.highlightElement(codeContent);
+            pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
+            prevBtn.disabled = this.currentPage === 1;
+            nextBtn.disabled = this.currentPage === this.pages.length;
+        };
+
+        prevBtn.addEventListener('click', () => showPage(this.currentPage - 1));
+        nextBtn.addEventListener('click', () => showPage(this.currentPage + 1));
+        jumpBtn.addEventListener('click', () => {
+            const page = parseInt(jumpInput.value, 10);
+            if (!isNaN(page)) {
+                showPage(page);
+            }
+        });
+
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevBtn.click();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextBtn.click();
+            }
+        };
+        document.addEventListener('keydown', this.handleKeyDown);
+
+        showPage(1);
     }
     
     renderCSV(csvText, contentOther) {
@@ -311,16 +403,36 @@ class ImageRenderer {
 }
 
 class PDFRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.currentPage = 1;
+        this.totalPages = null;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
+        this.currentPage = 1;
+        this.totalPages = null;
+
         const pdfContainer = document.createElement('div');
         pdfContainer.className = 'pdf-container';
         
         const controls = document.createElement('div');
         controls.className = 'pdf-controls';
+        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px;`;
         controls.innerHTML = `
             <button id="pdf-prev">Previous</button>
-            <span id="pdf-page-info">Page 1</span>
+            <span id="pdf-page-info" style="margin: 0 10px;">Page 1</span>
             <button id="pdf-next">Next</button>
+            <input type="number" id="pdf-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
+            <button id="pdf-jump-btn" style="margin-left: 5px;">Go</button>
             <span id="pdf-status" style="margin-left: 10px; font-style: italic;"></span>
         `;
         
@@ -333,15 +445,43 @@ class PDFRenderer {
         contentOther.appendChild(pdfContainer);
         contentOther.style.display = 'block';
         
-        let currentPage = 1;
+        const prevBtn = controls.querySelector('#pdf-prev');
+        const nextBtn = controls.querySelector('#pdf-next');
+        const pageInfo = controls.querySelector('#pdf-page-info');
+        const jumpInput = controls.querySelector('#pdf-page-jump');
+        const jumpBtn = controls.querySelector('#pdf-jump-btn');
         const statusElement = controls.querySelector('#pdf-status');
+
+        const updateTotalPages = (totalPages) => {
+            this.totalPages = totalPages;
+            updatePageInfo();
+        };
+
+        const updatePageInfo = () => {
+            if (this.totalPages) {
+                pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+            } else {
+                pageInfo.textContent = `Page ${this.currentPage}`;
+            }
+            prevBtn.disabled = this.currentPage === 1;
+            nextBtn.disabled = this.totalPages !== null && this.currentPage === this.totalPages;
+        };
         
         const loadPage = async (page) => {
+            if (page < 1 || (this.totalPages && page > this.totalPages)) {
+                return;
+            }
+            this.currentPage = page;
             try {
                 statusElement.textContent = 'Loading...';
                 const response = await fetch(`/pdf-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
                 
                 if (!response.ok) {
+                    if (response.status === 500) { // Assume 500 means end of pages if total is unknown
+                        if (!this.totalPages) {
+                            this.totalPages = this.currentPage - 1;
+                        }
+                    }
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
@@ -351,28 +491,49 @@ class PDFRenderer {
                 }
                 
                 pageImg.src = URL.createObjectURL(blob);
-                document.getElementById('pdf-page-info').textContent = `Page ${page}`;
                 statusElement.textContent = '';
+                updatePageInfo();
             } catch (error) {
                 console.error('PDF load error:', error);
                 statusElement.textContent = `Error: ${error.message}`;
                 pageImg.src = '';
+                updatePageInfo();
             }
         };
         
-        document.getElementById('pdf-prev').addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                loadPage(currentPage);
+        prevBtn.addEventListener('click', () => loadPage(this.currentPage - 1));
+        nextBtn.addEventListener('click', () => loadPage(this.currentPage + 1));
+        jumpBtn.addEventListener('click', () => {
+            const page = parseInt(jumpInput.value, 10);
+            if (!isNaN(page)) {
+                loadPage(page);
             }
         });
+
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevBtn.click();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextBtn.click();
+            }
+        };
+        document.addEventListener('keydown', this.handleKeyDown);
+
+        // Fetch total pages
+        try {
+            const infoResponse = await fetch(`/api/pdf-info?path=${encodeURIComponent(filePath)}`);
+            if (infoResponse.ok) {
+                const info = await infoResponse.json();
+                updateTotalPages(info.pages);
+            }
+        } catch (e) {
+            console.error("Could not fetch PDF info", e);
+        }
         
-        document.getElementById('pdf-next').addEventListener('click', () => {
-            currentPage++;
-            loadPage(currentPage);
-        });
-        
-        await loadPage(currentPage);
+        await loadPage(1);
     }
 }
 
@@ -406,7 +567,8 @@ class ComicRenderer {
         
         const loadPage = async (page) => {
             try {
-                statusElement.textContent = 'Loading...';
+                statusElement.innerHTML = '⏳ Loading page...';
+                pageImg.style.opacity = '0.5';
                 const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
                 
                 if (!response.ok) {
@@ -415,10 +577,12 @@ class ComicRenderer {
                 
                 const blob = await response.blob();
                 pageImg.src = URL.createObjectURL(blob);
+                pageImg.style.opacity = '1';
                 document.getElementById('comic-page-info').textContent = `Page ${page}`;
                 statusElement.textContent = '';
             } catch (error) {
                 console.error('Comic load error:', error);
+                pageImg.style.opacity = '1';
                 statusElement.textContent = `Error: ${error.message}`;
             }
         };
@@ -461,7 +625,22 @@ class VideoRenderer {
 }
 
 class DocxRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.currentPage = 1;
+        this.totalPages = 0;
+        this.pageHeight = 0;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
         try {
             const response = await fetch(`/files?path=${encodeURIComponent(filePath)}`);
             const arrayBuffer = await response.arrayBuffer();
@@ -478,28 +657,73 @@ class DocxRenderer {
                 font-family: Arial, sans-serif;
                 line-height: 1.6;
                 max-width: 100%;
-                overflow-x: auto;
+                height: 70vh;
+                overflow-y: auto;
             `;
             
-            docxContainer.innerHTML = result.value;
+            const docxContent = document.createElement('div');
+            docxContent.innerHTML = result.value;
+            docxContainer.appendChild(docxContent);
+
+            const controls = document.createElement('div');
+            controls.className = 'docx-controls';
+            controls.style.cssText = `display: flex; align-items: center; margin-top: 10px;`;
+            controls.innerHTML = `
+                <button id="docx-prev">Previous</button>
+                <span id="docx-page-info" style="margin: 0 10px;"></span>
+                <button id="docx-next">Next</button>
+                <input type="number" id="docx-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
+                <button id="docx-jump-btn" style="margin-left: 5px;">Go</button>
+            `;
             
-            if (result.messages && result.messages.length > 0) {
-                const messagesDiv = document.createElement('div');
-                messagesDiv.className = 'docx-messages';
-                messagesDiv.style.cssText = `
-                    margin-top: 10px;
-                    padding: 10px;
-                    background: #f5f5f5;
-                    font-size: 12px;
-                    color: #666;
-                `;
-                messagesDiv.innerHTML = '<strong>Conversion notes:</strong><br>' + 
-                    result.messages.map(m => m.message).join('<br>');
-                docxContainer.appendChild(messagesDiv);
-            }
-            
+            contentOther.appendChild(controls);
             contentOther.appendChild(docxContainer);
             contentOther.style.display = 'block';
+
+            // Pagination logic
+            setTimeout(() => {
+                this.pageHeight = docxContainer.clientHeight;
+                const contentHeight = docxContent.scrollHeight;
+                this.totalPages = Math.ceil(contentHeight / this.pageHeight);
+                this.currentPage = 1;
+
+                const prevBtn = controls.querySelector('#docx-prev');
+                const nextBtn = controls.querySelector('#docx-next');
+                const pageInfo = controls.querySelector('#docx-page-info');
+                const jumpInput = controls.querySelector('#docx-page-jump');
+                const jumpBtn = controls.querySelector('#docx-jump-btn');
+
+                const showPage = (page) => {
+                    if (page < 1 || page > this.totalPages) return;
+                    this.currentPage = page;
+                    docxContainer.scrollTop = (this.currentPage - 1) * this.pageHeight;
+                    pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+                    prevBtn.disabled = this.currentPage === 1;
+                    nextBtn.disabled = this.currentPage === this.totalPages;
+                };
+
+                prevBtn.addEventListener('click', () => showPage(this.currentPage - 1));
+                nextBtn.addEventListener('click', () => showPage(this.currentPage + 1));
+                jumpBtn.addEventListener('click', () => {
+                    const page = parseInt(jumpInput.value, 10);
+                    if (!isNaN(page)) showPage(page);
+                });
+
+                this.handleKeyDown = (e) => {
+                    if (e.target.tagName === 'INPUT') return;
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        prevBtn.click();
+                    } else if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        nextBtn.click();
+                    }
+                };
+                document.addEventListener('keydown', this.handleKeyDown);
+
+                showPage(1);
+            }, 100);
+
         } catch (error) {
             console.error('DOCX render error:', error);
             contentOther.innerHTML = `<div style="color: red;">Error loading DOCX file: ${error.message}</div>`;
@@ -650,7 +874,19 @@ class PptxRenderer {
 }
 
 class EpubRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
         try {
             const response = await fetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
             const epubData = await response.json();
@@ -724,53 +960,22 @@ class EpubRenderer {
                 border: 1px solid rgba(255, 255, 255, 0.1);
             `;
             
-            // Create chapter selector
-            const chapterSelect = document.createElement('select');
-            chapterSelect.id = 'epub-chapter-select';
-            chapterSelect.style.cssText = `
-                flex: 1;
-                padding: 8px 12px;
-                margin: 0 10px;
-                background: rgba(40, 40, 60, 0.9);
-                border: 1px solid rgba(78, 205, 196, 0.3);
-                border-radius: 8px;
-                color: #ffffff;
-                font-size: 0.9rem;
-                max-width: 300px;
+            controls.innerHTML = `
+                <button id="epub-prev">‹ Previous</button>
+                <select id="epub-chapter-select" style="flex: 1; max-width: 300px;"></select>
+                <button id="epub-next">Next ›</button>
+                <span id="epub-page-info" style="margin: 0 10px;"></span>
+                <input type="number" id="epub-page-jump" placeholder="Chapter" style="width: 80px;">
+                <button id="epub-jump-btn">Go</button>
             `;
-            
+
+            const chapterSelect = controls.querySelector('#epub-chapter-select');
             epubData.chapters.forEach((chapter, index) => {
                 const option = document.createElement('option');
                 option.value = index;
                 option.textContent = chapter.title || `Chapter ${index + 1}`;
-                option.style.cssText = `
-                    background: rgba(40, 40, 60, 0.95);
-                    color: #ffffff;
-                    padding: 8px;
-                `;
                 chapterSelect.appendChild(option);
             });
-            
-            const prevBtn = document.createElement('button');
-            prevBtn.textContent = '‹ Previous';
-            prevBtn.style.cssText = `
-                padding: 8px 16px;
-                background: rgba(78, 205, 196, 0.2);
-                border: 1px solid #4ecdc4;
-                border-radius: 8px;
-                color: #4ecdc4;
-                cursor: pointer;
-                font-weight: 600;
-                transition: all 0.3s ease;
-            `;
-            
-            const nextBtn = document.createElement('button');
-            nextBtn.textContent = 'Next ›';
-            nextBtn.style.cssText = prevBtn.style.cssText;
-            
-            controls.appendChild(prevBtn);
-            controls.appendChild(chapterSelect);
-            controls.appendChild(nextBtn);
             
             // Create content area
             const contentArea = document.createElement('div');
@@ -818,11 +1023,17 @@ class EpubRenderer {
             epubContainer.appendChild(controls);
             epubContainer.appendChild(contentArea);
             
-            // Add event listeners
+            const prevBtn = controls.querySelector('#epub-prev');
+            const nextBtn = controls.querySelector('#epub-next');
+            const pageInfo = controls.querySelector('#epub-page-info');
+            const jumpInput = controls.querySelector('#epub-page-jump');
+            const jumpBtn = controls.querySelector('#epub-jump-btn');
+
             let currentChapter = 0;
-            
+            const totalChapters = epubData.chapters.length;
+
             const showChapter = (chapterIndex) => {
-                if (chapterIndex >= 0 && chapterIndex < epubData.chapters.length) {
+                if (chapterIndex >= 0 && chapterIndex < totalChapters) {
                     currentChapter = chapterIndex;
                     chapterSelect.value = chapterIndex;
                     contentArea.innerHTML = epubData.chapters[chapterIndex].content;
@@ -892,31 +1103,37 @@ class EpubRenderer {
                         }
                     });
                     
+                    pageInfo.textContent = `Chapter ${currentChapter + 1} of ${totalChapters}`;
                     prevBtn.disabled = chapterIndex === 0;
-                    nextBtn.disabled = chapterIndex === epubData.chapters.length - 1;
+                    nextBtn.disabled = chapterIndex === totalChapters - 1;
                     
                     prevBtn.style.opacity = prevBtn.disabled ? '0.5' : '1';
                     nextBtn.style.opacity = nextBtn.disabled ? '0.5' : '1';
                 }
             };
             
-            prevBtn.addEventListener('click', () => {
-                if (currentChapter > 0) {
-                    showChapter(currentChapter - 1);
+            prevBtn.addEventListener('click', () => showChapter(currentChapter - 1));
+            nextBtn.addEventListener('click', () => showChapter(currentChapter + 1));
+            chapterSelect.addEventListener('change', (e) => showChapter(parseInt(e.target.value)));
+            jumpBtn.addEventListener('click', () => {
+                const chapterNum = parseInt(jumpInput.value, 10);
+                if (chapterNum >= 1 && chapterNum <= totalChapters) {
+                    showChapter(chapterNum - 1);
                 }
             });
-            
-            nextBtn.addEventListener('click', () => {
-                if (currentChapter < epubData.chapters.length - 1) {
-                    showChapter(currentChapter + 1);
+
+            this.handleKeyDown = (e) => {
+                if (e.target.tagName === 'INPUT') return;
+                if (e.key === 'ArrowLeft') {
+                    e.preventDefault();
+                    prevBtn.click();
+                } else if (e.key === 'ArrowRight') {
+                    e.preventDefault();
+                    nextBtn.click();
                 }
-            });
+            };
+            document.addEventListener('keydown', this.handleKeyDown);
             
-            chapterSelect.addEventListener('change', (e) => {
-                showChapter(parseInt(e.target.value));
-            });
-            
-            // Show first chapter
             showChapter(0);
             
             contentOther.appendChild(epubContainer);

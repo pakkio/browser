@@ -6,8 +6,8 @@
 
 body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: #ffffff;
+    background-color: #1e1e1e;
+    color: #d4d4d4;
     min-height: 100vh;
     overflow: hidden;
 }
@@ -32,192 +32,172 @@ body {
 .container {
     display: flex;
     height: 100vh;
-    backdrop-filter: blur(10px);
 }
 
 .browser {
-    width: 350px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border-right: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 25px;
+    width: 300px;
+    background: #252526;
+    border-right: 1px solid #333333;
+    padding: 15px;
     overflow: hidden;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-    transition: all 0.3s ease;
     display: flex;
     flex-direction: column;
+    transition: all 0.3s ease;
 }
 
 .tree-view {
     flex: 1;
     overflow-y: auto;
-    margin-bottom: 20px;
-    border-radius: 10px;
-    background: rgba(255, 255, 255, 0.02);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    min-height: 200px;
+    margin-bottom: 15px;
+    border-radius: 5px;
+    background: #2a2a2a;
+    border: 1px solid #333333;
+    min-height: 150px;
 }
 
 .details-pane {
-    height: 200px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    padding: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    height: 150px;
+    background: #2a2a2a;
+    border-radius: 5px;
+    padding: 10px;
+    border: 1px solid #333333;
     overflow-y: auto;
 }
 
 .details-pane h3 {
-    margin: 0 0 15px 0;
-    color: #4ecdc4;
-    font-size: 1.1rem;
+    margin: 0 0 10px 0;
+    color: #00aacc;
+    font-size: 1rem;
     font-weight: 600;
-    text-align: center;
-    border-bottom: 1px solid rgba(78, 205, 196, 0.3);
-    padding-bottom: 8px;
+    text-align: left;
+    border-bottom: 1px solid #444444;
+    padding-bottom: 5px;
 }
 
 .detail-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 8px;
-    padding: 5px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    margin-bottom: 5px;
+    padding: 2px 0;
+    border-bottom: 1px solid #333333;
 }
 
 .detail-label {
     font-weight: 600;
-    color: #4ecdc4;
-    font-size: 0.85rem;
-    min-width: 70px;
+    color: #00aacc;
+    font-size: 0.75rem;
+    min-width: 60px;
 }
 
 .detail-value {
-    color: #ffffff;
-    font-size: 0.85rem;
+    color: #d4d4d4;
+    font-size: 0.75rem;
     text-align: right;
-    max-width: 150px;
+    max-width: 180px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 .browser h2 {
-    background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-    font-size: 1.8rem;
-    font-weight: 700;
-    margin-bottom: 10px;
-    text-align: center;
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    color: #cccccc;
+    font-size: 1.4rem;
+    font-weight: 600;
+    margin-bottom: 15px;
+    text-align: left;
 }
 
 .current-path {
-    margin-bottom: 20px;
-    padding: 12px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 10px;
-    border-left: 4px solid #4ecdc4;
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #333333;
+    border-radius: 5px;
+    border-left: 3px solid #007acc;
 }
 
 .path-label {
     font-weight: 600;
-    color: #4ecdc4;
-    font-size: 0.85rem;
+    color: #00aacc;
+    font-size: 0.75rem;
     display: block;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
 }
 
 #current-path-display {
     font-family: 'Fira Code', 'Consolas', monospace;
-    color: #ffffff;
-    font-size: 0.8rem;
+    color: #d4d4d4;
+    font-size: 0.75rem;
     word-break: break-all;
-    background: rgba(0, 0, 0, 0.2);
-    padding: 6px 8px;
-    border-radius: 5px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: #2a2a2a;
+    padding: 5px 8px;
+    border-radius: 3px;
+    border: 1px solid #444444;
 }
 
 .filter-section {
-    margin-bottom: 20px;
-    padding: 15px;
-    background: rgba(255, 255, 255, 0.05);
-    border-radius: 10px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(10px);
+    margin-bottom: 15px;
+    padding: 0;
 }
 
 .filter-section label {
-    display: block;
-    color: #4ecdc4;
-    font-weight: 600;
-    font-size: 0.9rem;
-    margin-bottom: 8px;
+    display: none;
 }
 
 .filter-select {
     width: 100%;
-    padding: 10px 12px;
-    background: rgba(255, 255, 255, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    border-radius: 8px;
-    color: #ffffff;
-    font-size: 0.9rem;
-    font-weight: 500;
-    backdrop-filter: blur(10px);
-    transition: all 0.3s ease;
+    padding: 8px 10px;
+    background: #333333;
+    border: 1px solid #444444;
+    border-radius: 5px;
+    color: #d4d4d4;
+    font-size: 0.85rem;
+    font-weight: 400;
+    transition: all 0.2s ease;
     cursor: pointer;
 }
 
 .filter-select:hover {
-    background: rgba(255, 255, 255, 0.15);
-    border-color: rgba(78, 205, 196, 0.4);
+    background: #3c3c3c;
+    border-color: #555555;
 }
 
 .filter-select:focus {
     outline: none;
-    background: rgba(255, 255, 255, 0.2);
-    border-color: #4ecdc4;
-    box-shadow: 0 0 0 2px rgba(78, 205, 196, 0.2);
+    background: #3c3c3c;
+    border-color: #007acc;
+    box-shadow: 0 0 0 1px #007acc;
 }
 
 .filter-select option {
-    background: rgba(30, 30, 50, 0.95);
-    color: #ffffff;
+    background: #252526;
+    color: #d4d4d4;
     padding: 8px;
 }
 
 .content-viewer {
     flex: 1;
-    padding: 30px;
+    padding: 20px;
     overflow-y: auto;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
+    background: #1e1e1e;
 }
 
 #file-list {
     list-style: none;
-    padding: 0;
+    padding: 5px;
 }
 
 #file-list li {
     cursor: pointer;
-    padding: 8px 12px;
-    margin: 2px 0;
-    border-radius: 8px;
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    padding: 6px 10px;
+    margin: 1px 0;
+    border-radius: 4px;
+    background: transparent;
+    border: 1px solid transparent;
+    transition: all 0.2s ease;
     position: relative;
     overflow: hidden;
-    font-weight: 500;
+    font-weight: 400;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -246,63 +226,35 @@ body {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
 }
 
 .file-size {
     flex-shrink: 0;
-    font-size: 0.75rem;
-    color: rgba(255, 255, 255, 0.6);
+    font-size: 0.7rem;
+    color: #888888;
     text-align: right;
     min-width: 50px;
 }
 
-#file-list li::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: linear-gradient(45deg, rgba(255, 107, 107, 0.1), rgba(78, 205, 196, 0.1));
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: -1;
-}
-
 #file-list li:hover {
-    background: rgba(255, 255, 255, 0.15);
-    transform: translateX(4px);
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.2);
-    border-color: rgba(255, 255, 255, 0.3);
-}
-
-#file-list li:hover::before {
-    opacity: 1;
+    background: #333333;
+    border-color: #444444;
 }
 
 #file-list li.selected {
-    background: rgba(78, 205, 196, 0.2);
-    border-color: #4ecdc4;
-    transform: translateX(4px);
-    box-shadow: 0 6px 20px rgba(78, 205, 196, 0.3);
-}
-
-#file-list li.selected::before {
-    opacity: 1;
-    background: linear-gradient(45deg, rgba(78, 205, 196, 0.2), rgba(78, 205, 196, 0.1));
+    background: #094771;
+    border-color: #007acc;
+    color: #ffffff;
 }
 
 #file-list li.parent-dir {
-    font-weight: 700;
-    background: linear-gradient(45deg, rgba(255, 107, 107, 0.2), rgba(78, 205, 196, 0.2));
-    color: #4ecdc4;
-    border: 1px solid rgba(78, 205, 196, 0.3);
+    font-weight: 500;
+    color: #00aacc;
 }
 
 #file-list li.parent-dir:hover {
-    transform: translateX(6px);
-    box-shadow: 0 8px 25px rgba(78, 205, 196, 0.3);
+    background: #333333;
 }
 
 /* File type icons */
@@ -359,20 +311,18 @@ body {
 }
 
 pre {
-    background: rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
-    padding: 25px;
-    border-radius: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    background: #252526;
+    padding: 15px;
+    border-radius: 5px;
+    border: 1px solid #333333;
     font-family: 'Fira Code', 'Consolas', monospace;
-    line-height: 1.6;
+    line-height: 1.5;
 }
 
 #content-code {
     white-space: pre-wrap;
     word-wrap: break-word;
-    color: #e2e8f0;
+    color: #d4d4d4;
 }
 
 /* Control buttons styling */
@@ -380,101 +330,86 @@ pre {
     display: flex;
     justify-content: center;
     align-items: center;
-    gap: 15px;
-    margin-bottom: 25px;
-    padding: 20px;
-    background: rgba(255, 255, 255, 0.1);
-    backdrop-filter: blur(20px);
-    border-radius: 20px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    gap: 10px;
+    margin-bottom: 15px;
+    padding: 10px;
+    background: #252526;
+    border-radius: 5px;
+    border: 1px solid #333333;
 }
 
 .pdf-controls button, .comic-controls button {
-    padding: 12px 24px;
-    border: none;
-    border-radius: 25px;
+    padding: 8px 16px;
+    border: 1px solid #333333;
+    border-radius: 5px;
     font-weight: 600;
-    font-size: 14px;
+    font-size: 13px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
+    transition: all 0.2s ease;
+    text-transform: none;
+    letter-spacing: 0;
 }
 
 .pdf-controls button {
-    background: linear-gradient(45deg, #667eea, #764ba2);
-    color: white;
-    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.4);
+    background: #333333;
+    color: #d4d4d4;
 }
 
 .comic-controls button {
-    background: linear-gradient(45deg, #56ab2f, #a8e6cf);
-    color: #2d5a3d;
-    box-shadow: 0 4px 15px rgba(86, 171, 47, 0.4);
+    background: #333333;
+    color: #d4d4d4;
 }
 
 .pdf-controls button:hover, .comic-controls button:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-}
-
-.pdf-controls button:active, .comic-controls button:active {
-    transform: translateY(-1px);
+    background: #3c3c3c;
+    border-color: #555555;
 }
 
 .pdf-controls button:disabled, .comic-controls button:disabled {
-    background: rgba(255, 255, 255, 0.1);
-    color: rgba(255, 255, 255, 0.3);
+    background: #2a2a2a;
+    color: #888888;
     cursor: not-allowed;
-    transform: none;
-    box-shadow: none;
 }
 
 #pdf-page-info, #comic-page-info {
-    font-weight: 700;
-    font-size: 16px;
-    padding: 12px 20px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    backdrop-filter: blur(10px);
-    text-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    font-weight: 600;
+    font-size: 14px;
+    padding: 8px 16px;
+    background: #252526;
+    border-radius: 5px;
+    border: 1px solid #333333;
 }
 
 /* Image styling */
 img {
-    border-radius: 15px;
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-    transition: all 0.3s ease;
+    border-radius: 5px;
+    box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+    transition: all 0.2s ease;
     max-width: 100%;
     height: auto;
 }
 
 img:hover {
-    transform: scale(1.02);
-    box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+    transform: scale(1.01);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
 }
 
 /* Scrollbar styling */
 ::-webkit-scrollbar {
-    width: 8px;
+    width: 10px;
 }
 
 ::-webkit-scrollbar-track {
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 10px;
+    background: #2a2a2a;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: linear-gradient(45deg, #667eea, #764ba2);
-    border-radius: 10px;
+    background: #444444;
+    border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: linear-gradient(45deg, #5a6fd8, #6a4190);
+    background: #555555;
 }
 
 /* Responsive design */
@@ -503,20 +438,20 @@ img:hover {
 
 /* Animation keyframes */
 @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(20px); }
+    from { opacity: 0; transform: translateY(10px); }
     to { opacity: 1; transform: translateY(0); }
 }
 
 .browser, .content-viewer {
-    animation: fadeIn 0.6s ease-out;
+    animation: fadeIn 0.3s ease-out;
 }
 
 /* Loading animation */
 .loading {
     display: inline-block;
-    width: 20px;
-    height: 20px;
-    border: 3px solid rgba(255, 255, 255, 0.3);
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
     border-radius: 50%;
     border-top-color: #fff;
     animation: spin 1s ease-in-out infinite;
@@ -528,20 +463,17 @@ img:hover {
 
 /* Content container styling */
 #content-other {
-    background: rgba(255, 255, 255, 0.05);
-    backdrop-filter: blur(10px);
-    border-radius: 20px;
-    padding: 25px;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    background: #252526;
+    border-radius: 5px;
+    padding: 20px;
+    border: 1px solid #333333;
 }
 
 /* Audio and video styling */
 audio, video {
     width: 100%;
-    border-radius: 15px;
-    background: rgba(0, 0, 0, 0.3);
-    backdrop-filter: blur(10px);
+    border-radius: 5px;
+    background: #252526;
 }
 
 /* CSV table styling */
@@ -579,5 +511,28 @@ audio, video {
 }
 
 .srt-container::-webkit-scrollbar-thumb:hover {
+    background: rgba(78, 205, 196, 0.5);
+}
+
+/* E-book styling */
+.epub-container {
+    font-family: 'Georgia', serif;
+}
+
+.epub-container::-webkit-scrollbar {
+    width: 6px;
+}
+
+.epub-container::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.epub-container::-webkit-scrollbar-thumb {
+    background: rgba(78, 205, 196, 0.3);
+    border-radius: 3px;
+}
+
+.epub-container::-webkit-scrollbar-thumb:hover {
     background: rgba(78, 205, 196, 0.5);
 }
