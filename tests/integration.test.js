@@ -9,9 +9,16 @@ jest.mock('yauzl');
 jest.mock('node-unrar-js');
 jest.mock('child_process');
 
-const app = require('../server');
-
 describe('Integration Tests', () => {
+  let app;
+  
+  beforeAll(() => {
+    process.env.AUTH = 'FALSE'; // Disable auth for integration tests
+    delete require.cache[require.resolve('../server.js')];
+    delete require.cache[require.resolve('../auth.js')];
+    app = require('../server');
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
   });

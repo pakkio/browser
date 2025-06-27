@@ -35,6 +35,16 @@ describe('Middleware and Application Tests', () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
       
+      // Mock fs for browse endpoint
+      const fs = require('fs');
+      jest.spyOn(fs, 'readdirSync').mockReturnValue([
+        { name: 'test.txt', isDirectory: () => false }
+      ]);
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        size: 1024,
+        mtime: new Date('2023-01-01')
+      });
+      
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
       
       await request(app)
@@ -46,6 +56,8 @@ describe('Middleware and Application Tests', () => {
       );
       
       consoleSpy.mockRestore();
+      fs.readdirSync.mockRestore();
+      fs.statSync.mockRestore();
     });
 
     test('should not log file requests without query params', async () => {

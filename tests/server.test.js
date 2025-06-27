@@ -9,11 +9,20 @@ jest.mock('yauzl');
 jest.mock('node-unrar-js');
 jest.mock('child_process');
 
-const app = require('../server');
-
 describe('File Browser Server', () => {
+  let app;
+  
+  beforeAll(() => {
+    process.env.AUTH = 'FALSE'; // Disable auth for server tests
+    delete require.cache[require.resolve('../server.js')];
+    delete require.cache[require.resolve('../auth.js')];
+    app = require('../server');
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset all fs mocks
+    jest.restoreAllMocks();
   });
 
   describe('GET /api/browse', () => {
@@ -69,7 +78,12 @@ describe('File Browser Server', () => {
         })
       };
       
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        isDirectory: () => false,
+        size: testContent.length
+      });
 
       const response = await request(app)
         .get('/files?path=test.txt');

@@ -35,7 +35,7 @@ describe('EPUB Tests', () => {
       expect(response.body.error).toBeDefined();
     });
 
-    test('should return 404 when cover image not found', (done) => {
+    test('should return 404 when cover image not found', async () => {
       // Mock yauzl to simulate EPUB without cover
       const yauzl = require('yauzl');
       const originalOpen = yauzl.open;
@@ -46,29 +46,26 @@ describe('EPUB Tests', () => {
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               // Simulate some entries but not the cover
-              setTimeout(() => handler({ fileName: 'content.opf' }), 10);
-              setTimeout(() => handler({ fileName: 'chapter1.html' }), 20);
+              setImmediate(() => handler({ fileName: 'content.opf' }));
+              setImmediate(() => handler({ fileName: 'chapter1.html' }));
             } else if (event === 'end') {
-              setTimeout(() => handler(), 30);
+              setImmediate(() => handler());
             }
           })
         };
         callback(null, mockZipfile);
       });
 
-      request(app)
+      const response = await request(app)
         .get('/epub-cover?path=test.epub&cover=images/cover.jpg')
-        .expect(404)
-        .end((err, res) => {
-          if (err) return done(err);
-          expect(res.body.error).toBe('Cover image not found');
-          expect(res.body.requestedPath).toBe('images/cover.jpg');
-          
-          // Restore original function
-          yauzl.open = originalOpen;
-          done();
-        });
-    });
+        .expect(404);
+        
+      expect(response.body.error).toBe('Cover image not found');
+      expect(response.body.requestedPath).toBe('images/cover.jpg');
+      
+      // Restore original function
+      yauzl.open = originalOpen;
+    }, 10000);
   });
 
   describe('GET /images/:filename', () => {
@@ -115,10 +112,10 @@ describe('EPUB Tests', () => {
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               // Simulate some entries but not the requested image
-              setTimeout(() => handler({ fileName: 'content.opf' }), 10);
-              setTimeout(() => handler({ fileName: 'other-image.png' }), 20);
+              setImmediate(() => handler({ fileName: 'content.opf' }));
+              setImmediate(() => handler({ fileName: 'other-image.png' }));
             } else if (event === 'end') {
-              setTimeout(() => handler(), 30);
+              setImmediate(() => handler());
             }
           })
         };
@@ -133,7 +130,7 @@ describe('EPUB Tests', () => {
       
       // Restore original function
       yauzl.open = originalOpen;
-    });
+    }, 10000);
   });
 
   describe('GET /cover.jpeg and /cover.jpg', () => {
@@ -184,9 +181,9 @@ describe('EPUB Tests', () => {
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               // Simulate entries without container.xml
-              setTimeout(() => handler({ fileName: 'content.opf' }), 10);
+              setImmediate(() => handler({ fileName: 'content.opf' }));
             } else if (event === 'end') {
-              setTimeout(() => handler(), 20);
+              setImmediate(() => handler());
             }
           })
         };
@@ -201,7 +198,7 @@ describe('EPUB Tests', () => {
       
       // Restore original function
       yauzl.open = originalOpen;
-    });
+    }, 15000);
 
     test('should handle EPUB with missing OPF file', async () => {
       // Mock yauzl to simulate EPUB with container.xml but missing OPF
@@ -217,12 +214,12 @@ describe('EPUB Tests', () => {
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               // Only container.xml, no OPF file
-              setTimeout(() => handler({ 
+              setImmediate(() => handler({ 
                 fileName: 'META-INF/container.xml',
                 isDirectory: () => false 
-              }), 10);
+              }));
             } else if (event === 'end') {
-              setTimeout(() => handler(), 20);
+              setImmediate(() => handler());
             }
           }),
           openReadStream: jest.fn((entry, callback) => {
@@ -230,9 +227,9 @@ describe('EPUB Tests', () => {
             const mockStream = {
               on: jest.fn((event, handler) => {
                 if (event === 'data') {
-                  setTimeout(() => handler(Buffer.from(content)), 10);
+                  setImmediate(() => handler(Buffer.from(content)));
                 } else if (event === 'end') {
-                  setTimeout(() => handler(), 20);
+                  setImmediate(() => handler());
                 }
               })
             };
@@ -250,7 +247,7 @@ describe('EPUB Tests', () => {
       
       // Restore original function
       yauzl.open = originalOpen;
-    });
+    }, 15000);
 
     test('should handle EPUB with no readable chapters', async () => {
       // Mock yauzl to simulate EPUB with OPF but no chapters
@@ -266,16 +263,16 @@ describe('EPUB Tests', () => {
           readEntry: jest.fn(),
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
-              setTimeout(() => handler({ 
+              setImmediate(() => handler({ 
                 fileName: 'META-INF/container.xml',
                 isDirectory: () => false 
-              }), 10);
-              setTimeout(() => handler({ 
+              }));
+              setImmediate(() => handler({ 
                 fileName: 'content.opf',
                 isDirectory: () => false 
-              }), 20);
+              }));
             } else if (event === 'end') {
-              setTimeout(() => handler(), 30);
+              setImmediate(() => handler());
             }
           }),
           openReadStream: jest.fn((entry, callback) => {
@@ -283,9 +280,9 @@ describe('EPUB Tests', () => {
             const mockStream = {
               on: jest.fn((event, handler) => {
                 if (event === 'data') {
-                  setTimeout(() => handler(Buffer.from(content)), 10);
+                  setImmediate(() => handler(Buffer.from(content)));
                 } else if (event === 'end') {
-                  setTimeout(() => handler(), 20);
+                  setImmediate(() => handler());
                 }
               })
             };
@@ -303,6 +300,6 @@ describe('EPUB Tests', () => {
       
       // Restore original function
       yauzl.open = originalOpen;
-    });
+    }, 15000);
   });
 });

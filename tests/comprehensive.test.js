@@ -12,6 +12,10 @@ describe('Comprehensive Coverage Tests', () => {
 
   describe('CBR Comic Extraction Detailed', () => {
     test('should handle CBR file list caching', async () => {
+      // Mock fs.existsSync to make file exist
+      const originalExistsSync = fs.existsSync;
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      
       // Mock exec for unrar lb command
       const { exec } = require('child_process');
       const originalExec = exec;
@@ -28,11 +32,15 @@ describe('Comprehensive Coverage Tests', () => {
         .get('/comic-preview?path=test.cbr&page=1')
         .expect(500); // Will fail at extraction but caching should work
       
-      // Restore original exec
+      // Restore original functions
       require('child_process').exec = originalExec;
+      fs.existsSync.mockRestore();
     });
 
     test('should handle CBR extraction with node-unrar-js fallback', async () => {
+      // Mock fs.existsSync to make file exist
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      
       // Mock both exec and node-unrar-js
       const { exec } = require('child_process');
       const { createExtractorFromFile } = require('node-unrar-js');
@@ -66,9 +74,13 @@ describe('Comprehensive Coverage Tests', () => {
       // Restore original functions
       require('child_process').exec = originalExec;
       require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
+      fs.existsSync.mockRestore();
     });
 
     test('should handle different file data formats in CBR extraction', async () => {
+      // Mock fs.existsSync to make file exist
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      
       const { exec } = require('child_process');
       const { createExtractorFromFile } = require('node-unrar-js');
       const originalExec = exec;
@@ -97,6 +109,7 @@ describe('Comprehensive Coverage Tests', () => {
       // Restore original functions
       require('child_process').exec = originalExec;
       require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
+      fs.existsSync.mockRestore();
     });
   });
 
