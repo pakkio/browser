@@ -6,10 +6,16 @@ A sleek, modern web-based file browser with support for multiple file types incl
 
 ## ✨ Features
 
+### 🔐 Authentication Control
+- **Conditional Authentication**: Enable/disable OAuth2 authentication via environment variable
+- **Google OAuth2 Integration**: Secure login when authentication is enabled
+- **Session Management**: Persistent user sessions with configurable timeouts
+
 ### 📁 File Management
 - **Directory Navigation** - Browse folders with intuitive breadcrumb navigation
 - **File Type Icons** - Visual indicators for different file types
 - **Smooth Animations** - Fluid hover effects and transitions
+- **Security**: Path traversal protection and access control
 
 ### 📄 Document Support
 - **PDF Viewer** - Page-by-page PDF navigation with image conversion
@@ -73,11 +79,35 @@ cd browser
 # Install Node.js dependencies
 npm install
 
+# Set up environment (optional - auth disabled by default)
+cp .env.example .env
+# Edit .env to configure authentication
+
 # Start the server
 npm start
 ```
 
 The application will be available at `http://localhost:3000`
+
+#### Authentication Setup (Optional)
+
+For secure environments, enable authentication:
+
+1. **Create `.env` file**:
+```env
+AUTH=TRUE
+GOOGLE_CLIENT_ID=your_google_client_id
+GOOGLE_CLIENT_SECRET=your_google_client_secret
+BASE_URL=http://localhost:3000
+```
+
+2. **Google OAuth Setup**:
+   - Go to [Google Cloud Console](https://console.cloud.google.com/)
+   - Create/select project → APIs & Services → Credentials
+   - Create OAuth 2.0 Client ID
+   - Add authorized redirect URI: `http://localhost:3000/auth/google/callback`
+
+For local/trusted environments, set `AUTH=FALSE` or omit the `.env` file entirely.
 
 ### Custom Directory
 
@@ -112,7 +142,7 @@ The test suite covers:
 - **Client Logic**: File filtering, search, and navigation
 - **Integration**: Complete workflows and error handling
 
-Current coverage: ~46% of server code with 30 passing tests
+Current coverage: **69% server coverage** with 22+ comprehensive tests
 
 ## 📋 Supported File Types
 

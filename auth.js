@@ -5,6 +5,7 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
+const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'TRUE').toUpperCase());
 
 // Configure Google OAuth strategy
 passport.use(new GoogleStrategy({
@@ -38,6 +39,11 @@ passport.deserializeUser((user, done) => {
 
 // Authentication middleware
 function requireAuth(req, res, next) {
+    // If authentication is disabled, always allow access
+    if (!AUTH_ENABLED) {
+        return next();
+    }
+    
     if (req.isAuthenticated()) {
         return next();
     }
