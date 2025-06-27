@@ -11,7 +11,7 @@ const { createExtractorFromFile } = require('node-unrar-js');
 const session = require('express-session');
 const { passport, requireAuth, optionalAuth } = require('./auth');
 
-const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'TRUE').toUpperCase());
+const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'FALSE').toUpperCase());
 
 const app = express();
 const port = process.env.PORT || 3000;
