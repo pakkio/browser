@@ -95,11 +95,11 @@ Thumbs.db
 *.log
 logs/
 
-# Test files and output
+# Test files and output (but keep our test suite)
 test-*.png
 test-*.pdf
-*.test.js
 debug-*.js
+# *.test.js  # Commented out to allow our test suite
 
 # Sample files
 sample.*

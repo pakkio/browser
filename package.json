@@ -1,6 +1,6 @@
 {
   "name": "browser",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
@@ -8,10 +8,10 @@
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },
-  "keywords": [],
+  "keywords": ["file-browser", "authentication", "oauth2", "pdf-viewer", "comic-reader", "epub-reader", "video-transcoding", "express", "nodejs"],
   "author": "",
   "license": "ISC",
-  "description": "",
+  "description": "Modern file browser with conditional authentication, media preview, and comprehensive test coverage",
   "dependencies": {
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
