@@ -12,6 +12,9 @@ describe('Error Path Coverage Tests', () => {
 
   describe('PDF Info Error Paths', () => {
     test('should handle pdfinfo command not found', async () => {
+      // Mock fs.existsSync to make file exist
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      
       // Mock exec to simulate command not found
       const { exec } = require('child_process');
       const originalExec = exec;
@@ -27,11 +30,15 @@ describe('Error Path Coverage Tests', () => {
       
       expect(response.text).toBe('Failed to get PDF info');
       
-      // Restore original exec
+      // Restore original functions
       require('child_process').exec = originalExec;
+      fs.existsSync.mockRestore();
     });
 
     test('should handle invalid PDF info output', async () => {
+      // Mock fs.existsSync to make file exist
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      
       // Mock exec to return output without Pages field
       const { exec } = require('child_process');
       const originalExec = exec;
@@ -46,8 +53,9 @@ describe('Error Path Coverage Tests', () => {
       
       expect(response.text).toBe('Could not parse PDF info');
       
-      // Restore original exec
+      // Restore original functions
       require('child_process').exec = originalExec;
+      fs.existsSync.mockRestore();
     });
   });
 
