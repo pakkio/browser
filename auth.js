@@ -5,37 +5,39 @@ const GoogleStrategy = require('passport-google-oauth20').Strategy;
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || '';
 const BASE_URL = process.env.BASE_URL || 'http://localhost:3000';
-const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'TRUE').toUpperCase());
+const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'FALSE').toUpperCase());
 
-// Configure Google OAuth strategy
-passport.use(new GoogleStrategy({
-    clientID: GOOGLE_CLIENT_ID,
-    clientSecret: GOOGLE_CLIENT_SECRET,
-    callbackURL: `${BASE_URL}/auth/google/callback`
-}, (accessToken, refreshToken, profile, done) => {
-    // In a real application, you would save user data to a database
-    // For this demo, we'll just use the profile information
-    const user = {
-        id: profile.id,
-        name: profile.displayName,
-        email: profile.emails?.[0]?.value,
-        picture: profile.photos?.[0]?.value,
-        provider: 'google'
-    };
-    
-    console.log(`[${new Date().toISOString()}] 🔐 User authenticated: ${user.name} (${user.email})`);
-    return done(null, user);
-}));
+// Configure Google OAuth strategy only if auth is enabled
+if (AUTH_ENABLED) {
+    passport.use(new GoogleStrategy({
+        clientID: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET,
+        callbackURL: `${BASE_URL}/auth/google/callback`
+    }, (accessToken, refreshToken, profile, done) => {
+        // In a real application, you would save user data to a database
+        // For this demo, we'll just use the profile information
+        const user = {
+            id: profile.id,
+            name: profile.displayName,
+            email: profile.emails?.[0]?.value,
+            picture: profile.photos?.[0]?.value,
+            provider: 'google'
+        };
+        
+        console.log(`[${new Date().toISOString()}] 🔐 User authenticated: ${user.name} (${user.email})`);
+        return done(null, user);
+    }));
 
-// Serialize user for session
-passport.serializeUser((user, done) => {
-    done(null, user);
-});
+    // Serialize user for session
+    passport.serializeUser((user, done) => {
+        done(null, user);
+    });
 
-// Deserialize user from session
-passport.deserializeUser((user, done) => {
-    done(null, user);
-});
+    // Deserialize user from session
+    passport.deserializeUser((user, done) => {
+        done(null, user);
+    });
+}
 
 // Authentication middleware
 function requireAuth(req, res, next) {

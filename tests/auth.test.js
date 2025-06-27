@@ -2,16 +2,23 @@ const request = require('supertest');
 
 describe('Authentication Tests', () => {
   let originalAuthEnv;
+  let originalArgv;
   
   beforeEach(() => {
     originalAuthEnv = process.env.AUTH;
+    originalArgv = process.argv;
+    // Mock argv to use current directory instead of test file path
+    process.argv = ['node', 'server.js', '.'];
     // Clear require cache to force re-import of server with new AUTH setting
     delete require.cache[require.resolve('../server.js')];
+    delete require.cache[require.resolve('../auth.js')];
   });
   
   afterEach(() => {
     process.env.AUTH = originalAuthEnv;
+    process.argv = originalArgv;
     delete require.cache[require.resolve('../server.js')];
+    delete require.cache[require.resolve('../auth.js')];
   });
 
   describe('AUTH=TRUE (Authentication Enabled)', () => {

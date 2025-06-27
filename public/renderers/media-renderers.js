@@ -1,0 +1,84 @@
+class AudioRenderer {
+    async render(filePath, fileName, contentCode, contentOther) {
+        const audio = document.createElement('audio');
+        audio.controls = true;
+        audio.src = `/files?path=${encodeURIComponent(filePath)}`;
+        contentOther.appendChild(audio);
+        contentOther.style.display = 'block';
+    }
+}
+
+class VideoRenderer {
+    async render(filePath, fileName, contentCode, contentOther) {
+        const video = document.createElement('video');
+        video.controls = true;
+        video.preload = 'metadata';
+        video.style.maxWidth = '100%';
+        video.style.height = 'auto';
+        
+        // Check if this is an AVI file that needs transcoding
+        const isAVI = fileName.toLowerCase().endsWith('.avi');
+        
+        if (isAVI) {
+            // Use transcoding endpoint for AVI files
+            video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
+            
+            // Add loading indicator for transcoding
+            const loadingDiv = document.createElement('div');
+            loadingDiv.style.color = '#666';
+            loadingDiv.style.marginBottom = '10px';
+            loadingDiv.innerHTML = '🔄 Transcoding AVI file for playback...';
+            contentOther.appendChild(loadingDiv);
+            
+            video.addEventListener('loadstart', () => {
+                loadingDiv.innerHTML = '🔄 Loading transcoded video...';
+            });
+            
+            video.addEventListener('canplay', () => {
+                loadingDiv.style.display = 'none';
+            });
+        } else {
+            // Use direct file serving for other formats
+            video.src = `/files?path=${encodeURIComponent(filePath)}`;
+        }
+        
+        // Error handling
+        const errorDiv = document.createElement('div');
+        errorDiv.style.color = 'red';
+        errorDiv.style.marginTop = '10px';
+        errorDiv.style.display = 'none';
+        
+        video.addEventListener('error', (e) => {
+            console.error('Video error:', e, video.error);
+            errorDiv.style.display = 'block';
+            errorDiv.innerHTML = `
+                <strong>Video Error:</strong><br>
+                ${this.getErrorMessage(video.error?.code)}<br>
+                <small>File: ${fileName}</small>
+                ${isAVI ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
+            `;
+        });
+        
+        video.addEventListener('loadedmetadata', () => {
+            console.log('Video loaded:', fileName, `${video.videoWidth}x${video.videoHeight}`);
+        });
+        
+        video.addEventListener('canplay', () => {
+            console.log('Video can play:', fileName);
+        });
+        
+        contentOther.appendChild(video);
+        contentOther.appendChild(errorDiv);
+        contentOther.style.display = 'block';
+    }
+    
+    getErrorMessage(errorCode) {
+        const errors = {
+            1: 'MEDIA_ERR_ABORTED - Video loading was aborted',
+            2: 'MEDIA_ERR_NETWORK - Network error occurred',
+            3: 'MEDIA_ERR_DECODE - Video decoding failed (unsupported format or codec)',
+            4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported'
+        };
+        return errors[errorCode] || 'Unknown video error';
+    }
+}
