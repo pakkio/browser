@@ -1,5 +1,19 @@
 console.log('FileRenderer type:', typeof FileRenderer);
-document.addEventListener('DOMContentLoaded', () => {
+
+// Initialize the main application
+function initializeApp() {
+    console.log('Initializing main application...');
+    
+    // Make sure we're authenticated before proceeding
+    if (!window.authManager?.authenticated) {
+        console.warn('Attempted to initialize app without authentication');
+        return;
+    }
+
+    initializeFileExplorer();
+}
+
+function initializeFileExplorer() {
     const fileList = document.getElementById('file-list');
     const contentCode = document.getElementById('content-code');
     const contentOther = document.getElementById('content-other');
@@ -34,8 +48,12 @@ document.addEventListener('DOMContentLoaded', () => {
         // Clear current file list
         fileList.innerHTML = '<li style="color: #666;">Loading...</li>';
         
-        fetch(`/api/browse?path=${encodeURIComponent(path)}`)
+        window.authManager.authenticatedFetch(`/api/browse?path=${encodeURIComponent(path)}`)
             .then(response => {
+                if (!response) {
+                    // Authentication failed, handled by authManager
+                    return;
+                }
                 console.log('Response status:', response.status);
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -43,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 return response.json();
             })
             .then(data => {
+                if (!data) return; // Handle auth failure
                 console.log('Received data:', data);
                 currentFiles = data.files;
                 displayFiles(data.files, path);
@@ -372,4 +391,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     loadFiles(currentPath);
-});
+}
+
+// Expose initializeApp globally so auth.js can call it
+window.initializeApp = initializeApp;
