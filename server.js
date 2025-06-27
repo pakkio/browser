@@ -1118,10 +1118,14 @@ app.use((req, res, next) => {
     next();
 });
 
-app.listen(port, () => {
-    console.log(`🚀 Server started successfully!`);
-    console.log(`📂 Browsing directory: ${baseDir}`);
-    console.log(`🌐 Server listening at http://localhost:${port}`);
-    console.log(`⏰ Started at: ${new Date().toISOString()}`);
-    console.log('================================');
-});
+if (require.main === module) {
+    app.listen(port, () => {
+        console.log(`🚀 Server started successfully!`);
+        console.log(`📂 Browsing directory: ${baseDir}`);
+        console.log(`🌐 Server listening at http://localhost:${port}`);
+        console.log(`⏰ Started at: ${new Date().toISOString()}`);
+        console.log('================================');
+    });
+}
+
+module.exports = app;

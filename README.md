@@ -86,6 +86,34 @@ Browse a specific directory:
 node server.js /path/to/your/directory
 ```
 
+## 🧪 Testing
+
+The application includes a comprehensive test suite with unit tests, integration tests, and security validation.
+
+### Running Tests
+
+```bash
+# Run all tests
+npm test
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run tests in watch mode during development
+npm run test:watch
+```
+
+### Test Coverage
+
+The test suite covers:
+- **API Endpoints**: All server routes and error conditions
+- **File Processing**: PDF, comic, and EPUB handling pipelines
+- **Security**: Path traversal and input validation
+- **Client Logic**: File filtering, search, and navigation
+- **Integration**: Complete workflows and error handling
+
+Current coverage: ~46% of server code with 30 passing tests
+
 ## 📋 Supported File Types
 
 | Type | Extensions | Features |
@@ -128,6 +156,11 @@ node server.js /path/to/your/directory
 - **yauzl** - ZIP/CBZ archive extraction
 - **node-unrar-js** - RAR/CBR archive extraction
 
+### Development & Testing
+- **jest** - Testing framework
+- **supertest** - HTTP testing utilities
+- **jest-environment-jsdom** - DOM testing environment
+
 ### Frontend
 - **highlight.js** - Code syntax highlighting
 - **mammoth.js** - DOCX document processing
@@ -144,6 +177,10 @@ browser/
 │   ├── script.js             # Client-side JavaScript
 │   ├── style.css             # Modern glassmorphism styles
 │   └── file-renderer.js      # File type rendering logic
+├── tests/                     # Test suite
+│   ├── server.test.js        # Server-side unit tests
+│   ├── client.test.js        # Client-side unit tests
+│   └── integration.test.js   # Integration tests
 ├── server.js                 # Express server with file handling
 ├── package.json              # Dependencies and scripts
 └── README.md                 # This file
