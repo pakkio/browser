@@ -9,6 +9,35 @@
 </head>
 <body>
     <div id="loading-indicator" style="display:none; text-align:center; margin:10px 0;">Loading...</div>
+    
+    <!-- Authentication Panel -->
+    <div id="auth-panel" class="auth-panel" style="display:none;">
+        <div class="auth-content">
+            <h2>🔐 Authentication Required</h2>
+            <p>Please sign in with your Google account to access the file browser.</p>
+            <div class="auth-buttons">
+                <a href="/auth/google" class="google-signin-btn">
+                    <svg width="18" height="18" viewBox="0 0 18 18">
+                        <path fill="#4285F4" d="M16.51 8H8.98v3h4.3c-.18 1-.74 1.48-1.6 2.04v2.01h2.6a7.8 7.8 0 0 0 2.38-5.88c0-.57-.05-.66-.15-1.18z"/>
+                        <path fill="#34A853" d="M8.98 17c2.16 0 3.97-.72 5.3-1.94l-2.6-2.04a4.8 4.8 0 0 1-7.18-2.53H1.83v2.07A8 8 0 0 0 8.98 17z"/>
+                        <path fill="#FBBC05" d="M4.5 10.49a4.8 4.8 0 0 1 0-3.07V5.35H1.83a8 8 0 0 0 0 7.17l2.67-2.03z"/>
+                        <path fill="#EA4335" d="M8.98 4.72c1.16 0 2.23.4 3.06 1.2l2.3-2.3A8 8 0 0 0 1.83 5.35L4.5 7.42a4.77 4.77 0 0 1 4.48-2.7z"/>
+                    </svg>
+                    Sign in with Google
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Info Bar -->
+    <div id="user-bar" class="user-bar" style="display:none;">
+        <div class="user-info">
+            <img id="user-avatar" class="user-avatar" src="" alt="User Avatar">
+            <span id="user-name" class="user-name"></span>
+        </div>
+        <button id="logout-btn" class="logout-btn">Sign Out</button>
+    </div>
+
     <div class="container">
         <div class="browser">
             <h2>File Browser</h2>
@@ -59,6 +88,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <script src="file-renderer.js"></script>
+    <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

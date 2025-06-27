@@ -1,3 +1,6 @@
+// Load environment variables
+require('dotenv').config();
+
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
@@ -5,11 +8,28 @@ const { exec, spawn } = require('child_process');
 const pdf2pic = require('pdf2pic');
 const yauzl = require('yauzl');
 const { createExtractorFromFile } = require('node-unrar-js');
+const session = require('express-session');
+const { passport, requireAuth, optionalAuth } = require('./auth');
 
 const app = express();
-const port = 3000;
+const port = process.env.PORT || 3000;
 
 const baseDir = path.resolve(process.argv[2] || '.');
+
+// Session configuration
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'your-fallback-secret-key-change-in-production',
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+        secure: false, // Set to true in production with HTTPS
+        maxAge: 24 * 60 * 60 * 1000 // 24 hours
+    }
+}));
+
+// Initialize Passport
+app.use(passport.initialize());
+app.use(passport.session());
 
 // Cache for comic file lists to avoid repeated unrar calls
 const comicFileCache = new Map();
@@ -50,9 +70,73 @@ const mimeTypes = {
     '.epub': 'application/epub+zip'
 };
 
+// Authentication routes
+app.get('/auth/google',
+    passport.authenticate('google', { scope: ['profile', 'email'] })
+);
+
+app.get('/auth/google/callback',
+    passport.authenticate('google', { failureRedirect: '/login-failed' }),
+    (req, res) => {
+        // Successful authentication
+        console.log(`[${new Date().toISOString()}] ✅ Authentication successful for ${req.user.name}`);
+        res.redirect('/');
+    }
+);
+
+app.get('/auth/user', (req, res) => {
+    if (req.isAuthenticated()) {
+        res.json({
+            authenticated: true,
+            user: {
+                name: req.user.name,
+                email: req.user.email,
+                picture: req.user.picture
+            }
+        });
+    } else {
+        res.json({ authenticated: false });
+    }
+});
+
+app.post('/auth/logout', (req, res) => {
+    const userName = req.user?.name || 'Unknown user';
+    req.logout((err) => {
+        if (err) {
+            console.error(`[${new Date().toISOString()}] ❌ Logout error: ${err.message}`);
+            return res.status(500).json({ error: 'Logout failed' });
+        }
+        
+        req.session.destroy((err) => {
+            if (err) {
+                console.error(`[${new Date().toISOString()}] ❌ Session destroy error: ${err.message}`);
+                return res.status(500).json({ error: 'Session cleanup failed' });
+            }
+            
+            console.log(`[${new Date().toISOString()}] 👋 User logged out: ${userName}`);
+            res.json({ success: true, message: 'Logged out successfully' });
+        });
+    });
+});
+
+app.get('/login-failed', (req, res) => {
+    res.status(401).send(`
+        <html>
+            <head><title>Login Failed</title></head>
+            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                <h1>Authentication Failed</h1>
+                <p>Unable to authenticate with Google. Please try again.</p>
+                <a href="/auth/google" style="background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                    Try Again
+                </a>
+            </body>
+        </html>
+    `);
+});
+
 app.use(express.static(path.join(__dirname, 'public')));
 
-app.get('/api/browse', (req, res) => {
+app.get('/api/browse', requireAuth, (req, res) => {
     const requestedPath = req.query.path || '';
     const dirPath = path.join(baseDir, requestedPath);
     
@@ -98,7 +182,7 @@ app.get('/api/browse', (req, res) => {
     }
 });
 
-app.get('/api/pdf-info', (req, res) => {
+app.get('/api/pdf-info', requireAuth, (req, res) => {
     const requestedFile = req.query.path;
     if (!requestedFile) {
         return res.status(400).send('File path is required');
@@ -122,7 +206,7 @@ app.get('/api/pdf-info', (req, res) => {
     });
 });
 
-app.get('/files', (req, res) => {
+app.get('/files', requireAuth, (req, res) => {
     const requestedFile = req.query.path;
     console.log(`[${new Date().toISOString()}] GET /files - path: "${requestedFile}"`);
     
@@ -150,7 +234,7 @@ app.get('/files', (req, res) => {
     stream.pipe(res);
 });
 
-app.get('/pdf-preview', async (req, res) => {
+app.get('/pdf-preview', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
     const page = parseInt(req.query.page) || 1;
     console.log(`[${new Date().toISOString()}] GET /pdf-preview - file: "${requestedFile}", page: ${page}`);
@@ -198,7 +282,7 @@ app.get('/pdf-preview', async (req, res) => {
     }
 });
 
-app.get('/video-transcode', async (req, res) => {
+app.get('/video-transcode', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
     console.log(`[${new Date().toISOString()}] GET /video-transcode - file: "${requestedFile}"`);
     
@@ -269,7 +353,7 @@ app.get('/video-transcode', async (req, res) => {
     }
 });
 
-app.get('/comic-preview', async (req, res) => {
+app.get('/comic-preview', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
     const page = parseInt(req.query.page) || 1;
     console.log(`[${new Date().toISOString()}] GET /comic-preview - file: "${requestedFile}", page: ${page}`);
@@ -594,7 +678,7 @@ async function extractFromCBRFallback(filePath, page, res) {
     }
 }
 
-app.get('/epub-cover', async (req, res) => {
+app.get('/epub-cover', requireAuth, async (req, res) => {
     try {
         const filePath = req.query.path;
         const coverPath = req.query.cover;
@@ -659,7 +743,7 @@ app.get('/epub-cover', async (req, res) => {
     }
 });
 
-app.get('/epub-preview', async (req, res) => {
+app.get('/epub-preview', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
     console.log(`[${new Date().toISOString()}] GET /epub-preview - file: "${requestedFile}"`);
     
@@ -1045,7 +1129,7 @@ app.get('/cover.jpg', (req, res) => {
 });
 
 // Handle EPUB images extraction
-app.get('/images/:filename', async (req, res) => {
+app.get('/images/:filename', requireAuth, async (req, res) => {
     const filename = req.params.filename;
     const epubPath = req.query.epub;
     

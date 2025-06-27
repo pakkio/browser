@@ -158,7 +158,16 @@ class TextRenderer {
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
         const extension = fileName.split('.').pop().toLowerCase();
-        const response = await fetch(`/files?path=${encodeURIComponent(filePath)}`);
+        const response = await window.authManager.authenticatedFetch(`/files?path=${encodeURIComponent(filePath)}`);
+        
+        if (!response) {
+            throw new Error('Authentication required');
+        }
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        
         const text = await response.text();
 
         if (extension === 'csv') {
@@ -474,7 +483,7 @@ class PDFRenderer {
             this.currentPage = page;
             try {
                 statusElement.textContent = 'Loading...';
-                const response = await fetch(`/pdf-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
+                const response = await window.authManager.authenticatedFetch(`/pdf-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
                 
                 if (!response.ok) {
                     if (response.status === 500) { // Assume 500 means end of pages if total is unknown
@@ -524,7 +533,7 @@ class PDFRenderer {
 
         // Fetch total pages
         try {
-            const infoResponse = await fetch(`/api/pdf-info?path=${encodeURIComponent(filePath)}`);
+            const infoResponse = await window.authManager.authenticatedFetch(`/api/pdf-info?path=${encodeURIComponent(filePath)}`);
             if (infoResponse.ok) {
                 const info = await infoResponse.json();
                 updateTotalPages(info.pages);
@@ -569,7 +578,7 @@ class ComicRenderer {
             try {
                 statusElement.innerHTML = '⏳ Loading page...';
                 pageImg.style.opacity = '0.5';
-                const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
+                const response = await window.authManager.authenticatedFetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
                 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -706,7 +715,7 @@ class DocxRenderer {
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
         try {
-            const response = await fetch(`/files?path=${encodeURIComponent(filePath)}`);
+            const response = await window.authManager.authenticatedFetch(`/files?path=${encodeURIComponent(filePath)}`);
             const arrayBuffer = await response.arrayBuffer();
             
             const result = await mammoth.convertToHtml({arrayBuffer: arrayBuffer});
@@ -799,7 +808,7 @@ class DocxRenderer {
 class XlsxRenderer {
     async render(filePath, fileName, contentCode, contentOther) {
         try {
-            const response = await fetch(`/files?path=${encodeURIComponent(filePath)}`);
+            const response = await window.authManager.authenticatedFetch(`/files?path=${encodeURIComponent(filePath)}`);
             const arrayBuffer = await response.arrayBuffer();
             
             const workbook = XLSX.read(arrayBuffer, {type: 'array'});
@@ -952,7 +961,7 @@ class EpubRenderer {
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
         try {
-            const response = await fetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
+            const response = await window.authManager.authenticatedFetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
             const epubData = await response.json();
             
             if (!response.ok) {
