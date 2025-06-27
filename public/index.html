@@ -17,23 +17,29 @@
                 <span id="current-path-display">Loading...</span>
             </div>
             <div class="filter-section">
-                <label for="file-type-filter">Filter by type:</label>
-                <select id="file-type-filter" class="filter-select">
-                    <option value="all">All Files</option>
-                    <option value="directory">📁 Directories</option>
-                    <option value="image">🖼️ Images</option>
-                    <option value="video">🎬 Videos</option>
-                    <option value="audio">🎵 Audio</option>
-                    <option value="pdf">📄 PDF</option>
-                    <option value="code">💻 Code</option>
-                    <option value="text">📝 Text Documents</option>
-                    <option value="table">📊 Spreadsheets</option>
-                    <option value="presentation">📊 Presentations</option>
-                    <option value="subtitle">💬 Subtitles</option>
-                    <option value="comic">📚 Comics</option>
-                    <option value="ebook">📖 E-books</option>
-                    <option value="file">📄 Other Files</option>
-                </select>
+                <div class="search-section">
+                    <label for="search-input">Search files:</label>
+                    <input type="text" id="search-input" class="search-input" placeholder="e.g. physics manual pdf">
+                </div>
+                <div class="type-filter-section">
+                    <label for="file-type-filter">Filter by type:</label>
+                    <select id="file-type-filter" class="filter-select">
+                        <option value="all">All Files</option>
+                        <option value="directory">📁 Directories</option>
+                        <option value="image">🖼️ Images</option>
+                        <option value="video">🎬 Videos</option>
+                        <option value="audio">🎵 Audio</option>
+                        <option value="pdf">📄 PDF</option>
+                        <option value="code">💻 Code</option>
+                        <option value="text">📝 Text Documents</option>
+                        <option value="table">📊 Spreadsheets</option>
+                        <option value="presentation">📊 Presentations</option>
+                        <option value="subtitle">💬 Subtitles</option>
+                        <option value="comic">📚 Comics</option>
+                        <option value="ebook">📖 E-books</option>
+                        <option value="file">📄 Other Files</option>
+                    </select>
+                </div>
             </div>
             <div class="tree-view">
                 <ul id="file-list"></ul>

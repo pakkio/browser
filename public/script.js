@@ -5,11 +5,23 @@ document.addEventListener('DOMContentLoaded', () => {
     const contentOther = document.getElementById('content-other');
     const fileDetails = document.getElementById('file-details');
     const fileTypeFilter = document.getElementById('file-type-filter');
+    const searchInput = document.getElementById('search-input');
     let currentPath = '';
     let currentFiles = [];
     let filteredFiles = [];
     let selectedIndex = -1;
     const fileRenderer = new FileRenderer();
+
+    function matchesSearchTerms(filename, searchTerms) {
+        if (!searchTerms || searchTerms.length === 0) return true;
+        
+        const lowerFilename = filename.toLowerCase();
+        return searchTerms.every(term => lowerFilename.includes(term.toLowerCase()));
+    }
+
+    function parseSearchQuery(query) {
+        return query.trim().split(/\s+/).filter(term => term.length > 0);
+    }
 
     function loadFiles(path) {
         console.log('Loading files for path:', path);
@@ -62,23 +74,35 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         
         const selectedFilter = fileTypeFilter.value;
+        const searchQuery = searchInput.value;
+        const searchTerms = parseSearchQuery(searchQuery);
         
-        // Perform filtering
-        filteredFiles = selectedFilter === 'all' ? data : data.filter(file => {
-            if (file.isDirectory) {
-                return selectedFilter === 'directory';
+        // Perform filtering (both type and search)
+        filteredFiles = data.filter(file => {
+            // Type filter
+            let typeMatches = true;
+            if (selectedFilter !== 'all') {
+                if (file.isDirectory) {
+                    typeMatches = selectedFilter === 'directory';
+                } else {
+                    const extension = file.name.split('.').pop().toLowerCase();
+                    const fileType = getFileTypeFromExtension(extension);
+                    typeMatches = fileType === selectedFilter;
+                }
             }
             
-            const extension = file.name.split('.').pop().toLowerCase();
-            const fileType = getFileTypeFromExtension(extension);
-            return fileType === selectedFilter;
+            // Search filter
+            const searchMatches = matchesSearchTerms(file.name, searchTerms);
+            
+            return typeMatches && searchMatches;
         });
         
         // Update path display with filtered count if different from total
-        if (selectedFilter !== 'all') {
+        const hasFilters = selectedFilter !== 'all' || searchTerms.length > 0;
+        if (hasFilters) {
             const pathDisplay = document.getElementById('current-path-display');
             const currentText = pathDisplay.textContent;
-            const baseText = currentText.replace(/ \(\d+ items\).*/, '');
+            const baseText = currentText.replace(/ \(\d+ items\).*/, '').replace(/ \(\d+ of \d+ items\).*/, '');
             pathDisplay.textContent = `${baseText} (${filteredFiles.length} of ${data.length} items)`;
         }
         
@@ -321,6 +345,22 @@ document.addEventListener('DOMContentLoaded', () => {
             const loadingIndicator = document.getElementById('loading-indicator');
             loadingIndicator.style.display = 'block';
             loadingIndicator.textContent = 'Filtering files...';
+            
+            setTimeout(() => {
+                displayFiles(currentFiles, currentPath);
+                loadingIndicator.style.display = 'none';
+            }, 50);
+        } else {
+            displayFiles(currentFiles, currentPath);
+        }
+    });
+
+    searchInput.addEventListener('input', () => {
+        // Show brief loading for searching in large directories
+        if (currentFiles.length > 100) {
+            const loadingIndicator = document.getElementById('loading-indicator');
+            loadingIndicator.style.display = 'block';
+            loadingIndicator.textContent = 'Searching files...';
             
             setTimeout(() => {
                 displayFiles(currentFiles, currentPath);

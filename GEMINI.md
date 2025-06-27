@@ -1,0 +1,1 @@
+To run the server, use the command `node server.js <directory>`. For example, `node server.js /mnt/z`.
