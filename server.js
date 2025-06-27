@@ -11,25 +11,29 @@ const { createExtractorFromFile } = require('node-unrar-js');
 const session = require('express-session');
 const { passport, requireAuth, optionalAuth } = require('./auth');
 
+const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'TRUE').toUpperCase());
+
 const app = express();
 const port = process.env.PORT || 3000;
 
 const baseDir = path.resolve(process.argv[2] || '.');
 
-// Session configuration
-app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-fallback-secret-key-change-in-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: false, // Set to true in production with HTTPS
-        maxAge: 24 * 60 * 60 * 1000 // 24 hours
-    }
-}));
+// Session configuration (only if auth is enabled)
+if (AUTH_ENABLED) {
+    app.use(session({
+        secret: process.env.SESSION_SECRET || 'your-fallback-secret-key-change-in-production',
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            secure: false, // Set to true in production with HTTPS
+            maxAge: 24 * 60 * 60 * 1000 // 24 hours
+        }
+    }));
 
-// Initialize Passport
-app.use(passport.initialize());
-app.use(passport.session());
+    // Initialize Passport
+    app.use(passport.initialize());
+    app.use(passport.session());
+}
 
 // Cache for comic file lists to avoid repeated unrar calls
 const comicFileCache = new Map();
@@ -39,6 +43,7 @@ console.log('================================');
 console.log('🚀 File Browser Server Starting...');
 console.log(`📂 Base directory: ${baseDir}`);
 console.log(`🔧 Port: ${port}`);
+console.log(`🔐 Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
 console.log('================================');
 
 const mimeTypes = {
@@ -70,22 +75,65 @@ const mimeTypes = {
     '.epub': 'application/epub+zip'
 };
 
-// Authentication routes
-app.get('/auth/google',
-    passport.authenticate('google', { scope: ['profile', 'email'] })
-);
+// Authentication routes (only if auth is enabled)
+if (AUTH_ENABLED) {
+    app.get('/auth/google',
+        passport.authenticate('google', { scope: ['profile', 'email'] })
+    );
 
-app.get('/auth/google/callback',
-    passport.authenticate('google', { failureRedirect: '/login-failed' }),
-    (req, res) => {
-        // Successful authentication
-        console.log(`[${new Date().toISOString()}] ✅ Authentication successful for ${req.user.name}`);
-        res.redirect('/');
-    }
-);
+    app.get('/auth/google/callback',
+        passport.authenticate('google', { failureRedirect: '/login-failed' }),
+        (req, res) => {
+            // Successful authentication
+            console.log(`[${new Date().toISOString()}] ✅ Authentication successful for ${req.user.name}`);
+            res.redirect('/');
+        }
+    );
 
+    app.post('/auth/logout', (req, res) => {
+        const userName = req.user?.name || 'Unknown user';
+        req.logout((err) => {
+            if (err) {
+                console.error(`[${new Date().toISOString()}] ❌ Logout error: ${err.message}`);
+                return res.status(500).json({ error: 'Logout failed' });
+            }
+            
+            req.session.destroy((err) => {
+                if (err) {
+                    console.error(`[${new Date().toISOString()}] ❌ Session destroy error: ${err.message}`);
+                    return res.status(500).json({ error: 'Session cleanup failed' });
+                }
+                
+                console.log(`[${new Date().toISOString()}] 👋 User logged out: ${userName}`);
+                res.json({ success: true, message: 'Logged out successfully' });
+            });
+        });
+    });
+
+    app.get('/login-failed', (req, res) => {
+        res.status(401).send(`
+            <html>
+                <head><title>Login Failed</title></head>
+                <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
+                    <h1>Authentication Failed</h1>
+                    <p>Unable to authenticate with Google. Please try again.</p>
+                    <a href="/auth/google" style="background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                        Try Again
+                    </a>
+                </body>
+            </html>
+        `);
+    });
+}
+
+// User info endpoint (works for both auth enabled/disabled)
 app.get('/auth/user', (req, res) => {
-    if (req.isAuthenticated()) {
+    if (!AUTH_ENABLED) {
+        res.json({ 
+            authenticated: false, 
+            authDisabled: true 
+        });
+    } else if (req.isAuthenticated && req.isAuthenticated()) {
         res.json({
             authenticated: true,
             user: {
@@ -97,41 +145,6 @@ app.get('/auth/user', (req, res) => {
     } else {
         res.json({ authenticated: false });
     }
-});
-
-app.post('/auth/logout', (req, res) => {
-    const userName = req.user?.name || 'Unknown user';
-    req.logout((err) => {
-        if (err) {
-            console.error(`[${new Date().toISOString()}] ❌ Logout error: ${err.message}`);
-            return res.status(500).json({ error: 'Logout failed' });
-        }
-        
-        req.session.destroy((err) => {
-            if (err) {
-                console.error(`[${new Date().toISOString()}] ❌ Session destroy error: ${err.message}`);
-                return res.status(500).json({ error: 'Session cleanup failed' });
-            }
-            
-            console.log(`[${new Date().toISOString()}] 👋 User logged out: ${userName}`);
-            res.json({ success: true, message: 'Logged out successfully' });
-        });
-    });
-});
-
-app.get('/login-failed', (req, res) => {
-    res.status(401).send(`
-        <html>
-            <head><title>Login Failed</title></head>
-            <body style="font-family: Arial, sans-serif; text-align: center; padding: 50px;">
-                <h1>Authentication Failed</h1>
-                <p>Unable to authenticate with Google. Please try again.</p>
-                <a href="/auth/google" style="background: #4285f4; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                    Try Again
-                </a>
-            </body>
-        </html>
-    `);
 });
 
 app.use(express.static(path.join(__dirname, 'public')));
