@@ -1,6 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
 const pdf2pic = require('pdf2pic');
 const yauzl = require('yauzl');
 const { createExtractorFromFile } = require('node-unrar-js');
@@ -9,6 +10,10 @@ const app = express();
 const port = 3000;
 
 const baseDir = path.resolve(process.argv[2] || '.');
+
+// Cache for comic file lists to avoid repeated unrar calls
+const comicFileCache = new Map();
+const pendingRequests = new Map();
 
 console.log('================================');
 console.log('🚀 File Browser Server Starting...');
@@ -87,6 +92,30 @@ app.get('/api/browse', (req, res) => {
         console.error(`[${new Date().toISOString()}] ❌ Browse error: ${error.message}`);
         res.status(500).send(error.toString());
     }
+});
+
+app.get('/api/pdf-info', (req, res) => {
+    const requestedFile = req.query.path;
+    if (!requestedFile) {
+        return res.status(400).send('File path is required');
+    }
+    const filePath = path.join(baseDir, requestedFile);
+    if (!filePath.startsWith(baseDir)) {
+        return res.status(403).send('Forbidden');
+    }
+
+    exec(`pdfinfo "${filePath}"`, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`[${new Date().toISOString()}] ❌ PDF info error: ${stderr}`);
+            return res.status(500).send('Failed to get PDF info');
+        }
+        const pagesMatch = stdout.match(/Pages:\s*(\d+)/);
+        if (pagesMatch && pagesMatch[1]) {
+            res.json({ pages: parseInt(pagesMatch[1], 10) });
+        } else {
+            res.status(500).send('Could not parse PDF info');
+        }
+    });
 });
 
 app.get('/files', (req, res) => {
@@ -246,10 +275,87 @@ async function extractFromCBZ(filePath, page, res) {
     });
 }
 
+async function getComicFileList(filePath) {
+    // Check cache first
+    if (comicFileCache.has(filePath)) {
+        return comicFileCache.get(filePath);
+    }
+    
+    return new Promise((resolve, reject) => {
+        exec(`unrar lb "${filePath}"`, (err, stdout, stderr) => {
+            if (err) {
+                return reject(err);
+            }
+            
+            const files = stdout.split('\n').filter(line => line.trim());
+            const imageFiles = files
+                .filter(file => file.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+                .sort();
+            
+            // Cache the result
+            comicFileCache.set(filePath, imageFiles);
+            resolve(imageFiles);
+        });
+    });
+}
+
 async function extractFromCBR(filePath, page, res) {
+    const requestKey = `${filePath}:${page}`;
+    
+    // Check if same request is already in progress
+    if (pendingRequests.has(requestKey)) {
+        return pendingRequests.get(requestKey);
+    }
+    
+    const promise = new Promise(async (resolve, reject) => {
+        try {
+            const imageFiles = await getComicFileList(filePath);
+            
+            if (page > imageFiles.length || page < 1) {
+                return reject(new Error(`Page not found. Found ${imageFiles.length} images, requested page ${page}`));
+            }
+            
+            const targetFile = imageFiles[page - 1];
+            
+            // Extract the specific file
+            exec(`unrar p -inul "${filePath}" "${targetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+                if (err) {
+                    return reject(new Error(`Failed to extract ${targetFile}: ${err.message}`));
+                }
+                
+                const ext = path.extname(targetFile).toLowerCase();
+                const mimeType = {
+                    '.jpg': 'image/jpeg',
+                    '.jpeg': 'image/jpeg',
+                    '.png': 'image/png',
+                    '.gif': 'image/gif',
+                    '.webp': 'image/webp'
+                }[ext] || 'image/jpeg';
+                
+                res.setHeader('Content-Type', mimeType);
+                res.send(stdout);
+                resolve();
+            });
+        } catch (error) {
+            extractFromCBRFallback(filePath, page, res).then(resolve).catch(reject);
+        }
+    });
+    
+    // Store pending request
+    pendingRequests.set(requestKey, promise);
+    
+    // Clean up after completion
+    promise.finally(() => {
+        pendingRequests.delete(requestKey);
+    });
+    
+    return promise;
+}
+
+async function extractFromCBRFallback(filePath, page, res) {
     try {
         const extractor = await createExtractorFromFile({ filepath: filePath });
-        const list = extractor.getFileList();
+        const list = await extractor.getFileList();
         
         // Handle different possible structures from node-unrar-js
         let fileHeaders = [];
@@ -276,11 +382,12 @@ async function extractFromCBR(filePath, page, res) {
         ).sort((a, b) => a.name.localeCompare(b.name));
         
         if (page > imageFiles.length || page < 1) {
-            throw new Error('Page not found');
+            throw new Error(`Page not found. Found ${imageFiles.length} images, requested page ${page}`);
         }
         
         const targetFile = imageFiles[page - 1];
-        const extracted = extractor.extract({ files: [targetFile.name] });
+        const fileName = targetFile.name || targetFile.filename;
+        const extracted = await extractor.extract({ files: [fileName] });
         
         console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Full extracted object:`, JSON.stringify(extracted, null, 2));
         console.log(`[${new Date().toISOString()}] 📖 CBR extraction: Extracted keys:`, Object.keys(extracted));
@@ -377,7 +484,7 @@ async function extractFromCBR(filePath, page, res) {
             throw new Error('Could not extract file data');
         }
         
-        const ext = path.extname(targetFile.name).toLowerCase();
+        const ext = path.extname(fileName).toLowerCase();
         const mimeType = {
             '.jpg': 'image/jpeg',
             '.jpeg': 'image/jpeg',
