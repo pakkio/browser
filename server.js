@@ -1,7 +1,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const pdf2pic = require('pdf2pic');
 const yauzl = require('yauzl');
 const { createExtractorFromFile } = require('node-unrar-js');
@@ -35,6 +35,10 @@ const mimeTypes = {
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
     '.mp4': 'video/mp4',
+    '.avi': 'video/x-msvideo',
+    '.mov': 'video/quicktime',
+    '.mkv': 'video/x-matroska',
+    '.webm': 'video/webm',
     '.woff': 'application/font-woff',
     '.ttf': 'application/font-ttf',
     '.eot': 'application/vnd.ms-fontobject',
@@ -194,6 +198,77 @@ app.get('/pdf-preview', async (req, res) => {
     }
 });
 
+app.get('/video-transcode', async (req, res) => {
+    const requestedFile = req.query.path;
+    console.log(`[${new Date().toISOString()}] GET /video-transcode - file: "${requestedFile}"`);
+    
+    if (!requestedFile) {
+        return res.status(400).send('File path is required');
+    }
+    
+    const filePath = path.join(baseDir, requestedFile);
+    
+    if (!filePath.startsWith(baseDir)) {
+        return res.status(403).send('Forbidden');
+    }
+    
+    const ext = path.extname(filePath).toLowerCase();
+    if (ext !== '.avi') {
+        return res.status(400).send('Only AVI files supported for transcoding');
+    }
+    
+    try {
+        console.log(`[${new Date().toISOString()}] 🔄 Transcoding AVI to WebM...`);
+        
+        // Set headers for streaming (using WebM for better streaming support)
+        res.setHeader('Content-Type', 'video/webm');
+        res.setHeader('Accept-Ranges', 'bytes');
+        res.setHeader('Cache-Control', 'no-cache');
+        
+        // Use spawn instead of exec for better stream handling
+        const ffmpeg = spawn('ffmpeg', [
+            '-i', filePath,
+            '-c:v', 'libvpx-vp9',
+            '-preset', 'fast',
+            '-crf', '30',
+            '-c:a', 'libopus',
+            '-f', 'webm',
+            '-'
+        ]);
+        
+        // Handle stderr for FFmpeg logging
+        ffmpeg.stderr.on('data', (data) => {
+            console.log(`[FFmpeg] ${data.toString()}`);
+        });
+        
+        ffmpeg.stdout.pipe(res);
+        
+        ffmpeg.on('close', (code) => {
+            if (code === 0) {
+                console.log(`[${new Date().toISOString()}] ✅ Video transcoding completed`);
+            } else {
+                console.error(`[${new Date().toISOString()}] ❌ FFmpeg failed with code ${code}`);
+            }
+        });
+        
+        ffmpeg.on('error', (error) => {
+            console.error(`[${new Date().toISOString()}] ❌ Transcoding error: ${error.message}`);
+            if (!res.headersSent) {
+                res.status(500).send(`Transcoding error: ${error.message}`);
+            }
+        });
+        
+        // Handle client disconnect
+        req.on('close', () => {
+            ffmpeg.kill('SIGKILL');
+        });
+        
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Video transcoding error: ${error.message}`);
+        res.status(500).send(`Video transcoding error: ${error.message}`);
+    }
+});
+
 app.get('/comic-preview', async (req, res) => {
     const requestedFile = req.query.path;
     const page = parseInt(req.query.page) || 1;
@@ -233,7 +308,7 @@ app.get('/comic-preview', async (req, res) => {
 
 async function extractFromCBZ(filePath, page, res) {
     return new Promise((resolve, reject) => {
-        yauzl.open(filePath, { lazyEntries: true }, (err, zipfile) => {
+        yauzl.open(filePath, { lazyEntries: true, autoClose: false }, (err, zipfile) => {
             if (err) return reject(err);
             
             const imageFiles = [];
@@ -250,12 +325,16 @@ async function extractFromCBZ(filePath, page, res) {
                 imageFiles.sort((a, b) => a.fileName.localeCompare(b.fileName));
                 
                 if (page > imageFiles.length || page < 1) {
-                    return reject(new Error('Page not found'));
+                    zipfile.close();
+                    return reject(new Error(`Page not found. Found ${imageFiles.length} images, requested page ${page}`));
                 }
                 
                 const targetEntry = imageFiles[page - 1];
                 zipfile.openReadStream(targetEntry, (err, readStream) => {
-                    if (err) return reject(err);
+                    if (err) {
+                        zipfile.close();
+                        return reject(err);
+                    }
                     
                     const ext = path.extname(targetEntry.fileName).toLowerCase();
                     const mimeType = {
@@ -268,8 +347,22 @@ async function extractFromCBZ(filePath, page, res) {
                     
                     res.setHeader('Content-Type', mimeType);
                     readStream.pipe(res);
-                    resolve();
+                    
+                    readStream.on('end', () => {
+                        zipfile.close();
+                        resolve();
+                    });
+                    
+                    readStream.on('error', (err) => {
+                        zipfile.close();
+                        reject(err);
+                    });
                 });
+            });
+            
+            zipfile.on('error', (err) => {
+                zipfile.close();
+                reject(err);
             });
         });
     });
