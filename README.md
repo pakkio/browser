@@ -21,7 +21,7 @@ A sleek, modern web-based file browser with support for multiple file types incl
 
 ### 🎨 Media Support
 - **Images** - JPG, JPEG, PNG, GIF, WebP, BMP, SVG preview
-- **Video** - MP4, AVI, MOV, MKV, WebM playback with controls
+- **Video** - MP4, AVI, MOV, MKV, WebM playback with controls (AVI with real-time transcoding)
 - **Audio** - MP3, WAV, FLAC, OGG, AAC playback with controls
 
 ### 🎯 Modern UI
@@ -35,6 +35,7 @@ A sleek, modern web-based file browser with support for multiple file types incl
 ### Prerequisites
 - Node.js 14+
 - ImageMagick or GraphicsMagick (for PDF support)
+- FFmpeg (for AVI video transcoding)
 
 ### Installation
 
@@ -44,6 +45,9 @@ A sleek, modern web-based file browser with support for multiple file types incl
 sudo apt update
 sudo apt install imagemagick
 
+# Install FFmpeg for AVI video transcoding
+sudo apt install ffmpeg
+
 # Alternative: Install GraphicsMagick
 # sudo apt install graphicsmagick
 ```
@@ -52,8 +56,12 @@ sudo apt install imagemagick
 ```bash
 # Using Homebrew
 brew install imagemagick
-# or
-brew install graphicsmagick
+
+# Install FFmpeg for AVI video transcoding
+brew install ffmpeg
+
+# Alternative: Install GraphicsMagick
+# brew install graphicsmagick
 ```
 
 #### Application Setup
@@ -87,7 +95,7 @@ node server.js /path/to/your/directory
 | **Office** | DOCX, XLSX, PPTX | Document rendering, spreadsheet viewing |
 | **Comics** | CBZ, CBR | Page navigation, archive extraction |
 | **Images** | JPG, JPEG, PNG, GIF, WebP, BMP, SVG | Full-size preview, hover effects |
-| **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls |
+| **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls, AVI transcoding |
 | **Audio** | MP3, WAV, FLAC, OGG, AAC | HTML5 audio player with controls |
 | **Subtitles** | SRT | Text overlay support |
 | **Code** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | Syntax highlighting |
@@ -150,6 +158,7 @@ browser/
 | `/pdf-preview` | GET | Convert PDF page to image |
 | `/comic-preview` | GET | Extract comic page from archive |
 | `/epub-preview` | GET | Extract EPUB page content |
+| `/video-transcode` | GET | Real-time AVI to WebM transcoding |
 
 ## 🎯 Usage Examples
 
@@ -164,6 +173,9 @@ Click on CBZ or CBR files to open the comic reader with page-by-page navigation.
 
 ### Preview Code
 Text and code files open with syntax highlighting for better readability.
+
+### Play AVI Videos
+AVI files are automatically transcoded to WebM format for browser compatibility. The transcoding happens in real-time using FFmpeg, providing seamless playback without requiring pre-conversion.
 
 ## 🔒 Security Features
 
