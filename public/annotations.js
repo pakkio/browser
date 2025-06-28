@@ -14,6 +14,24 @@ class AnnotationManager {
         this.loadAnnotations();
     }
 
+    getFileTypeFromExtension(extension, fileName = '') {
+        if (extension === 'pdf') return 'pdf';
+        if (['cbz', 'cbr'].includes(extension)) return 'comic';
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
+        if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
+        if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
+        if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
+        if (extension === 'ipynb') return 'notebook';
+        if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) return 'text';
+        if (['csv', 'xlsx', 'xls', 'ods'].includes(extension)) return 'table';
+        if (['pptx', 'ppt', 'odp'].includes(extension)) return 'presentation';
+        if (extension === 'srt') return 'subtitle';
+        if (extension === 'epub') return 'ebook';
+        if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (fileName && fileName.endsWith('.tar.gz'))) return 'archive';
+        if (!fileName || !fileName.includes('.')) return 'text'; // Files without extension
+        return 'text'; // Unknown extensions treated as text
+    }
+
     async loadAnnotations() {
         try {
             // Use direct fetch if authManager is not available or auth is disabled
@@ -273,6 +291,13 @@ class AnnotationManager {
         backdrop.appendChild(modal);
         document.body.appendChild(backdrop);
 
+        // Helper function to safely remove modal
+        const closeModal = () => {
+            if (backdrop && backdrop.parentNode) {
+                backdrop.parentNode.removeChild(backdrop);
+            }
+        };
+
         // Add event listeners
         let currentStars = annotation.stars || 0;
         let currentColor = annotation.color || '';
@@ -287,7 +312,7 @@ class AnnotationManager {
             });
         });
 
-        modal.getElementById('clear-stars').addEventListener('click', () => {
+        modal.querySelector('#clear-stars').addEventListener('click', () => {
             currentStars = 0;
             modal.querySelectorAll('.star').forEach(s => {
                 s.style.color = '#666666';
@@ -305,7 +330,7 @@ class AnnotationManager {
             });
         });
 
-        modal.getElementById('clear-color').addEventListener('click', () => {
+        modal.querySelector('#clear-color').addEventListener('click', () => {
             modal.querySelectorAll('.color-option').forEach(c => {
                 c.style.border = '2px solid transparent';
             });
@@ -321,7 +346,7 @@ class AnnotationManager {
             cancelBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 console.log('Cancel clicked');
-                document.body.removeChild(backdrop);
+                closeModal();
             });
         }
 
@@ -332,7 +357,7 @@ class AnnotationManager {
                 if (confirm('Delete all annotations for this file?')) {
                     try {
                         await this.deleteAnnotation(filePath);
-                        document.body.removeChild(backdrop);
+                        closeModal();
                     } catch (error) {
                         console.error('Delete error:', error);
                         alert('Failed to delete annotation. Please try again.');
@@ -365,7 +390,7 @@ class AnnotationManager {
 
                     if (success) {
                         console.log('Save successful');
-                        document.body.removeChild(backdrop);
+                        closeModal();
                     } else {
                         console.error('Save failed');
                         alert('Failed to save annotation. Please try again.');
@@ -380,13 +405,13 @@ class AnnotationManager {
         // Close on backdrop click
         backdrop.addEventListener('click', (e) => {
             if (e.target === backdrop) {
-                document.body.removeChild(backdrop);
+                closeModal();
             }
         });
 
         // Focus on comment input
         setTimeout(() => {
-            modal.getElementById('annotation-comment').focus();
+            modal.querySelector('#annotation-comment').focus();
         }, 100);
     }
 
@@ -398,6 +423,7 @@ class AnnotationManager {
             if (filters.hasStars) params.append('hasStars', 'true');
             if (filters.hasColor) params.append('hasColor', 'true');
             if (filters.color) params.append('color', filters.color);
+            if (filters.fileType) params.append('fileType', filters.fileType);
 
             // Use direct fetch if authManager is not available or auth is disabled
             const fetchFn = window.authManager?.authenticatedFetch || fetch;
@@ -458,9 +484,26 @@ class AnnotationManager {
                     <input type="text" id="bookmarks-search" placeholder="Search in comments..." 
                            style="flex: 1; min-width: 200px; background: #333333; border: 1px solid #555555; 
                                   border-radius: 4px; color: #d4d4d4; padding: 6px 10px; font-size: 0.9rem;">
+                    <select id="bookmarks-file-type" style="background: #333333; border: 1px solid #555555; 
+                            border-radius: 4px; color: #d4d4d4; padding: 6px 10px; font-size: 0.9rem;">
+                        <option value="all">All File Types</option>
+                        <option value="image">🖼️ Images</option>
+                        <option value="video">🎬 Videos</option>
+                        <option value="audio">🎵 Audio</option>
+                        <option value="pdf">📄 PDF</option>
+                        <option value="code">💻 Code</option>
+                        <option value="notebook">📓 Notebooks</option>
+                        <option value="text">📝 Text Documents</option>
+                        <option value="table">📊 Spreadsheets</option>
+                        <option value="presentation">📊 Presentations</option>
+                        <option value="subtitle">💬 Subtitles</option>
+                        <option value="comic">📚 Comics</option>
+                        <option value="ebook">📖 E-books</option>
+                        <option value="archive">📦 Archives</option>
+                    </select>
                     <select id="bookmarks-filter" style="background: #333333; border: 1px solid #555555; 
                             border-radius: 4px; color: #d4d4d4; padding: 6px 10px; font-size: 0.9rem;">
-                        <option value="">All Files</option>
+                        <option value="">All Annotations</option>
                         <option value="comment">With Comments</option>
                         <option value="stars">With Stars</option>
                         <option value="color">With Colors</option>
@@ -547,7 +590,7 @@ class AnnotationManager {
                     
                     const filePath = item.dataset.path;
                     this.navigateToFile(filePath);
-                    document.body.removeChild(backdrop);
+                    closeModal();
                 });
             });
 
@@ -567,10 +610,12 @@ class AnnotationManager {
 
         // Search functionality
         const searchInput = modal.querySelector('#bookmarks-search');
+        const fileTypeSelect = modal.querySelector('#bookmarks-file-type');
         const filterSelect = modal.querySelector('#bookmarks-filter');
 
         const filterBookmarks = async () => {
             const searchQuery = searchInput.value.trim();
+            const fileTypeValue = fileTypeSelect.value;
             const filterValue = filterSelect.value;
             
             let filters = {};
@@ -582,11 +627,16 @@ class AnnotationManager {
                 filters.color = filterValue.replace('color-', '');
             }
             
+            if (fileTypeValue && fileTypeValue !== 'all') {
+                filters.fileType = fileTypeValue;
+            }
+            
             const filteredAnnotations = await this.searchAnnotations(searchQuery || undefined, filters);
             renderBookmarks(filteredAnnotations);
         };
 
         searchInput.addEventListener('input', filterBookmarks);
+        fileTypeSelect.addEventListener('change', filterBookmarks);
         filterSelect.addEventListener('change', filterBookmarks);
 
         // Refresh button
@@ -595,6 +645,7 @@ class AnnotationManager {
             const refreshedAnnotations = await this.searchAnnotations();
             renderBookmarks(refreshedAnnotations);
             searchInput.value = '';
+            fileTypeSelect.value = 'all';
             filterSelect.value = '';
         });
 
@@ -606,7 +657,7 @@ class AnnotationManager {
         // Close on backdrop click
         backdrop.addEventListener('click', (e) => {
             if (e.target === backdrop) {
-                document.body.removeChild(backdrop);
+                closeModal();
             }
         });
 
