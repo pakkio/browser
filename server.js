@@ -899,9 +899,14 @@ app.get('/epub-cover', requireAuth, async (req, res) => {
                 allEntries.push(entry.fileName);
                 console.log(`[${new Date().toISOString()}] 📁 EPUB entry: "${entry.fileName}"`);
                 
+                // Log comparison for debugging
+                if (entry.fileName.toLowerCase() === coverPath.toLowerCase()) {
+                    console.log(`[${new Date().toISOString()}] 🔍 Case-insensitive match: "${entry.fileName}" === "${coverPath}"`);
+                }
+                
                 if (entry.fileName === coverPath) {
                     foundCover = true;
-                    console.log(`[${new Date().toISOString()}] ✅ Found cover: ${entry.fileName}`);
+                    console.log(`[${new Date().toISOString()}] ✅ Found exact cover match: ${entry.fileName}`);
                     zipfile.openReadStream(entry, (err, readStream) => {
                         if (err) {
                             console.error(`[${new Date().toISOString()}] ❌ EPUB cover: Stream error: ${err.message}`);
@@ -1131,6 +1136,26 @@ async function extractEpubContent(filePath) {
                     
                     console.log(`[${new Date().toISOString()}] 📖 EPUB: Final cover path: ${coverPath || 'None'}`);
                     
+                    // Additional debugging for cover path resolution
+                    if (coverPath) {
+                        console.log(`[${new Date().toISOString()}] 📖 EPUB: Checking if cover exists in ZIP...`);
+                        console.log(`[${new Date().toISOString()}] 📖 EPUB: Looking for: "${coverPath}"`);
+                        console.log(`[${new Date().toISOString()}] 📖 EPUB: Available files: ${Array.from(files.keys()).filter(f => f.includes('cover') || f.includes('jpeg') || f.includes('jpg') || f.includes('png')).join(', ')}`);
+                        if (files.has(coverPath)) {
+                            console.log(`[${new Date().toISOString()}] ✅ EPUB: Cover file found in extracted files`);
+                        } else {
+                            console.log(`[${new Date().toISOString()}] ❌ EPUB: Cover file NOT found in extracted files`);
+                            // Try case-insensitive match
+                            const lowerCoverPath = coverPath.toLowerCase();
+                            for (const filePath of files.keys()) {
+                                if (filePath.toLowerCase() === lowerCoverPath) {
+                                    console.log(`[${new Date().toISOString()}] 🔍 EPUB: Found case-insensitive match: "${filePath}" for "${coverPath}"`);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
                     if (coverPath && !files.has(coverPath)) {
                         console.log(`[${new Date().toISOString()}] ⚠️ EPUB: Cover file "${coverPath}" not found in extracted files`);
                     }
@@ -1270,21 +1295,12 @@ async function extractEpubContent(filePath) {
                     if (metadata.coverPath) {
                         console.log(`[${new Date().toISOString()}] 📖 EPUB: Looking for cover at path: ${metadata.coverPath}`);
                         // Read cover as binary data
-                        for (const [fileName, content] of files.entries()) {
-                            if (fileName === metadata.coverPath) {
-                                console.log(`[${new Date().toISOString()}] 📖 EPUB: Found cover file: ${fileName}`);
-                                // Re-read the file as binary
-                                const entry = Array.from(zipfile.entriesRead || []).find(e => e.fileName === fileName);
-                                if (entry) {
-                                    const mimeType = fileName.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
-                                    console.log(`[${new Date().toISOString()}] 📖 EPUB: Cover MIME type: ${mimeType}`);
-                                    // For now, store path - we'll serve it via separate endpoint
-                                    coverImage = fileName;
-                                } else {
-                                    console.log(`[${new Date().toISOString()}] ⚠️ EPUB: Cover file found in extracted files but not in entries`);
-                                }
-                                break;
-                            }
+                        if (files.has(metadata.coverPath)) {
+                            console.log(`[${new Date().toISOString()}] 📖 EPUB: Found cover file: ${metadata.coverPath}`);
+                            const mimeType = metadata.coverPath.toLowerCase().endsWith('.png') ? 'image/png' : 'image/jpeg';
+                            console.log(`[${new Date().toISOString()}] 📖 EPUB: Cover MIME type: ${mimeType}`);
+                            // Store the cover path for serving via separate endpoint
+                            coverImage = metadata.coverPath;
                         }
                         if (!coverImage) {
                             console.log(`[${new Date().toISOString()}] ⚠️ EPUB: Cover file not found in extracted files`);
@@ -1305,16 +1321,17 @@ async function extractEpubContent(filePath) {
     });
 }
 
-// Handle direct cover image requests from EPUB content - redirect to images endpoint
+// Handle direct cover image requests from EPUB content - this should rarely be needed now
 app.get('/cover.jpeg', (req, res) => {
-    console.log(`[${new Date().toISOString()}] GET /cover.jpeg - checking for EPUB image context`);
-    const referer = req.get('Referer');
-    if (referer && referer.includes('epub')) {
-        // Check if there's a current EPUB context to get the actual cover path
-        res.redirect('/images/cover.jpeg');
-    } else {
-        res.status(404).json({ error: 'Cover image not found' });
-    }
+    console.log(`[${new Date().toISOString()}] GET /cover.jpeg - direct request (should be rare after URL rewriting)`);
+    console.log(`[${new Date().toISOString()}] Referer: ${req.get('Referer')}`);
+    
+    // This is a fallback for any missed image references
+    // In most cases, images should go through /epub-cover endpoint
+    res.status(404).json({ 
+        error: 'Cover image not found. Images should use /epub-cover endpoint.',
+        hint: 'This suggests a URL rewriting issue in EPUB content'
+    });
 });
 
 app.get('/cover.jpg', (req, res) => {

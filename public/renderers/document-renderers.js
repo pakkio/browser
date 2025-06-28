@@ -102,7 +102,7 @@ class PDFRenderer {
 
         try {
             statusElement.textContent = 'Loading PDF...';
-            const url = filePath.startsWith('/') ? `/files?path=${encodeURIComponent(filePath)}` : filePath;
+            const url = `/files?path=${encodeURIComponent(filePath)}`;
             const loadingTask = pdfjsLib.getDocument(url);
             this.pdfDoc = await loadingTask.promise;
             this.totalPages = this.pdfDoc.numPages;
@@ -277,7 +277,37 @@ class EpubRenderer {
                 if (chapterIndex >= 0 && chapterIndex < totalChapters) {
                     currentChapter = chapterIndex;
                     chapterSelect.value = chapterIndex;
-                    contentArea.innerHTML = epubData.chapters[chapterIndex].content;
+                    
+                    // Rewrite image URLs to use the epub-cover endpoint
+                    let content = epubData.chapters[chapterIndex].content;
+                    
+                    // Rewrite src attributes
+                    content = content.replace(/src=["']([^"']*\.(jpg|jpeg|png|gif))["']/gi, (match, imagePath) => {
+                        const cleanPath = imagePath.replace(/^\.\.\//, '');
+                        return `src="/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}"`;
+                    });
+                    
+                    // Rewrite CSS background-image in style attributes
+                    content = content.replace(/style=["']([^"']*background[^"']*url\(["']?([^"')]*\.(jpg|jpeg|png|gif))["']?\)[^"']*)["']/gi, (match, styleContent, imagePath) => {
+                        const cleanPath = imagePath.replace(/^\.\.\//, '');
+                        const newUrl = `/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}`;
+                        const newStyle = styleContent.replace(/url\(["']?[^"')]*\.(jpg|jpeg|png|gif)["']?\)/gi, `url("${newUrl}")`);
+                        return `style="${newStyle}"`;
+                    });
+                    
+                    // Rewrite CSS background-image in style blocks
+                    content = content.replace(/background-image:\s*url\(["']?([^"')]*\.(jpg|jpeg|png|gif))["']?\)/gi, (match, imagePath) => {
+                        const cleanPath = imagePath.replace(/^\.\.\//, '');
+                        return `background-image: url("/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}")`;
+                    });
+                    
+                    // Rewrite href attributes for image links
+                    content = content.replace(/href=["']([^"']*\.(jpg|jpeg|png|gif))["']/gi, (match, imagePath) => {
+                        const cleanPath = imagePath.replace(/^\.\.\//, '');
+                        return `href="/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}"`;
+                    });
+                    
+                    contentArea.innerHTML = content;
                     
                     // Style the content
                     const elements = contentArea.querySelectorAll('*');
@@ -321,12 +351,12 @@ class EpubRenderer {
                             el.style.borderRadius = '8px';
                             el.style.boxShadow = '0 4px 12px rgba(0,0,0,0.3)';
                             
-                            // Fix EPUB image paths
+                            // Fix EPUB image paths - use epub-cover endpoint consistently
                             const src = el.src || el.getAttribute('src');
-                            if (src && !src.startsWith('http') && !src.startsWith('/')) {
-                                // Convert relative EPUB image paths to use our images endpoint
-                                const filename = src.split('/').pop();
-                                el.src = `/images/${filename}?epub=${encodeURIComponent(filePath)}`;
+                            if (src && !src.startsWith('http') && !src.startsWith('/epub-cover')) {
+                                // Strip ../ prefix and use epub-cover endpoint
+                                const cleanPath = src.replace(/^\.\.\//, '');
+                                el.src = `/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}`;
                                 el.onerror = function() {
                                     this.style.display = 'none';
                                 };
