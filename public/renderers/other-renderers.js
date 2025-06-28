@@ -417,6 +417,8 @@ class ArchiveRenderer {
         this.selectedIndex = -1;
         this.archiveFiles = [];
         this.keydownHandler = null;
+        this.previewKeydownHandler = null;
+        this.previewIndex = -1;
     }
 
     cleanup() {
@@ -424,11 +426,16 @@ class ArchiveRenderer {
         this.currentArchive = null;
         this.selectedIndex = -1;
         this.archiveFiles = [];
+        this.previewIndex = -1;
         
         // Remove keyboard event listener
         if (this.keydownHandler) {
             document.removeEventListener('keydown', this.keydownHandler);
             this.keydownHandler = null;
+        }
+        if (this.previewKeydownHandler) {
+            document.removeEventListener('keydown', this.previewKeydownHandler);
+            this.previewKeydownHandler = null;
         }
     }
 
@@ -563,7 +570,7 @@ class ArchiveRenderer {
             return a.name.localeCompare(b.name);
         });
 
-        sortedFiles.forEach(file => {
+        sortedFiles.forEach((file, index) => {
             const fileItem = document.createElement('div');
             fileItem.className = 'file-item';
             fileItem.style.cssText = `
@@ -615,7 +622,7 @@ class ArchiveRenderer {
             } else {
                 fileItem.onclick = () => {
                     const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-                    this.previewFile(archivePath, filePath, file.name);
+                    this.previewFile(archivePath, filePath, file.name, index);
                 };
             }
 
@@ -642,35 +649,163 @@ class ArchiveRenderer {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
-    async previewFile(archivePath, filePath, fileName) {
+    async previewFile(archivePath, filePath, fileName, fileIndex) {
+        // Clean up any existing preview handlers
+        if (this.previewKeydownHandler) {
+            document.removeEventListener('keydown', this.previewKeydownHandler);
+            this.previewKeydownHandler = null;
+        }
+
+        this.previewIndex = fileIndex;
+
         try {
-            const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
-            
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            const contentOther = document.getElementById('content-other');
+            if (!contentOther) throw new Error('Content container not found');
+
+            contentOther.innerHTML = '';
+            contentOther.style.display = 'block';
+
+            const extension = fileName.split('.').pop().toLowerCase();
+
+            if (extension === 'pdf') {
+                const pdfUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`;
+                
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: white; border: 1px solid #ccc; padding: 10px; border-radius: 5px; height: 80vh;`;
+
+                const controls = document.createElement('div');
+                controls.className = 'archive-preview-controls';
+                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
+
+                const backBtn = document.createElement('button');
+                backBtn.textContent = '← Back to Archive';
+                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
+
+                const fileInfo = document.createElement('span');
+                fileInfo.textContent = `Viewing: ${fileName}`;
+                fileInfo.style.fontWeight = 'bold';
+
+                controls.appendChild(backBtn);
+                controls.appendChild(fileInfo);
+
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = `width: 100%; height: calc(100% - 40px); border: 1px solid #ddd;`;
+                iframe.src = pdfUrl;
+
+                previewContainer.appendChild(controls);
+                previewContainer.appendChild(iframe);
+                contentOther.appendChild(previewContainer);
+
+                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, pdfUrl, fileIndex);
+                document.addEventListener('keydown', this.previewKeydownHandler);
+            } else {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: white; border: 1px solid #ccc; padding: 10px; border-radius: 5px;`;
+
+                const controls = document.createElement('div');
+                controls.className = 'archive-preview-controls';
+                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
+
+                const backBtn = document.createElement('button');
+                backBtn.textContent = '← Back to Archive';
+                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
+
+                const fileInfo = document.createElement('span');
+                fileInfo.textContent = `Viewing: ${fileName}`;
+                fileInfo.style.fontWeight = 'bold';
+
+                controls.appendChild(backBtn);
+                controls.appendChild(fileInfo);
+
+                const img = document.createElement('img');
+                img.style.cssText = `max-width: 100%; max-height: 80vh; display: block; margin: 0 auto; border: 1px solid #ddd;`;
+
+                previewContainer.appendChild(controls);
+                previewContainer.appendChild(img);
+                contentOther.appendChild(previewContainer);
+
+                const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                img.src = url;
+
+                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, url, fileIndex);
+                document.addEventListener('keydown', this.previewKeydownHandler);
+
+                img.onload = () => URL.revokeObjectURL(url); // Revoke on load to free memory
             }
 
-            // Open in new window/tab for preview
-            const blob = await response.blob();
-            const url = URL.createObjectURL(blob);
-            const newWindow = window.open(url, '_blank');
-            
-            // Clean up the object URL after a delay
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-            
-            if (!newWindow) {
-                // Fallback: download the file
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = fileName;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-            }
         } catch (error) {
-            console.error('File preview error:', error);
+            console.error('Preview error:', error);
             alert(`Error previewing file: ${error.message}`);
         }
+    }
+
+    handlePreviewKeys(e, archivePath, contentOther, currentUrl, fileIndex) {
+        if (e.target.tagName === 'INPUT') return;
+
+        const navigate = (direction) => {
+            let currentFileIndex = this.previewIndex;
+
+            let nextIndex = -1;
+
+            if (direction === 'next') {
+                for (let i = currentFileIndex + 1; i < this.archiveFiles.length; i++) {
+                    if (!this.archiveFiles[i].isDirectory) {
+                        nextIndex = i;
+                        break;
+                    }
+                }
+            } else { // prev
+                for (let i = currentFileIndex - 1; i >= 0; i--) {
+                    if (!this.archiveFiles[i].isDirectory) {
+                        nextIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            if (nextIndex !== -1) {
+                const nextFile = this.archiveFiles[nextIndex];
+                const nextFilePath = this.currentPath ? `${this.currentPath}/${nextFile.name}` : nextFile.name;
+                this.previewFile(archivePath, nextFilePath, nextFile.name, nextIndex);
+            }
+        };
+
+        switch (e.key) {
+            case 'Escape':
+            case 'Backspace':
+                e.preventDefault();
+                this.revertToListView(archivePath, contentOther);
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                navigate('prev');
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                navigate('next');
+                break;
+        }
+    }
+
+    
+
+    revertToListView(archivePath, contentOther) {
+        if (this.previewKeydownHandler) {
+            document.removeEventListener('keydown', this.previewKeydownHandler);
+            this.previewKeydownHandler = null;
+        }
+        this.previewIndex = -1;
+        // Re-render the file list view
+        const navBar = document.createElement('div');
+        const pathDisplay = document.createElement('span');
+        const backBtn = document.createElement('button');
+        this.loadArchiveContents(archivePath, this.currentPath, contentOther, pathDisplay, backBtn);
     }
 
     setupKeyboardNavigation(archivePath, contentArea, pathDisplay, backBtn) {
@@ -704,7 +839,7 @@ class ArchiveRenderer {
                             this.loadArchiveContents(this.currentArchive, newPath, contentArea, pathDisplay, backBtn);
                         } else {
                             const filePath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
-                            this.previewFile(this.currentArchive, filePath, file.name);
+                            this.previewFile(this.currentArchive, filePath, file.name, this.selectedIndex);
                         }
                     }
                     return;

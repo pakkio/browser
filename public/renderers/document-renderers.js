@@ -3,6 +3,7 @@ class PDFRenderer {
         this.handleKeyDown = null;
         this.currentPage = 1;
         this.totalPages = null;
+        this.pdfDoc = null;
     }
 
     cleanup() {
@@ -10,12 +11,11 @@ class PDFRenderer {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
         }
+        this.pdfDoc = null;
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
-        this.currentPage = 1;
-        this.totalPages = null;
 
         const pdfContainer = document.createElement('div');
         pdfContainer.className = 'pdf-container';
@@ -32,12 +32,12 @@ class PDFRenderer {
             <span id="pdf-status" style="margin-left: 10px; font-style: italic;"></span>
         `;
         
-        const pageImg = document.createElement('img');
-        pageImg.style.maxWidth = '100%';
-        pageImg.style.border = '1px solid #ccc';
+        const canvas = document.createElement('canvas');
+        canvas.style.maxWidth = '100%';
+        canvas.style.border = '1px solid #ccc';
         
         pdfContainer.appendChild(controls);
-        pdfContainer.appendChild(pageImg);
+        pdfContainer.appendChild(canvas);
         contentOther.appendChild(pdfContainer);
         contentOther.style.display = 'block';
         
@@ -48,61 +48,43 @@ class PDFRenderer {
         const jumpBtn = controls.querySelector('#pdf-jump-btn');
         const statusElement = controls.querySelector('#pdf-status');
 
-        const updateTotalPages = (totalPages) => {
-            this.totalPages = totalPages;
-            updatePageInfo();
-        };
-
         const updatePageInfo = () => {
-            if (this.totalPages) {
-                pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
-            } else {
-                pageInfo.textContent = `Page ${this.currentPage}`;
-            }
+            pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
             prevBtn.disabled = this.currentPage === 1;
-            nextBtn.disabled = this.totalPages !== null && this.currentPage === this.totalPages;
+            nextBtn.disabled = this.currentPage === this.totalPages;
         };
         
-        const loadPage = async (page) => {
-            if (page < 1 || (this.totalPages && page > this.totalPages)) {
+        const renderPage = async (pageNumber) => {
+            if (!this.pdfDoc || pageNumber < 1 || pageNumber > this.totalPages) {
                 return;
             }
-            this.currentPage = page;
+            this.currentPage = pageNumber;
+            statusElement.textContent = 'Loading...';
             try {
-                statusElement.textContent = 'Loading...';
-                const response = await window.authManager.authenticatedFetch(`/pdf-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
-                
-                if (!response.ok) {
-                    if (response.status === 500) { // Assume 500 means end of pages if total is unknown
-                        if (!this.totalPages) {
-                            this.totalPages = this.currentPage - 1;
-                        }
-                    }
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-                
-                const blob = await response.blob();
-                if (blob.size === 0) {
-                    throw new Error('Empty response');
-                }
-                
-                pageImg.src = URL.createObjectURL(blob);
+                const page = await this.pdfDoc.getPage(pageNumber);
+                const viewport = page.getViewport({ scale: 1.5 });
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                const renderContext = {
+                    canvasContext: context,
+                    viewport: viewport
+                };
+                await page.render(renderContext).promise;
                 statusElement.textContent = '';
                 updatePageInfo();
             } catch (error) {
-                console.error('PDF load error:', error);
+                console.error('PDF page render error:', error);
                 statusElement.textContent = `Error: ${error.message}`;
-                pageImg.src = '';
-                updatePageInfo();
             }
         };
-        
-        prevBtn.addEventListener('click', () => loadPage(this.currentPage - 1));
-        nextBtn.addEventListener('click', () => loadPage(this.currentPage + 1));
+
+        prevBtn.addEventListener('click', () => renderPage(this.currentPage - 1));
+        nextBtn.addEventListener('click', () => renderPage(this.currentPage + 1));
         jumpBtn.addEventListener('click', () => {
             const page = parseInt(jumpInput.value, 10);
             if (!isNaN(page)) {
-                loadPage(page);
+                renderPage(page);
             }
         });
 
@@ -118,18 +100,17 @@ class PDFRenderer {
         };
         document.addEventListener('keydown', this.handleKeyDown);
 
-        // Fetch total pages
         try {
-            const infoResponse = await window.authManager.authenticatedFetch(`/api/pdf-info?path=${encodeURIComponent(filePath)}`);
-            if (infoResponse.ok) {
-                const info = await infoResponse.json();
-                updateTotalPages(info.pages);
-            }
-        } catch (e) {
-            console.error("Could not fetch PDF info", e);
+            statusElement.textContent = 'Loading PDF...';
+            const url = filePath.startsWith('/') ? `/files?path=${encodeURIComponent(filePath)}` : filePath;
+            const loadingTask = pdfjsLib.getDocument(url);
+            this.pdfDoc = await loadingTask.promise;
+            this.totalPages = this.pdfDoc.numPages;
+            await renderPage(1);
+        } catch (error) {
+            console.error('PDF load error:', error);
+            statusElement.textContent = `Error: ${error.message}`;
         }
-        
-        await loadPage(1);
     }
 }
 
