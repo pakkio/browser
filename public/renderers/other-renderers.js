@@ -872,3 +872,273 @@ class ArchiveRenderer {
         }
     }
 }
+
+class HtmlRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.zoomLevel = 1.0;
+        this.minZoom = 0.1;
+        this.maxZoom = 5.0;
+        this.zoomStep = 0.1;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+    }
+
+    async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
+        this.zoomLevel = 1.0;
+
+        try {
+            contentOther.innerHTML = '';
+            contentOther.style.display = 'block';
+
+            const htmlContainer = document.createElement('div');
+            htmlContainer.className = 'html-container';
+            htmlContainer.style.cssText = `
+                width: 100%;
+                height: 100vh;
+                display: flex;
+                flex-direction: column;
+                background: white;
+                border: 1px solid #ccc;
+                border-radius: 5px;
+            `;
+
+            // Create controls
+            const controls = document.createElement('div');
+            controls.className = 'html-controls';
+            controls.style.cssText = `
+                display: flex;
+                align-items: center;
+                padding: 10px;
+                background: #f5f5f5;
+                border-bottom: 1px solid #ddd;
+                gap: 10px;
+                flex-shrink: 0;
+            `;
+
+            const fileInfo = document.createElement('span');
+            fileInfo.textContent = `HTML: ${fileName}`;
+            fileInfo.style.fontWeight = 'bold';
+
+            const zoomControls = document.createElement('div');
+            zoomControls.style.cssText = `display: flex; align-items: center; gap: 5px; margin-left: auto;`;
+            
+            const zoomOutBtn = document.createElement('button');
+            zoomOutBtn.textContent = '−';
+            zoomOutBtn.title = 'Zoom Out';
+            zoomOutBtn.onclick = () => this.adjustZoom(-this.zoomStep);
+
+            const zoomDisplay = document.createElement('span');
+            zoomDisplay.id = 'zoom-display';
+            zoomDisplay.textContent = '100%';
+            zoomDisplay.style.cssText = `min-width: 50px; text-align: center; font-family: monospace;`;
+
+            const zoomInBtn = document.createElement('button');
+            zoomInBtn.textContent = '+';
+            zoomInBtn.title = 'Zoom In';
+            zoomInBtn.onclick = () => this.adjustZoom(this.zoomStep);
+
+            const resetBtn = document.createElement('button');
+            resetBtn.textContent = 'Reset';
+            resetBtn.title = 'Reset Zoom';
+            resetBtn.onclick = () => this.setZoom(1.0);
+
+            const fitBtn = document.createElement('button');
+            fitBtn.textContent = 'Fit';
+            fitBtn.title = 'Fit to Window';
+            fitBtn.onclick = () => this.fitToWindow();
+
+            zoomControls.appendChild(zoomOutBtn);
+            zoomControls.appendChild(zoomDisplay);
+            zoomControls.appendChild(zoomInBtn);
+            zoomControls.appendChild(resetBtn);
+            zoomControls.appendChild(fitBtn);
+
+            controls.appendChild(fileInfo);
+            controls.appendChild(zoomControls);
+
+            // Create iframe container with scrolling
+            const iframeContainer = document.createElement('div');
+            iframeContainer.style.cssText = `
+                flex: 1;
+                overflow: auto;
+                background: #f0f0f0;
+                position: relative;
+            `;
+
+            // Create iframe
+            const iframe = document.createElement('iframe');
+            iframe.id = 'html-iframe';
+            iframe.style.cssText = `
+                width: 100%;
+                height: 100%;
+                border: none;
+                background: white;
+                transform-origin: top left;
+                transition: transform 0.2s ease;
+            `;
+
+            // Set iframe source to the HTML file
+            const htmlUrl = `/file?path=${encodeURIComponent(filePath)}`;
+            iframe.src = htmlUrl;
+
+            // Handle iframe load to implement auto-scaling
+            iframe.onload = () => {
+                this.setupAutoScaling(iframe, iframeContainer);
+            };
+
+            iframeContainer.appendChild(iframe);
+            htmlContainer.appendChild(controls);
+            htmlContainer.appendChild(iframeContainer);
+            contentOther.appendChild(htmlContainer);
+
+            // Setup keyboard controls
+            this.handleKeyDown = (e) => {
+                if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+                
+                switch(e.key) {
+                    case '+':
+                    case '=':
+                        e.preventDefault();
+                        this.adjustZoom(this.zoomStep);
+                        break;
+                    case '-':
+                        e.preventDefault();
+                        this.adjustZoom(-this.zoomStep);
+                        break;
+                    case '0':
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            this.setZoom(1.0);
+                        }
+                        break;
+                    case 'f':
+                        if (e.ctrlKey || e.metaKey) {
+                            e.preventDefault();
+                            this.fitToWindow();
+                        }
+                        break;
+                }
+            };
+
+            document.addEventListener('keydown', this.handleKeyDown);
+
+        } catch (error) {
+            console.error('HTML rendering error:', error);
+            contentOther.innerHTML = `<div style="padding: 20px; color: red;">Error rendering HTML: ${error.message}</div>`;
+        }
+    }
+
+    setupAutoScaling(iframe, container) {
+        try {
+            // Get iframe document dimensions
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            const body = iframeDoc.body;
+            const html = iframeDoc.documentElement;
+
+            if (!body || !html) return;
+
+            // Get actual content dimensions
+            const contentWidth = Math.max(
+                body.scrollWidth,
+                body.offsetWidth,
+                html.clientWidth,
+                html.scrollWidth,
+                html.offsetWidth
+            );
+
+            const contentHeight = Math.max(
+                body.scrollHeight,
+                body.offsetHeight,
+                html.clientHeight,
+                html.scrollHeight,
+                html.offsetHeight
+            );
+
+            // Get container dimensions
+            const containerWidth = container.clientWidth;
+            const containerHeight = container.clientHeight;
+
+            // If content is larger than container, auto-scale
+            if (contentWidth > containerWidth || contentHeight > containerHeight) {
+                const scaleX = containerWidth / contentWidth;
+                const scaleY = containerHeight / contentHeight;
+                const autoScale = Math.min(scaleX, scaleY, 1.0);
+
+                if (autoScale < 1.0) {
+                    this.setZoom(autoScale);
+                    console.log(`Auto-scaled to ${Math.round(autoScale * 100)}% to fit content`);
+                }
+            }
+        } catch (error) {
+            console.warn('Auto-scaling failed (likely due to CORS):', error.message);
+        }
+    }
+
+    adjustZoom(delta) {
+        const newZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoomLevel + delta));
+        this.setZoom(newZoom);
+    }
+
+    setZoom(zoom) {
+        this.zoomLevel = Math.max(this.minZoom, Math.min(this.maxZoom, zoom));
+        
+        const iframe = document.getElementById('html-iframe');
+        const zoomDisplay = document.getElementById('zoom-display');
+        
+        if (iframe) {
+            iframe.style.transform = `scale(${this.zoomLevel})`;
+            
+            // Adjust iframe dimensions to account for scaling
+            const scaledWidth = 100 / this.zoomLevel;
+            const scaledHeight = 100 / this.zoomLevel;
+            iframe.style.width = `${scaledWidth}%`;
+            iframe.style.height = `${scaledHeight}%`;
+        }
+        
+        if (zoomDisplay) {
+            zoomDisplay.textContent = `${Math.round(this.zoomLevel * 100)}%`;
+        }
+    }
+
+    fitToWindow() {
+        const iframe = document.getElementById('html-iframe');
+        const container = iframe?.parentElement;
+        
+        if (!iframe || !container) return;
+
+        try {
+            // Get iframe document dimensions
+            const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+            const body = iframeDoc.body;
+            const html = iframeDoc.documentElement;
+
+            if (!body || !html) {
+                this.setZoom(1.0);
+                return;
+            }
+
+            const contentWidth = Math.max(
+                body.scrollWidth,
+                body.offsetWidth,
+                html.clientWidth,
+                html.scrollWidth,
+                html.offsetWidth
+            );
+
+            const containerWidth = container.clientWidth;
+            const fitScale = Math.min(1.0, containerWidth / contentWidth);
+            
+            this.setZoom(fitScale);
+        } catch (error) {
+            console.warn('Fit to window failed:', error.message);
+            this.setZoom(1.0);
+        }
+    }
+}

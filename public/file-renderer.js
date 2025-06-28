@@ -20,6 +20,7 @@ class FileRenderer {
         this.handlers.set('pptx', new PptxRenderer());
         this.handlers.set('epub', new EpubRenderer());
         this.handlers.set('archive', new ArchiveRenderer());
+        this.handlers.set('html', new HtmlRenderer());
         // Treat .doc as .docx for rendering
         this.handlers.set('doc', this.handlers.get('docx'));
         // Add a CSS class to the <pre> element for better text contrast and fix font rendering
@@ -66,7 +67,9 @@ class FileRenderer {
         // Treat .doc as .docx
         if (extension === 'doc') return 'docx';
 
-        if (['txt', 'md', 'js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
+        if (extension === 'html') {
+            return 'html';
+        } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
             return 'text';
         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
             return 'image';
