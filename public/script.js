@@ -172,6 +172,8 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'audio');
                         } else if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
                             li.setAttribute('data-type', 'code');
+                        } else if (extension === 'ipynb') {
+                            li.setAttribute('data-type', 'notebook');
                         } else if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) {
                             li.setAttribute('data-type', 'text');
                         } else if (['csv', 'xlsx', 'xls', 'ods'].includes(extension)) {
@@ -182,22 +184,73 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'subtitle');
                         } else if (extension === 'epub') {
                             li.setAttribute('data-type', 'ebook');
-                        } else if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (fileName && fileName.endsWith('.tar.gz'))) {
+                        } else if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (file.name && file.name.endsWith('.tar.gz'))) {
                             li.setAttribute('data-type', 'archive');
+                        } else if (file.name && !file.name.includes('.')) {
+                            // Files without extension - treat as text
+                            li.setAttribute('data-type', 'text');
                         } else {
-                            li.setAttribute('data-type', 'file');
+                            // Unknown extensions - treat as text for better visibility
+                            li.setAttribute('data-type', 'text');
                         }
                         
-                        li.addEventListener('click', () => {
+                        li.addEventListener('click', (e) => {
+                            // Check if clicked on annotation button
+                            if (e.target.closest('.annotation-btn')) {
+                                return; // Don't select file if annotation button was clicked
+                            }
+                            
                             const filePath = path ? `${path}/${file.name}` : file.name;
                             selectFile(index, filePath, file.name);
                             showContent(path, file.name);
                             updateDetails(file);
                         });
+
+                        // Add annotation button for files
+                        const annotationBtn = document.createElement('button');
+                        annotationBtn.className = 'annotation-btn';
+                        annotationBtn.innerHTML = '📝';
+                        annotationBtn.title = 'Add annotation';
+                        annotationBtn.style.cssText = `
+                            background: transparent;
+                            border: 1px solid #555555;
+                            color: #d4d4d4;
+                            padding: 2px 6px;
+                            border-radius: 3px;
+                            cursor: pointer;
+                            font-size: 12px;
+                            margin-left: auto;
+                            opacity: 0.7;
+                            transition: all 0.2s;
+                            flex-shrink: 0;
+                        `;
+                        
+                        annotationBtn.addEventListener('mouseenter', () => {
+                            annotationBtn.style.opacity = '1';
+                            annotationBtn.style.background = '#333333';
+                        });
+                        
+                        annotationBtn.addEventListener('mouseleave', () => {
+                            annotationBtn.style.opacity = '0.7';
+                            annotationBtn.style.background = 'transparent';
+                        });
+                        
+                        annotationBtn.addEventListener('click', (e) => {
+                            e.stopPropagation();
+                            const filePath = path ? `${path}/${file.name}` : file.name;
+                            window.annotationManager?.showAnnotationDialog(filePath, file.name);
+                        });
+                        
+                        li.appendChild(annotationBtn);
                         
                     }
                     fileList.appendChild(li);
                 });
+        
+        // Update annotations display after files are loaded
+        setTimeout(() => {
+            window.annotationManager?.updateFileListDisplay();
+        }, 100);
     }
 
     function showContent(path, fileName) {
@@ -257,13 +310,15 @@ function initializeFileExplorer() {
         if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
         if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
+        if (extension === 'ipynb') return 'notebook';
         if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) return 'text';
         if (['csv', 'xlsx', 'xls', 'ods'].includes(extension)) return 'table';
         if (['pptx', 'ppt', 'odp'].includes(extension)) return 'presentation';
         if (extension === 'srt') return 'subtitle';
         if (extension === 'epub') return 'ebook';
         if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (fileName && fileName.endsWith('.tar.gz'))) return 'archive';
-        return 'file';
+        if (!fileName || !fileName.includes('.')) return 'text'; // Files without extension
+        return 'text'; // Unknown extensions treated as text
     }
     
     function getFileTypeDescription(extension) {
@@ -282,10 +337,11 @@ function initializeFileExplorer() {
             'xml': 'XML Document', 'yaml': 'YAML Config', 'yml': 'YAML Config',
             'cbz': 'Comic Book Archive', 'cbr': 'Comic Book Archive',
             'epub': 'EPUB E-book',
+            'ipynb': 'Jupyter Notebook',
             'zip': 'ZIP Archive', 'rar': 'RAR Archive', 'tar': 'TAR Archive',
             'tgz': 'Compressed TAR Archive', '7z': '7-Zip Archive'
         };
-        return types[extension] || 'Unknown File';
+        return types[extension] || 'Text File';
     }
     
     function updateCurrentPathDisplay(fullPath, fileCount) {
@@ -429,6 +485,14 @@ function initializeFileExplorer() {
             displayFiles(currentFiles, currentPath);
         }
     });
+
+    // Bookmarks button
+    const bookmarksBtn = document.getElementById('bookmarks-btn');
+    if (bookmarksBtn) {
+        bookmarksBtn.addEventListener('click', () => {
+            window.annotationManager?.showBookmarksView();
+        });
+    }
 
     loadFiles(currentPath);
     

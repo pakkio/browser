@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Annotations</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+        }
+        button {
+            background: #444444;
+            border: 1px solid #666666;
+            color: #d4d4d4;
+            padding: 10px 20px;
+            margin: 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #555555;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #444444;
+            border-radius: 4px;
+            background: #2a2a2a;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Annotation System</h1>
+    
+    <button onclick="testSave()">Test Save Annotation</button>
+    <button onclick="testLoad()">Test Load Annotations</button>
+    <button onclick="testSearch()">Test Search</button>
+    
+    <div id="result"></div>
+
+    <script>
+        async function testSave() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing save...';
+            
+            try {
+                const response = await fetch('/api/annotations', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        filePath: 'test.txt',
+                        comment: 'Test comment',
+                        stars: 3,
+                        color: 'red'
+                    })
+                });
+
+                const data = await response.json();
+                result.textContent = 'Save result: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                result.textContent = 'Save error: ' + error.message;
+            }
+        }
+
+        async function testLoad() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing load...';
+            
+            try {
+                const response = await fetch('/api/annotations');
+                const data = await response.json();
+                result.textContent = 'Load result: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                result.textContent = 'Load error: ' + error.message;
+            }
+        }
+
+        async function testSearch() {
+            const result = document.getElementById('result');
+            result.textContent = 'Testing search...';
+            
+            try {
+                const response = await fetch('/api/search-annotations');
+                const data = await response.json();
+                result.textContent = 'Search result: ' + JSON.stringify(data, null, 2);
+            } catch (error) {
+                result.textContent = 'Search error: ' + error.message;
+            }
+        }
+    </script>
+</body>
+</html>

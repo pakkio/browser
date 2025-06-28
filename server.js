@@ -281,8 +281,8 @@ app.get('/files', requireAuth, (req, res) => {
     try {
         const stats = fs.statSync(filePath);
         if (stats.isDirectory()) {
-            console.log(`[${new Date().toISOString()}] ❌ Cannot serve directory as file: ${filePath}`);
-            return res.status(400).send('Cannot serve directory as file');
+            console.log(`[${new Date().toISOString()}] ❌ Attempted to serve a directory: ${filePath}`);
+            return res.status(400).send('Requested resource is a directory, not a file');
         }
     } catch (error) {
         console.log(`[${new Date().toISOString()}] ❌ File not found: ${filePath}`);
@@ -1763,6 +1763,208 @@ app.post('/api/cache/clear', requireAuth, async (req, res) => {
         }
     } catch (error) {
         console.error(`[${new Date().toISOString()}] ❌ Cache clear error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// File Annotation System
+app.use(express.json());
+
+// Ensure .browser directory exists
+function ensureBrowserDir() {
+    const browserDir = path.join(baseDir, '.browser');
+    if (!fs.existsSync(browserDir)) {
+        fs.mkdirSync(browserDir, { recursive: true });
+    }
+    return browserDir;
+}
+
+// Get annotations file path
+function getAnnotationsPath() {
+    return path.join(ensureBrowserDir(), 'annotations.json');
+}
+
+// Load annotations from disk
+function loadAnnotations() {
+    try {
+        const annotationsPath = getAnnotationsPath();
+        if (fs.existsSync(annotationsPath)) {
+            const data = fs.readFileSync(annotationsPath, 'utf8');
+            return JSON.parse(data);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error loading annotations: ${error.message}`);
+    }
+    return {};
+}
+
+// Save annotations to disk
+function saveAnnotations(annotations) {
+    try {
+        const annotationsPath = getAnnotationsPath();
+        fs.writeFileSync(annotationsPath, JSON.stringify(annotations, null, 2));
+        return true;
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error saving annotations: ${error.message}`);
+        return false;
+    }
+}
+
+// Get annotations for a file or all files
+app.get('/api/annotations', requireAuth, (req, res) => {
+    try {
+        const filePath = req.query.path;
+        const annotations = loadAnnotations();
+        
+        if (filePath) {
+            // Return annotations for specific file
+            res.json(annotations[filePath] || {});
+        } else {
+            // Return all annotations
+            res.json(annotations);
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error getting annotations: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Add or update annotation for a file
+app.post('/api/annotations', requireAuth, (req, res) => {
+    try {
+        const { filePath, comment, stars, color } = req.body;
+        
+        if (!filePath) {
+            return res.status(400).json({ error: 'File path is required' });
+        }
+        
+        const annotations = loadAnnotations();
+        
+        // Initialize file annotations if not exists
+        if (!annotations[filePath]) {
+            annotations[filePath] = {};
+        }
+        
+        // Update annotations
+        if (comment !== undefined) {
+            if (comment.trim() === '') {
+                delete annotations[filePath].comment;
+            } else {
+                annotations[filePath].comment = comment.trim();
+            }
+        }
+        
+        if (stars !== undefined) {
+            if (stars === 0 || stars === null) {
+                delete annotations[filePath].stars;
+            } else {
+                annotations[filePath].stars = Math.max(1, Math.min(5, parseInt(stars)));
+            }
+        }
+        
+        if (color !== undefined) {
+            if (color === '' || color === null) {
+                delete annotations[filePath].color;
+            } else {
+                annotations[filePath].color = color;
+            }
+        }
+        
+        // Add timestamp
+        if (Object.keys(annotations[filePath]).length > 0) {
+            annotations[filePath].lastModified = new Date().toISOString();
+        } else {
+            // Remove empty annotation
+            delete annotations[filePath];
+        }
+        
+        // Save to disk
+        if (saveAnnotations(annotations)) {
+            res.json({ success: true, annotation: annotations[filePath] || {} });
+        } else {
+            res.status(500).json({ error: 'Failed to save annotations' });
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error updating annotations: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Delete annotation for a file
+app.delete('/api/annotations', requireAuth, (req, res) => {
+    try {
+        const filePath = req.query.path;
+        
+        if (!filePath) {
+            return res.status(400).json({ error: 'File path is required' });
+        }
+        
+        const annotations = loadAnnotations();
+        delete annotations[filePath];
+        
+        if (saveAnnotations(annotations)) {
+            res.json({ success: true });
+        } else {
+            res.status(500).json({ error: 'Failed to save annotations' });
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error deleting annotations: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Search annotated files
+app.get('/api/search-annotations', requireAuth, (req, res) => {
+    try {
+        const { query, hasComment, hasStars, hasColor, color } = req.query;
+        const annotations = loadAnnotations();
+        
+        let results = [];
+        
+        for (const [filePath, annotation] of Object.entries(annotations)) {
+            let matches = true;
+            
+            // Filter by query in comments
+            if (query && annotation.comment) {
+                matches = annotation.comment.toLowerCase().includes(query.toLowerCase());
+            } else if (query && !annotation.comment) {
+                matches = false;
+            }
+            
+            // Filter by has comment
+            if (hasComment === 'true' && !annotation.comment) {
+                matches = false;
+            }
+            
+            // Filter by has stars
+            if (hasStars === 'true' && !annotation.stars) {
+                matches = false;
+            }
+            
+            // Filter by has color
+            if (hasColor === 'true' && !annotation.color) {
+                matches = false;
+            }
+            
+            // Filter by specific color
+            if (color && annotation.color !== color) {
+                matches = false;
+            }
+            
+            if (matches) {
+                results.push({
+                    filePath,
+                    ...annotation
+                });
+            }
+        }
+        
+        // Sort by lastModified (newest first)
+        results.sort((a, b) => new Date(b.lastModified) - new Date(a.lastModified));
+        
+        res.json(results);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Error searching annotations: ${error.message}`);
         res.status(500).json({ error: error.message });
     }
 });

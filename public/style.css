@@ -296,6 +296,32 @@ body.authenticated .container {
     font-style: italic;
 }
 
+.bookmarks-btn {
+    margin-top: 8px;
+    padding: 8px 12px;
+    background: #444444;
+    border: 1px solid #666666;
+    border-radius: 5px;
+    color: #d4d4d4;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+}
+
+.bookmarks-btn:hover {
+    background: #555555;
+    border-color: #777777;
+}
+
+.bookmarks-btn:focus {
+    outline: none;
+    background: #555555;
+    border-color: #007acc;
+    box-shadow: 0 0 0 1px #007acc;
+}
+
 .type-filter-section label {
     display: none;
 }
@@ -466,6 +492,50 @@ body.authenticated .container {
     content: "📄";
 }
 
+#file-list li[data-type="archive"] .file-icon::before {
+    content: "📦";
+}
+
+#file-list li[data-type="notebook"] .file-icon::before {
+    content: "📓";
+}
+
+/* File type colors for better contrast */
+#file-list li[data-type="notebook"] .file-name {
+    color: #ff9800;
+    font-weight: 500;
+}
+
+#file-list li[data-type="archive"] .file-name {
+    color: #9c27b0;
+    font-weight: 500;
+}
+
+#file-list li[data-type="code"] .file-name {
+    color: #4caf50;
+    font-weight: 500;
+}
+
+#file-list li[data-type="text"] .file-name {
+    color: #2196f3;
+    font-weight: 500;
+}
+
+#file-list li[data-type="image"] .file-name {
+    color: #e91e63;
+    font-weight: 500;
+}
+
+#file-list li[data-type="pdf"] .file-name {
+    color: #f44336;
+    font-weight: 500;
+}
+
+#file-list li[data-type="file"] .file-name {
+    color: #ffc107;
+    font-weight: 500;
+}
+
 pre {
     background: #252526;
     padding: 15px;
@@ -630,6 +700,120 @@ audio, video {
     width: 100%;
     border-radius: 5px;
     background: #252526;
+}
+
+/* Archive styling */
+.archive-container {
+    background: #2a2a2a !important;
+    border: 1px solid #444444 !important;
+    color: #d4d4d4 !important;
+    height: 85vh !important;
+}
+
+.archive-nav {
+    background: #333333 !important;
+    border-bottom: 1px solid #555555 !important;
+    color: #d4d4d4 !important;
+}
+
+.archive-nav button {
+    background: #444444 !important;
+    border: 1px solid #666666 !important;
+    color: #d4d4d4 !important;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.archive-nav button:hover:not(:disabled) {
+    background: #555555 !important;
+    border-color: #777777 !important;
+}
+
+.archive-nav button:disabled {
+    background: #2a2a2a !important;
+    color: #888888 !important;
+    cursor: not-allowed;
+}
+
+.archive-nav span {
+    background: #2a2a2a !important;
+    border: 1px solid #555555 !important;
+    color: #d4d4d4 !important;
+    padding: 6px 12px;
+    border-radius: 4px;
+    font-family: 'Fira Code', 'Consolas', monospace;
+    font-size: 0.9rem;
+}
+
+.archive-content {
+    background: #2a2a2a !important;
+    color: #d4d4d4 !important;
+}
+
+.archive-content .file-item {
+    background: transparent !important;
+    border-bottom: 1px solid #444444 !important;
+    color: #d4d4d4 !important;
+    padding: 10px 15px !important;
+    margin: 2px 0 !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+}
+
+.archive-content .file-item:hover {
+    background: #333333 !important;
+    border-color: #555555 !important;
+}
+
+.archive-content .file-item.selected,
+.archive-content .file-item[style*="background-color: rgb(227, 242, 253)"] {
+    background: #094771 !important;
+    border-color: #007acc !important;
+    color: #ffffff !important;
+}
+
+.archive-content .file-item span {
+    color: inherit !important;
+}
+
+.archive-content .file-item span:last-child {
+    color: #888888 !important;
+    font-size: 0.85rem !important;
+}
+
+.archive-preview-container {
+    background: #2a2a2a !important;
+    border: 1px solid #444444 !important;
+    color: #d4d4d4 !important;
+    height: 85vh !important;
+}
+
+.archive-preview-controls {
+    background: #333333 !important;
+    border-bottom: 1px solid #555555 !important;
+    color: #d4d4d4 !important;
+}
+
+.archive-preview-controls button {
+    background: #444444 !important;
+    border: 1px solid #666666 !important;
+    color: #d4d4d4 !important;
+    padding: 6px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.archive-preview-controls button:hover {
+    background: #555555 !important;
+    border-color: #777777 !important;
+}
+
+.archive-preview-controls span {
+    color: #d4d4d4 !important;
+    font-weight: bold;
 }
 
 /* CSV table styling */
