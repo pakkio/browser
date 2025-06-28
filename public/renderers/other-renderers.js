@@ -1,14 +1,41 @@
 class ComicRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.currentPage = 1;
+        this.totalPages = null;
+        this.abortController = null;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+        
+        if (this.abortController) {
+            this.abortController.abort();
+            this.abortController = null;
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
+        this.currentPage = 1;
+        this.totalPages = null;
+        this.abortController = new AbortController();
+
         const comicContainer = document.createElement('div');
         comicContainer.className = 'comic-container';
         
         const controls = document.createElement('div');
         controls.className = 'comic-controls';
+        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px;`;
         controls.innerHTML = `
             <button id="comic-prev">Previous</button>
             <span id="comic-page-info">Page 1</span>
             <button id="comic-next">Next</button>
+            <input type="number" id="comic-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
+            <button id="comic-jump-btn" style="margin-left: 5px;">Go</button>
             <span id="comic-status" style="margin-left: 10px; font-style: italic;"></span>
         `;
         
@@ -23,44 +50,114 @@ class ComicRenderer {
         contentOther.appendChild(comicContainer);
         contentOther.style.display = 'block';
         
-        let currentPage = 1;
+        const prevBtn = controls.querySelector('#comic-prev');
+        const nextBtn = controls.querySelector('#comic-next');
+        const pageInfo = controls.querySelector('#comic-page-info');
+        const jumpInput = controls.querySelector('#comic-page-jump');
+        const jumpBtn = controls.querySelector('#comic-jump-btn');
         const statusElement = controls.querySelector('#comic-status');
+
+        const updateTotalPages = (totalPages) => {
+            this.totalPages = totalPages;
+            updatePageInfo();
+        };
+
+        const updatePageInfo = () => {
+            if (this.totalPages) {
+                pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+            } else {
+                pageInfo.textContent = `Page ${this.currentPage}`;
+            }
+            prevBtn.disabled = this.currentPage === 1;
+            nextBtn.disabled = this.totalPages !== null && this.currentPage === this.totalPages;
+        };
         
         const loadPage = async (page) => {
+            if (page < 1 || (this.totalPages && page > this.totalPages)) {
+                return;
+            }
+            this.currentPage = page;
             try {
-                statusElement.innerHTML = '⏳ Loading page...';
+                if (this.totalPages) {
+                    statusElement.innerHTML = `⏳ Loading page... fetching ${page}/${this.totalPages}`;
+                } else {
+                    statusElement.innerHTML = '⏳ Loading page...';
+                }
                 pageImg.style.opacity = '0.5';
-                const response = await window.authManager.authenticatedFetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`);
+                
+                const response = await window.authManager.authenticatedFetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
+                    signal: this.abortController.signal
+                });
                 
                 if (!response.ok) {
+                    if (response.status === 500) { // Assume 500 means end of pages if total is unknown
+                        if (!this.totalPages) {
+                            this.totalPages = this.currentPage - 1;
+                        }
+                    }
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
                 }
                 
                 const blob = await response.blob();
+                if (blob.size === 0) {
+                    throw new Error('Empty response');
+                }
+                
                 pageImg.src = URL.createObjectURL(blob);
                 pageImg.style.opacity = '1';
-                document.getElementById('comic-page-info').textContent = `Page ${page}`;
                 statusElement.textContent = '';
+                updatePageInfo();
             } catch (error) {
+                if (error.name === 'AbortError') {
+                    console.log('Comic loading aborted');
+                    return;
+                }
                 console.error('Comic load error:', error);
                 pageImg.style.opacity = '1';
                 statusElement.textContent = `Error: ${error.message}`;
+                updatePageInfo();
             }
         };
         
-        document.getElementById('comic-prev').addEventListener('click', () => {
-            if (currentPage > 1) {
-                currentPage--;
-                loadPage(currentPage);
+        prevBtn.addEventListener('click', () => loadPage(this.currentPage - 1));
+        nextBtn.addEventListener('click', () => loadPage(this.currentPage + 1));
+        jumpBtn.addEventListener('click', () => {
+            const page = parseInt(jumpInput.value, 10);
+            if (!isNaN(page)) {
+                loadPage(page);
             }
         });
+
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            if (e.key === 'ArrowLeft') {
+                e.preventDefault();
+                prevBtn.click();
+            } else if (e.key === 'ArrowRight') {
+                e.preventDefault();
+                nextBtn.click();
+            }
+        };
+        document.addEventListener('keydown', this.handleKeyDown);
+
+        // Fetch total pages
+        try {
+            const infoResponse = await window.authManager.authenticatedFetch(`/api/comic-info?path=${encodeURIComponent(filePath)}`, {
+                signal: this.abortController.signal
+            });
+            if (infoResponse.ok) {
+                const info = await infoResponse.json();
+                updateTotalPages(info.pages);
+            }
+        } catch (e) {
+            if (e.name === 'AbortError') {
+                console.log('Comic info fetch aborted');
+                return;
+            }
+            console.error("Could not fetch comic info", e);
+        }
         
-        document.getElementById('comic-next').addEventListener('click', () => {
-            currentPage++;
-            loadPage(currentPage);
-        });
-        
-        await loadPage(currentPage);
+        await loadPage(1);
     }
 }
 

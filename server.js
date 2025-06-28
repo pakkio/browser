@@ -458,6 +458,45 @@ app.get('/comic-preview', requireAuth, async (req, res) => {
     }
 });
 
+// Comic info endpoint to get total pages
+app.get('/api/comic-info', requireAuth, async (req, res) => {
+    const requestedFile = req.query.path;
+    console.log(`[${new Date().toISOString()}] GET /api/comic-info - file: "${requestedFile}"`);
+    
+    if (!requestedFile) {
+        console.log(`[${new Date().toISOString()}] ❌ Comic info: File path is required`);
+        return res.status(400).send('File path is required');
+    }
+    
+    const filePath = path.join(baseDir, requestedFile);
+    
+    if (!filePath.startsWith(baseDir)) {
+        console.log(`[${new Date().toISOString()}] ❌ Comic info: Forbidden access to ${filePath}`);
+        return res.status(403).send('Forbidden');
+    }
+    
+    const ext = path.extname(filePath).toLowerCase();
+    if (!['.cbz', '.cbr'].includes(ext)) {
+        console.log(`[${new Date().toISOString()}] ❌ Comic info: Not a comic archive: ${filePath}`);
+        return res.status(400).send('Not a comic book archive');
+    }
+    
+    try {
+        console.log(`[${new Date().toISOString()}] 🔄 Getting comic info for ${ext} file...`);
+        const imageFiles = await getComicFileList(filePath);
+        
+        res.json({
+            pages: imageFiles.length,
+            format: ext.replace('.', '').toUpperCase()
+        });
+        
+        console.log(`[${new Date().toISOString()}] ✅ Comic info: Found ${imageFiles.length} pages`);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Comic info error: ${error.message}`);
+        res.status(500).send(`Comic info error: ${error.message}`);
+    }
+});
+
 // Archive contents endpoint
 app.get('/archive-contents', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
@@ -938,6 +977,13 @@ async function extractEpubContent(filePath) {
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
                 entryCount++;
+                
+                if (!entry || !entry.fileName) {
+                    console.warn(`[${new Date().toISOString()}] ⚠️ EPUB: Invalid entry ${entryCount}, skipping`);
+                    zipfile.readEntry();
+                    return;
+                }
+                
                 console.log(`[${new Date().toISOString()}] 📖 EPUB: Processing entry ${entryCount}: "${entry.fileName}"`);
                 
                 if (entry.fileName.endsWith('/')) {
@@ -1299,6 +1345,11 @@ app.get('/images/:filename', requireAuth, async (req, res) => {
             
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
+                if (!entry || !entry.fileName) {
+                    zipfile.readEntry();
+                    return;
+                }
+                
                 if (entry.fileName.endsWith(filename) && entry.fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
                     found = true;
                     console.log(`[${new Date().toISOString()}] ✅ Found EPUB image: ${entry.fileName}`);
@@ -1381,8 +1432,8 @@ async function getZipContents(filePath, subPath) {
                 
                 entries.set(relativePath, {
                     name: relativePath,
-                    isDirectory: entry.fileName.endsWith('/'),
-                    size: entry.uncompressedSize
+                    isDirectory: entry.fileName ? entry.fileName.endsWith('/') : false,
+                    size: entry.uncompressedSize || 0
                 });
                 
                 zipfile.readEntry();

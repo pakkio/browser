@@ -182,7 +182,7 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'subtitle');
                         } else if (extension === 'epub') {
                             li.setAttribute('data-type', 'ebook');
-                        } else if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || fileName.endsWith('.tar.gz')) {
+                        } else if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (fileName && fileName.endsWith('.tar.gz'))) {
                             li.setAttribute('data-type', 'archive');
                         } else {
                             li.setAttribute('data-type', 'file');
@@ -262,7 +262,7 @@ function initializeFileExplorer() {
         if (['pptx', 'ppt', 'odp'].includes(extension)) return 'presentation';
         if (extension === 'srt') return 'subtitle';
         if (extension === 'epub') return 'ebook';
-        if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || fileName.endsWith('.tar.gz')) return 'archive';
+        if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || (fileName && fileName.endsWith('.tar.gz'))) return 'archive';
         return 'file';
     }
     
@@ -424,7 +424,17 @@ function initializeFileExplorer() {
     });
 
     loadFiles(currentPath);
+    
+    // Expose file explorer state for keyboard navigation
+    window.fileExplorer = {
+        currentPath: () => currentPath,
+        currentFiles: () => currentFiles,
+        filteredFiles: () => filteredFiles,
+        loadFiles: loadFiles,
+        updateDetails: updateDetails
+    };
 }
+
 
 // Expose initializeApp globally so auth.js can call it
 window.initializeApp = initializeApp;
