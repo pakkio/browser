@@ -590,6 +590,11 @@ async function extractFromCBZ(filePath, page, res) {
             
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
+                if (!entry || !entry.fileName) {
+                    zipfile.readEntry();
+                    return;
+                }
+                
                 if (entry.fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
                     imageFiles.push(entry);
                 }
@@ -597,7 +602,7 @@ async function extractFromCBZ(filePath, page, res) {
             });
             
             zipfile.on('end', () => {
-                imageFiles.sort((a, b) => a.fileName.localeCompare(b.fileName));
+                imageFiles.sort((a, b) => (a.fileName || '').localeCompare(b.fileName || ''));
                 
                 if (page > imageFiles.length || page < 1) {
                     zipfile.close();
@@ -886,6 +891,11 @@ app.get('/epub-cover', requireAuth, async (req, res) => {
             
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
+                if (!entry || !entry.fileName) {
+                    zipfile.readEntry();
+                    return;
+                }
+                
                 allEntries.push(entry.fileName);
                 console.log(`[${new Date().toISOString()}] 📁 EPUB entry: "${entry.fileName}"`);
                 

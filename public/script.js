@@ -314,6 +314,13 @@ function initializeFileExplorer() {
         if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
             return;
         }
+        
+        // Don't interfere when specific renderers are active that handle their own navigation
+        const archiveContainer = document.querySelector('.archive-container');
+        const pdfContainer = document.querySelector('.pdf-container');
+        if ((archiveContainer && contentOther.style.display !== 'none') || (pdfContainer && contentOther.style.display !== 'none')) {
+            return; // Renderer handles its own arrow keys
+        }
 
         if (filteredFiles.length === 0 && event.key !== 'Backspace') return;
 
