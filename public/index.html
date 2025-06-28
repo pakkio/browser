@@ -53,6 +53,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
                 <div class="search-section">
                     <label for="search-input">Search files:</label>
                     <input type="text" id="search-input" class="search-input" placeholder="e.g. physics manual pdf">
+                    <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">
+                        📚 Bookmarks
+                    </button>
                 </div>
                 <div class="type-filter-section">
                     <label for="file-type-filter">Filter by type:</label>
@@ -64,6 +67,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
                         <option value="audio">🎵 Audio</option>
                         <option value="pdf">📄 PDF</option>
                         <option value="code">💻 Code</option>
+                        <option value="notebook">📓 Notebooks</option>
                         <option value="text">📝 Text Documents</option>
                         <option value="table">📊 Spreadsheets</option>
                         <option value="presentation">📊 Presentations</option>
@@ -100,6 +104,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     <script src="renderers/other-renderers.js"></script>
     <!-- Main file renderer and application -->
     <script src="file-renderer.js"></script>
+    <script src="debug-annotations.js"></script>
     <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>
