@@ -206,6 +206,39 @@ function initializeFileExplorer() {
                             updateDetails(file);
                         });
 
+                        li.addEventListener('dblclick', (e) => {
+                            // Check if clicked on annotation button
+                            if (e.target.closest('.annotation-btn')) {
+                                return;
+                            }
+                            
+                            const filePath = path ? `${path}/${file.name}` : file.name;
+                            
+                            // Open file with default system program
+                            window.authManager.authenticatedFetch('/api/open-file', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({ filePath })
+                            })
+                            .then(response => {
+                                if (!response) return; // Auth failure handled by authManager
+                                if (!response.ok) {
+                                    throw new Error(`Failed to open file: ${response.status}`);
+                                }
+                                return response.json();
+                            })
+                            .then(result => {
+                                if (result && !result.success) {
+                                    console.error('Failed to open file:', result.error);
+                                }
+                            })
+                            .catch(error => {
+                                console.error('Error opening file:', error);
+                            });
+                        });
+
                         // Add annotation button for files
                         const annotationBtn = document.createElement('button');
                         annotationBtn.className = 'annotation-btn';
@@ -238,7 +271,20 @@ function initializeFileExplorer() {
                         annotationBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
                             const filePath = path ? `${path}/${file.name}` : file.name;
-                            window.annotationManager?.showAnnotationDialog(filePath, file.name);
+                            console.log('Annotation button clicked for:', filePath);
+                            
+                            if (!window.annotationManager) {
+                                console.error('AnnotationManager not initialized');
+                                alert('Annotation system not available. Please refresh the page.');
+                                return;
+                            }
+                            
+                            try {
+                                window.annotationManager.showAnnotationDialog(filePath, file.name);
+                            } catch (error) {
+                                console.error('Error showing annotation dialog:', error);
+                                alert('Failed to open annotation dialog: ' + error.message);
+                            }
                         });
                         
                         li.appendChild(annotationBtn);
@@ -366,8 +412,13 @@ function initializeFileExplorer() {
     }
     
     function handleKeyNavigation(event) {
-        // Don't interfere with typing in search input or filter select
-        if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
+        // Don't interfere with typing in search input, filter select, or textarea
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') {
+            return;
+        }
+        
+        // Don't interfere when annotation modal is open
+        if (document.querySelector('.annotation-modal-backdrop') || document.querySelector('.bookmarks-modal-backdrop')) {
             return;
         }
         

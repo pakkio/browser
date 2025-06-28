@@ -9,6 +9,10 @@ class AudioRenderer {
 }
 
 class VideoRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
         const video = document.createElement('video');
         video.controls = true;
@@ -70,6 +74,49 @@ class VideoRenderer {
         contentOther.appendChild(video);
         contentOther.appendChild(errorDiv);
         contentOther.style.display = 'block';
+        
+        // Add keyboard handler for spacebar fullscreen toggle and play/pause
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            if (e.code === 'Space') {
+                e.preventDefault();
+                this.togglePlayAndFullscreen(video);
+            }
+        };
+        
+        document.addEventListener('keydown', this.handleKeyDown);
+    }
+    
+    togglePlayAndFullscreen(video) {
+        // Toggle play/pause
+        if (video.paused) {
+            video.play().catch(err => {
+                console.error('Error attempting to play video:', err);
+            });
+        } else {
+            video.pause();
+        }
+        
+        // Toggle fullscreen
+        if (!document.fullscreenElement) {
+            video.requestFullscreen().catch(err => {
+                console.error('Error attempting to enable fullscreen:', err);
+            });
+        } else {
+            document.exitFullscreen().catch(err => {
+                console.error('Error attempting to exit fullscreen:', err);
+            });
+        }
+    }
+    
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
     }
     
     getErrorMessage(errorCode) {
