@@ -103,3 +103,53 @@ debug-*.js
 
 # Sample files
 sample.*
+
+# Private content - images, documents, media files
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.bmp
+*.tiff
+*.webp
+*.svg
+*.ico
+*.pdf
+*.doc
+*.docx
+*.xls
+*.xlsx
+*.ppt
+*.pptx
+*.zip
+*.rar
+*.7z
+*.tar.gz
+*.tar
+*.cbz
+*.cbr
+*.epub
+*.mobi
+*.mp3
+*.wav
+*.flac
+*.ogg
+*.aac
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.webm
+*.wmv
+*.flv
+
+# Private directories and magazines
+*Magazine*/
+*PICTORIAL*/
+*magazine*/
+*pictorial*/
+
+# Keep test files that are part of the project
+!test.pdf
+!test-files/
+!test-files/**
