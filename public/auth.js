@@ -23,11 +23,22 @@ class AuthManager {
             
             if (response.ok) {
                 const data = await response.json();
+                
+                // Check if authentication is disabled
+                if (data.authDisabled) {
+                    console.log('Authentication is disabled, proceeding without auth');
+                    this.authenticated = true; // Allow access when auth is disabled
+                    this.user = null;
+                    this.authDisabled = true;
+                    return true;
+                }
+                
                 this.authenticated = data.authenticated;
                 this.user = data.user || null;
+                this.authDisabled = false;
                 
                 console.log('Authentication status:', this.authenticated ? 'Authenticated' : 'Not authenticated');
-                if (this.authenticated) {
+                if (this.authenticated && this.user) {
                     console.log('User:', this.user.name, this.user.email);
                 }
                 
@@ -36,12 +47,14 @@ class AuthManager {
                 console.warn('Auth check failed:', response.status);
                 this.authenticated = false;
                 this.user = null;
+                this.authDisabled = false;
                 return false;
             }
         } catch (error) {
             console.error('Auth check error:', error);
             this.authenticated = false;
             this.user = null;
+            this.authDisabled = false;
             return false;
         }
     }
@@ -74,30 +87,37 @@ class AuthManager {
         const container = document.querySelector('.container');
         const body = document.body;
 
-        if (this.authenticated && this.user) {
-            // Hide auth panel and show user bar
+        if (this.authenticated) {
+            // Hide auth panel and show container
             authPanel.style.display = 'none';
-            userBar.style.display = 'flex';
             container.style.display = 'flex';
             body.classList.add('authenticated');
 
-            // Update user info
-            const userAvatar = document.getElementById('user-avatar');
-            const userName = document.getElementById('user-name');
-            
-            if (userAvatar && this.user.picture) {
-                userAvatar.src = this.user.picture;
-                userAvatar.style.display = 'block';
-            }
-            
-            if (userName) {
-                userName.textContent = this.user.name;
-            }
+            if (this.authDisabled) {
+                // When auth is disabled, hide user bar
+                userBar.style.display = 'none';
+            } else if (this.user) {
+                // Show user bar for authenticated users
+                userBar.style.display = 'flex';
 
-            // Set up logout button
-            const logoutBtn = document.getElementById('logout-btn');
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', () => this.logout());
+                // Update user info
+                const userAvatar = document.getElementById('user-avatar');
+                const userName = document.getElementById('user-name');
+                
+                if (userAvatar && this.user.picture) {
+                    userAvatar.src = this.user.picture;
+                    userAvatar.style.display = 'block';
+                }
+                
+                if (userName) {
+                    userName.textContent = this.user.name;
+                }
+
+                // Set up logout button
+                const logoutBtn = document.getElementById('logout-btn');
+                if (logoutBtn) {
+                    logoutBtn.addEventListener('click', () => this.logout());
+                }
             }
         } else {
             // Show auth panel and hide everything else

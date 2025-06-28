@@ -19,6 +19,7 @@ class FileRenderer {
         this.handlers.set('xlsx', new XlsxRenderer());
         this.handlers.set('pptx', new PptxRenderer());
         this.handlers.set('epub', new EpubRenderer());
+        this.handlers.set('archive', new ArchiveRenderer());
         // Treat .doc as .docx for rendering
         this.handlers.set('doc', this.handlers.get('docx'));
         // Add a CSS class to the <pre> element for better text contrast and fix font rendering
@@ -85,6 +86,8 @@ class FileRenderer {
             return 'pptx';
         } else if (extension === 'epub') {
             return 'epub';
+        } else if (['zip', 'rar', 'tar', 'tgz', 'tar.gz'].includes(extension) || fileName.endsWith('.tar.gz')) {
+            return 'archive';
         }
         return 'unsupported';
     }

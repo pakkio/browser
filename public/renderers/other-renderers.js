@@ -312,3 +312,331 @@ class PptxRenderer {
         }
     }
 }
+
+class ArchiveRenderer {
+    constructor() {
+        this.currentPath = '';
+        this.currentArchive = null;
+        this.selectedIndex = -1;
+        this.archiveFiles = [];
+        this.keydownHandler = null;
+    }
+
+    cleanup() {
+        this.currentPath = '';
+        this.currentArchive = null;
+        this.selectedIndex = -1;
+        this.archiveFiles = [];
+        
+        // Remove keyboard event listener
+        if (this.keydownHandler) {
+            document.removeEventListener('keydown', this.keydownHandler);
+            this.keydownHandler = null;
+        }
+    }
+
+    async render(filePath, fileName, contentCode, contentOther) {
+        this.cleanup();
+        
+        const archiveContainer = document.createElement('div');
+        archiveContainer.className = 'archive-container';
+        archiveContainer.style.cssText = `
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-family: Arial, sans-serif;
+            max-width: 100%;
+            height: 70vh;
+            display: flex;
+            flex-direction: column;
+        `;
+
+        // Navigation bar
+        const navBar = document.createElement('div');
+        navBar.className = 'archive-nav';
+        navBar.style.cssText = `
+            background: #f5f5f5;
+            border-bottom: 1px solid #ccc;
+            padding: 10px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        `;
+
+        const backBtn = document.createElement('button');
+        backBtn.textContent = '← Back';
+        backBtn.style.cssText = `
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            border-radius: 3px;
+        `;
+        backBtn.disabled = true;
+
+        const pathDisplay = document.createElement('span');
+        pathDisplay.style.cssText = `
+            font-family: monospace;
+            background: white;
+            padding: 5px 10px;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            flex: 1;
+        `;
+        pathDisplay.textContent = fileName;
+
+        navBar.appendChild(backBtn);
+        navBar.appendChild(pathDisplay);
+
+        // Content area
+        const contentArea = document.createElement('div');
+        contentArea.className = 'archive-content';
+        contentArea.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px;
+        `;
+
+        archiveContainer.appendChild(navBar);
+        archiveContainer.appendChild(contentArea);
+        contentOther.appendChild(archiveContainer);
+        contentOther.style.display = 'block';
+
+        // Load archive contents
+        try {
+            await this.loadArchiveContents(filePath, '', contentArea, pathDisplay, backBtn);
+            this.setupKeyboardNavigation(filePath, contentArea, pathDisplay, backBtn);
+        } catch (error) {
+            console.error('Archive load error:', error);
+            contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error loading archive: ${error.message}</div>`;
+        }
+    }
+
+    async loadArchiveContents(archivePath, subPath, contentArea, pathDisplay, backBtn) {
+        contentArea.innerHTML = '<div style="padding: 20px;">⏳ Loading archive contents...</div>';
+        
+        try {
+            const response = await window.authManager.authenticatedFetch(`/archive-contents?path=${encodeURIComponent(archivePath)}&subPath=${encodeURIComponent(subPath)}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const data = await response.json();
+            this.renderFileList(data, archivePath, subPath, contentArea, pathDisplay, backBtn);
+        } catch (error) {
+            console.error('Failed to load archive contents:', error);
+            contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
+        }
+    }
+
+    renderFileList(files, archivePath, currentPath, contentArea, pathDisplay, backBtn) {
+        contentArea.innerHTML = '';
+        
+        // Store current state
+        this.archiveFiles = files;
+        this.currentArchive = archivePath;
+        this.currentPath = currentPath;
+        this.selectedIndex = -1;
+        
+        // Update path display
+        const displayPath = currentPath ? `${this.getBaseName(archivePath)}/${currentPath}` : this.getBaseName(archivePath);
+        pathDisplay.textContent = displayPath;
+        
+        // Update back button
+        backBtn.disabled = !currentPath;
+        backBtn.onclick = () => {
+            const parentPath = currentPath.split('/').slice(0, -1).join('/');
+            this.loadArchiveContents(archivePath, parentPath, contentArea, pathDisplay, backBtn);
+        };
+
+        if (files.length === 0) {
+            contentArea.innerHTML = '<div style="padding: 20px; color: #666;">No files found in this location.</div>';
+            return;
+        }
+
+        const fileList = document.createElement('div');
+        fileList.className = 'file-list';
+        
+        // Sort files: directories first, then files
+        const sortedFiles = files.sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) {
+                return a.isDirectory ? -1 : 1;
+            }
+            return a.name.localeCompare(b.name);
+        });
+
+        sortedFiles.forEach(file => {
+            const fileItem = document.createElement('div');
+            fileItem.className = 'file-item';
+            fileItem.style.cssText = `
+                display: flex;
+                align-items: center;
+                padding: 8px 12px;
+                border-bottom: 1px solid #eee;
+                cursor: pointer;
+                transition: background-color 0.2s;
+            `;
+            
+            fileItem.onmouseover = () => fileItem.style.backgroundColor = '#f0f0f0';
+            fileItem.onmouseout = () => fileItem.style.backgroundColor = 'white';
+
+            const icon = document.createElement('span');
+            icon.style.cssText = `
+                margin-right: 10px;
+                font-size: 16px;
+                width: 20px;
+            `;
+            icon.textContent = file.isDirectory ? '📁' : '📄';
+
+            const name = document.createElement('span');
+            name.textContent = file.name;
+            name.style.cssText = `
+                flex: 1;
+                font-family: monospace;
+            `;
+
+            const size = document.createElement('span');
+            if (!file.isDirectory && file.size !== undefined) {
+                size.textContent = this.formatFileSize(file.size);
+                size.style.cssText = `
+                    color: #666;
+                    font-size: 12px;
+                    margin-left: 10px;
+                `;
+            }
+
+            fileItem.appendChild(icon);
+            fileItem.appendChild(name);
+            if (size.textContent) fileItem.appendChild(size);
+
+            if (file.isDirectory) {
+                fileItem.onclick = () => {
+                    const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                    this.loadArchiveContents(archivePath, newPath, contentArea, pathDisplay, backBtn);
+                };
+            } else {
+                fileItem.onclick = () => {
+                    const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                    this.previewFile(archivePath, filePath, file.name);
+                };
+            }
+
+            fileList.appendChild(fileItem);
+        });
+
+        contentArea.appendChild(fileList);
+        
+        // Auto-select first file for keyboard navigation
+        if (files.length > 0) {
+            setTimeout(() => this.selectArchiveFile(0), 100);
+        }
+    }
+
+    getBaseName(path) {
+        return path.split('/').pop() || path;
+    }
+
+    formatFileSize(bytes) {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    }
+
+    async previewFile(archivePath, filePath, fileName) {
+        try {
+            const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
+            
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+
+            // Open in new window/tab for preview
+            const blob = await response.blob();
+            const url = URL.createObjectURL(blob);
+            const newWindow = window.open(url, '_blank');
+            
+            // Clean up the object URL after a delay
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+            
+            if (!newWindow) {
+                // Fallback: download the file
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = fileName;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+            }
+        } catch (error) {
+            console.error('File preview error:', error);
+            alert(`Error previewing file: ${error.message}`);
+        }
+    }
+
+    setupKeyboardNavigation(archivePath, contentArea, pathDisplay, backBtn) {
+        this.keydownHandler = (event) => {
+            if (this.archiveFiles.length === 0) return;
+
+            let newIndex = this.selectedIndex;
+            switch(event.key) {
+                case 'ArrowUp':
+                    event.preventDefault();
+                    newIndex = this.selectedIndex > 0 ? this.selectedIndex - 1 : this.archiveFiles.length - 1;
+                    break;
+                case 'ArrowDown':
+                    event.preventDefault();
+                    newIndex = this.selectedIndex < this.archiveFiles.length - 1 ? this.selectedIndex + 1 : 0;
+                    break;
+                case 'Home':
+                    event.preventDefault();
+                    newIndex = 0;
+                    break;
+                case 'End':
+                    event.preventDefault();
+                    newIndex = this.archiveFiles.length - 1;
+                    break;
+                case 'Enter':
+                    event.preventDefault();
+                    if (this.selectedIndex >= 0 && this.selectedIndex < this.archiveFiles.length) {
+                        const file = this.archiveFiles[this.selectedIndex];
+                        if (file.isDirectory) {
+                            const newPath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
+                            this.loadArchiveContents(this.currentArchive, newPath, contentArea, pathDisplay, backBtn);
+                        } else {
+                            const filePath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
+                            this.previewFile(this.currentArchive, filePath, file.name);
+                        }
+                    }
+                    return;
+                case 'Backspace':
+                    event.preventDefault();
+                    if (this.currentPath !== '') {
+                        const parentPath = this.currentPath.split('/').slice(0, -1).join('/');
+                        this.loadArchiveContents(this.currentArchive, parentPath, contentArea, pathDisplay, backBtn);
+                    }
+                    return;
+            }
+
+            if (newIndex !== this.selectedIndex) {
+                this.selectArchiveFile(newIndex);
+            }
+        };
+
+        document.addEventListener('keydown', this.keydownHandler);
+    }
+
+    selectArchiveFile(index) {
+        const fileItems = document.querySelectorAll('.archive-content .file-item');
+        fileItems.forEach(item => item.style.backgroundColor = 'white');
+
+        if (index >= 0 && index < this.archiveFiles.length && index < fileItems.length) {
+            this.selectedIndex = index;
+            const selectedItem = fileItems[index];
+            selectedItem.style.backgroundColor = '#e3f2fd';
+            selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+    }
+}
