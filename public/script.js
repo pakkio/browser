@@ -105,7 +105,7 @@ function initializeFileExplorer() {
                     typeMatches = selectedFilter === 'directory';
                 } else {
                     const extension = file.name.split('.').pop().toLowerCase();
-                    const fileType = getFileTypeFromExtension(extension);
+                    const fileType = getFileTypeFromExtension(extension, file.name);
                     typeMatches = fileType === selectedFilter;
                 }
             }
@@ -182,6 +182,8 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'subtitle');
                         } else if (extension === 'epub') {
                             li.setAttribute('data-type', 'ebook');
+                        } else if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || fileName.endsWith('.tar.gz')) {
+                            li.setAttribute('data-type', 'archive');
                         } else {
                             li.setAttribute('data-type', 'file');
                         }
@@ -248,7 +250,7 @@ function initializeFileExplorer() {
         `;
     }
     
-    function getFileTypeFromExtension(extension) {
+    function getFileTypeFromExtension(extension, fileName = '') {
         if (extension === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(extension)) return 'comic';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
@@ -260,6 +262,7 @@ function initializeFileExplorer() {
         if (['pptx', 'ppt', 'odp'].includes(extension)) return 'presentation';
         if (extension === 'srt') return 'subtitle';
         if (extension === 'epub') return 'ebook';
+        if (['zip', 'rar', 'tar', 'tgz', '7z'].includes(extension) || fileName.endsWith('.tar.gz')) return 'archive';
         return 'file';
     }
     
@@ -278,7 +281,9 @@ function initializeFileExplorer() {
             'py': 'Python Script', 'java': 'Java Source', 'c': 'C Source', 'cpp': 'C++ Source',
             'xml': 'XML Document', 'yaml': 'YAML Config', 'yml': 'YAML Config',
             'cbz': 'Comic Book Archive', 'cbr': 'Comic Book Archive',
-            'epub': 'EPUB E-book'
+            'epub': 'EPUB E-book',
+            'zip': 'ZIP Archive', 'rar': 'RAR Archive', 'tar': 'TAR Archive',
+            'tgz': 'Compressed TAR Archive', '7z': '7-Zip Archive'
         };
         return types[extension] || 'Unknown File';
     }
@@ -305,7 +310,12 @@ function initializeFileExplorer() {
     }
     
     function handleKeyNavigation(event) {
-        if (filteredFiles.length === 0) return;
+        // Don't interfere with typing in search input or filter select
+        if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT') {
+            return;
+        }
+
+        if (filteredFiles.length === 0 && event.key !== 'Backspace') return;
 
         let newIndex = selectedIndex;
         switch(event.key) {
@@ -344,6 +354,29 @@ function initializeFileExplorer() {
                     } else {
                         showContent(currentPath, file.name);
                     }
+                }
+                return;
+            case 'Backspace':
+                event.preventDefault();
+                if (currentPath !== '') {
+                    currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                    loadFiles(currentPath);
+                    updateDetails(null);
+                }
+                return;
+            case '/':
+                event.preventDefault();
+                // Focus on search input when user types '/'
+                searchInput.focus();
+                return;
+            case 'Escape':
+                event.preventDefault();
+                // Clear search when Escape is pressed
+                if (searchInput.value !== '') {
+                    searchInput.value = '';
+                    displayFiles(currentFiles, currentPath);
+                    // Re-focus on file list
+                    document.querySelector('.file-item.selected')?.focus();
                 }
                 return;
         }

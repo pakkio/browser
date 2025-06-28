@@ -8,8 +8,10 @@ const { exec, spawn } = require('child_process');
 const pdf2pic = require('pdf2pic');
 const yauzl = require('yauzl');
 const { createExtractorFromFile } = require('node-unrar-js');
+const tar = require('tar-stream');
 const session = require('express-session');
 const { passport, requireAuth, optionalAuth } = require('./auth');
+const FileCache = require('./cache');
 
 const AUTH_ENABLED = ['TRUE', 'YES', '1', 'true', 'yes'].includes((process.env.AUTH || 'FALSE').toUpperCase());
 
@@ -35,9 +37,30 @@ if (AUTH_ENABLED) {
     app.use(passport.session());
 }
 
-// Cache for comic file lists to avoid repeated unrar calls
-const comicFileCache = new Map();
+// Initialize disk-based cache system
+const cache = new FileCache({
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxSize: 500 * 1024 * 1024   // 500MB cache limit
+});
+
+// In-memory cache for pending requests to avoid duplicate processing
 const pendingRequests = new Map();
+
+// Helper function for image MIME type detection
+function getImageMimeType(fileName) {
+    const ext = path.extname(fileName).toLowerCase();
+    const mimeTypes = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.bmp': 'image/bmp',
+        '.tiff': 'image/tiff',
+        '.tif': 'image/tiff'
+    };
+    return mimeTypes[ext] || 'image/jpeg';
+}
 
 console.log('================================');
 console.log('🚀 File Browser Server Starting...');
@@ -56,6 +79,9 @@ const mimeTypes = {
     '.jpeg': 'image/jpeg',
     '.gif': 'image/gif',
     '.webp': 'image/webp',
+    '.bmp': 'image/bmp',
+    '.tiff': 'image/tiff',
+    '.tif': 'image/tiff',
     '.svg': 'image/svg+xml',
     '.wav': 'audio/wav',
     '.mp3': 'audio/mpeg',
@@ -123,6 +149,23 @@ if (AUTH_ENABLED) {
                 </body>
             </html>
         `);
+    });
+} else {
+    // When auth is disabled, return 404 for auth routes
+    app.get('/auth/google', (req, res) => {
+        res.status(404).json({ error: 'Authentication is disabled' });
+    });
+    
+    app.get('/auth/google/callback', (req, res) => {
+        res.status(404).json({ error: 'Authentication is disabled' });
+    });
+    
+    app.post('/auth/logout', (req, res) => {
+        res.status(404).json({ error: 'Authentication is disabled' });
+    });
+    
+    app.get('/login-failed', (req, res) => {
+        res.status(404).json({ error: 'Authentication is disabled' });
     });
 }
 
@@ -232,6 +275,18 @@ app.get('/files', requireAuth, (req, res) => {
     if (!filePath.startsWith(baseDir)) {
         console.log(`[${new Date().toISOString()}] ❌ Forbidden file access attempt: ${filePath}`);
         return res.status(403).send('Forbidden');
+    }
+
+    // Check if the path is a directory
+    try {
+        const stats = fs.statSync(filePath);
+        if (stats.isDirectory()) {
+            console.log(`[${new Date().toISOString()}] ❌ Cannot serve directory as file: ${filePath}`);
+            return res.status(400).send('Cannot serve directory as file');
+        }
+    } catch (error) {
+        console.log(`[${new Date().toISOString()}] ❌ File not found: ${filePath}`);
+        return res.status(404).send('File not found');
     }
 
     const ext = path.extname(filePath).toLowerCase();
@@ -403,6 +458,90 @@ app.get('/comic-preview', requireAuth, async (req, res) => {
     }
 });
 
+// Archive contents endpoint
+app.get('/archive-contents', requireAuth, async (req, res) => {
+    const requestedFile = req.query.path;
+    const subPath = req.query.subPath || '';
+    console.log(`[${new Date().toISOString()}] GET /archive-contents - file: "${requestedFile}", subPath: "${subPath}"`);
+    
+    if (!requestedFile) {
+        console.log(`[${new Date().toISOString()}] ❌ Archive contents: File path is required`);
+        return res.status(400).send('File path is required');
+    }
+    
+    const filePath = path.join(baseDir, requestedFile);
+    
+    if (!filePath.startsWith(baseDir)) {
+        console.log(`[${new Date().toISOString()}] ❌ Archive contents: Forbidden access to ${filePath}`);
+        return res.status(403).send('Forbidden');
+    }
+    
+    const ext = path.extname(filePath).toLowerCase();
+    const isGzipped = filePath.endsWith('.tar.gz') || ext === '.tgz';
+    
+    if (!['zip', 'rar', 'tar'].includes(ext.replace('.', '')) && !isGzipped) {
+        console.log(`[${new Date().toISOString()}] ❌ Archive contents: Not a supported archive: ${filePath}`);
+        return res.status(400).send('Not a supported archive format');
+    }
+    
+    try {
+        let contents = [];
+        
+        if (ext === '.zip') {
+            contents = await getZipContents(filePath, subPath);
+        } else if (ext === '.rar') {
+            contents = await getRarContents(filePath, subPath);
+        } else if (ext === '.tar' || isGzipped) {
+            contents = await getTarContents(filePath, subPath, isGzipped);
+        }
+        
+        console.log(`[${new Date().toISOString()}] ✅ Archive contents: Found ${contents.length} items`);
+        res.json(contents);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Archive contents error: ${error.message}`);
+        res.status(500).send(`Archive reading error: ${error.message}`);
+    }
+});
+
+// Archive file extraction endpoint
+app.get('/archive-file', requireAuth, async (req, res) => {
+    const archivePath = req.query.archive;
+    const filePath = req.query.file;
+    console.log(`[${new Date().toISOString()}] GET /archive-file - archive: "${archivePath}", file: "${filePath}"`);
+    
+    if (!archivePath || !filePath) {
+        console.log(`[${new Date().toISOString()}] ❌ Archive file: Archive and file path are required`);
+        return res.status(400).send('Archive and file path are required');
+    }
+    
+    const fullArchivePath = path.join(baseDir, archivePath);
+    
+    if (!fullArchivePath.startsWith(baseDir)) {
+        console.log(`[${new Date().toISOString()}] ❌ Archive file: Forbidden access to ${fullArchivePath}`);
+        return res.status(403).send('Forbidden');
+    }
+    
+    const ext = path.extname(fullArchivePath).toLowerCase();
+    const isGzipped = fullArchivePath.endsWith('.tar.gz') || ext === '.tgz';
+    
+    try {
+        if (ext === '.zip') {
+            await extractFileFromZip(fullArchivePath, filePath, res);
+        } else if (ext === '.rar') {
+            await extractFileFromRar(fullArchivePath, filePath, res);
+        } else if (ext === '.tar' || isGzipped) {
+            await extractFileFromTar(fullArchivePath, filePath, res, isGzipped);
+        } else {
+            throw new Error('Unsupported archive format');
+        }
+        
+        console.log(`[${new Date().toISOString()}] ✅ Archive file extraction completed`);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Archive file extraction error: ${error.message}`);
+        res.status(500).send(`File extraction error: ${error.message}`);
+    }
+});
+
 async function extractFromCBZ(filePath, page, res) {
     return new Promise((resolve, reject) => {
         yauzl.open(filePath, { lazyEntries: true, autoClose: false }, (err, zipfile) => {
@@ -412,7 +551,7 @@ async function extractFromCBZ(filePath, page, res) {
             
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
-                if (entry.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                if (entry.fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
                     imageFiles.push(entry);
                 }
                 zipfile.readEntry();
@@ -433,14 +572,7 @@ async function extractFromCBZ(filePath, page, res) {
                         return reject(err);
                     }
                     
-                    const ext = path.extname(targetEntry.fileName).toLowerCase();
-                    const mimeType = {
-                        '.jpg': 'image/jpeg',
-                        '.jpeg': 'image/jpeg',
-                        '.png': 'image/png',
-                        '.gif': 'image/gif',
-                        '.webp': 'image/webp'
-                    }[ext] || 'image/jpeg';
+                    const mimeType = getImageMimeType(targetEntry.fileName);
                     
                     res.setHeader('Content-Type', mimeType);
                     readStream.pipe(res);
@@ -466,24 +598,36 @@ async function extractFromCBZ(filePath, page, res) {
 }
 
 async function getComicFileList(filePath) {
-    // Check cache first
-    if (comicFileCache.has(filePath)) {
-        return comicFileCache.get(filePath);
+    // Generate cache key
+    const cacheKey = cache.generateKey(filePath, 'comic-list');
+    
+    // Check disk cache first
+    const cachedList = await cache.get('comic-lists', cacheKey, filePath);
+    if (cachedList) {
+        return cachedList;
     }
     
     return new Promise((resolve, reject) => {
+        console.log(`[${new Date().toISOString()}] 📖 CBR: Running unrar lb "${filePath}"`);
         exec(`unrar lb "${filePath}"`, (err, stdout, stderr) => {
             if (err) {
+                console.error(`[${new Date().toISOString()}] ❌ CBR: unrar error: ${err.message}`);
+                console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
                 return reject(err);
             }
             
+            console.log(`[${new Date().toISOString()}] 📖 CBR: unrar stdout length: ${stdout.length}`);
             const files = stdout.split('\n').filter(line => line.trim());
+            console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${files.length} total files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
+            
             const imageFiles = files
-                .filter(file => file.match(/\.(jpg|jpeg|png|gif|webp)$/i))
+                .filter(file => file.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i))
                 .sort();
             
-            // Cache the result
-            comicFileCache.set(filePath, imageFiles);
+            console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${imageFiles.length} image files: ${imageFiles.slice(0, 3).join(', ')}${imageFiles.length > 3 ? '...' : ''}`);
+            
+            // Cache the result to disk
+            cache.set('comic-lists', cacheKey, imageFiles, filePath);
             resolve(imageFiles);
         });
     });
@@ -513,14 +657,7 @@ async function extractFromCBR(filePath, page, res) {
                     return reject(new Error(`Failed to extract ${targetFile}: ${err.message}`));
                 }
                 
-                const ext = path.extname(targetFile).toLowerCase();
-                const mimeType = {
-                    '.jpg': 'image/jpeg',
-                    '.jpeg': 'image/jpeg',
-                    '.png': 'image/png',
-                    '.gif': 'image/gif',
-                    '.webp': 'image/webp'
-                }[ext] || 'image/jpeg';
+                const mimeType = getImageMimeType(targetFile);
                 
                 res.setHeader('Content-Type', mimeType);
                 res.send(stdout);
@@ -568,7 +705,7 @@ async function extractFromCBRFallback(filePath, page, res) {
         }
         
         const imageFiles = fileHeaders.filter(header => 
-            header.name && header.name.match(/\.(jpg|jpeg|png|gif|webp)$/i)
+            header.name && header.name.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)
         ).sort((a, b) => a.name.localeCompare(b.name));
         
         if (page > imageFiles.length || page < 1) {
@@ -674,14 +811,7 @@ async function extractFromCBRFallback(filePath, page, res) {
             throw new Error('Could not extract file data');
         }
         
-        const ext = path.extname(fileName).toLowerCase();
-        const mimeType = {
-            '.jpg': 'image/jpeg',
-            '.jpeg': 'image/jpeg',
-            '.png': 'image/png',
-            '.gif': 'image/gif',
-            '.webp': 'image/webp'
-        }[ext] || 'image/jpeg';
+        const mimeType = getImageMimeType(fileName);
         
         res.setHeader('Content-Type', mimeType);
         res.send(fileBuffer);
@@ -1169,7 +1299,7 @@ app.get('/images/:filename', requireAuth, async (req, res) => {
             
             zipfile.readEntry();
             zipfile.on('entry', (entry) => {
-                if (entry.fileName.endsWith(filename) && entry.fileName.match(/\.(jpg|jpeg|png|gif|webp)$/i)) {
+                if (entry.fileName.endsWith(filename) && entry.fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
                     found = true;
                     console.log(`[${new Date().toISOString()}] ✅ Found EPUB image: ${entry.fileName}`);
                     zipfile.openReadStream(entry, (err, readStream) => {
@@ -1178,14 +1308,7 @@ app.get('/images/:filename', requireAuth, async (req, res) => {
                             return res.status(500).json({ error: err.message });
                         }
                         
-                        const ext = path.extname(entry.fileName).toLowerCase();
-                        const mimeType = {
-                            '.jpg': 'image/jpeg',
-                            '.jpeg': 'image/jpeg',
-                            '.png': 'image/png',
-                            '.gif': 'image/gif',
-                            '.webp': 'image/webp'
-                        }[ext] || 'image/jpeg';
+                        const mimeType = getImageMimeType(entry.fileName);
                         
                         res.setHeader('Content-Type', mimeType);
                         readStream.pipe(res);
@@ -1204,6 +1327,364 @@ app.get('/images/:filename', requireAuth, async (req, res) => {
         });
     } catch (error) {
         console.error(`[${new Date().toISOString()}] ❌ EPUB images: General error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+// Archive utility functions
+async function getZipContents(filePath, subPath) {
+    // Generate cache key including subPath
+    const cacheKey = cache.generateKey(filePath, 'zip-contents', subPath);
+    
+    // Check disk cache first
+    const cachedContents = await cache.get('archive-contents', cacheKey, filePath);
+    if (cachedContents) {
+        return cachedContents;
+    }
+    
+    return new Promise((resolve, reject) => {
+        yauzl.open(filePath, { lazyEntries: true }, (err, zipfile) => {
+            if (err) return reject(err);
+            
+            const contents = [];
+            const entries = new Map();
+            
+            zipfile.readEntry();
+            zipfile.on('entry', (entry) => {
+                const fullPath = entry.fileName;
+                
+                // Skip directories ending with / and files not in the subPath
+                if (subPath && !fullPath.startsWith(subPath + '/') && fullPath !== subPath) {
+                    zipfile.readEntry();
+                    return;
+                }
+                
+                let relativePath = subPath ? fullPath.slice(subPath.length + 1) : fullPath;
+                if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+                
+                // Skip empty paths and nested files/directories
+                if (!relativePath || relativePath.includes('/')) {
+                    // Handle directories
+                    if (relativePath.includes('/')) {
+                        const dirName = relativePath.split('/')[0];
+                        if (dirName && !entries.has(dirName)) {
+                            entries.set(dirName, {
+                                name: dirName,
+                                isDirectory: true,
+                                size: 0
+                            });
+                        }
+                    }
+                    zipfile.readEntry();
+                    return;
+                }
+                
+                entries.set(relativePath, {
+                    name: relativePath,
+                    isDirectory: entry.fileName.endsWith('/'),
+                    size: entry.uncompressedSize
+                });
+                
+                zipfile.readEntry();
+            });
+            
+            zipfile.on('end', () => {
+                const contents = Array.from(entries.values());
+                // Cache the result
+                cache.set('archive-contents', cacheKey, contents, filePath);
+                resolve(contents);
+            });
+            
+            zipfile.on('error', reject);
+        });
+    });
+}
+
+async function getRarContents(filePath, subPath) {
+    // Generate cache key including subPath
+    const cacheKey = cache.generateKey(filePath, 'rar-contents', subPath);
+    
+    // Check disk cache first
+    const cachedContents = await cache.get('archive-contents', cacheKey, filePath);
+    if (cachedContents) {
+        return cachedContents;
+    }
+    
+    try {
+        const extractor = await createExtractorFromFile({ filepath: filePath });
+        const list = await extractor.getFileList();
+        
+        let fileHeaders = [];
+        if (list && list.fileHeaders) {
+            fileHeaders = Array.isArray(list.fileHeaders) ? list.fileHeaders : Array.from(list.fileHeaders);
+        } else if (Array.isArray(list)) {
+            fileHeaders = list;
+        }
+        
+        const contents = [];
+        const directories = new Set();
+        
+        for (const header of fileHeaders) {
+            const fullPath = header.name || header.filename;
+            if (!fullPath) continue;
+            
+            // Filter by subPath
+            if (subPath && !fullPath.startsWith(subPath + '/') && fullPath !== subPath) {
+                continue;
+            }
+            
+            let relativePath = subPath ? fullPath.slice(subPath.length + 1) : fullPath;
+            if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+            
+            if (!relativePath) continue;
+            
+            // Handle nested paths
+            if (relativePath.includes('/')) {
+                const dirName = relativePath.split('/')[0];
+                if (dirName && !directories.has(dirName)) {
+                    directories.add(dirName);
+                    contents.push({
+                        name: dirName,
+                        isDirectory: true,
+                        size: 0
+                    });
+                }
+            } else {
+                contents.push({
+                    name: relativePath,
+                    isDirectory: false,
+                    size: header.fileSize || header.size || 0
+                });
+            }
+        }
+        
+        // Cache the result
+        cache.set('archive-contents', cacheKey, contents, filePath);
+        return contents;
+    } catch (error) {
+        throw new Error(`Failed to read RAR archive: ${error.message}`);
+    }
+}
+
+async function getTarContents(filePath, subPath, isGzipped) {
+    // Generate cache key including subPath and compression type
+    const cacheKey = cache.generateKey(filePath, 'tar-contents', `${subPath}:${isGzipped}`);
+    
+    // Check disk cache first
+    const cachedContents = await cache.get('archive-contents', cacheKey, filePath);
+    if (cachedContents) {
+        return cachedContents;
+    }
+    
+    return new Promise((resolve, reject) => {
+        const contents = [];
+        const directories = new Set();
+        
+        const extract = tar.extract();
+        
+        extract.on('entry', (header, stream, next) => {
+            const fullPath = header.name;
+            
+            // Filter by subPath
+            if (subPath && !fullPath.startsWith(subPath + '/') && fullPath !== subPath) {
+                stream.resume();
+                return next();
+            }
+            
+            let relativePath = subPath ? fullPath.slice(subPath.length + 1) : fullPath;
+            if (relativePath.startsWith('/')) relativePath = relativePath.slice(1);
+            
+            if (!relativePath) {
+                stream.resume();
+                return next();
+            }
+            
+            // Handle nested paths
+            if (relativePath.includes('/')) {
+                const dirName = relativePath.split('/')[0];
+                if (dirName && !directories.has(dirName)) {
+                    directories.add(dirName);
+                    contents.push({
+                        name: dirName,
+                        isDirectory: true,
+                        size: 0
+                    });
+                }
+            } else {
+                contents.push({
+                    name: relativePath,
+                    isDirectory: header.type === 'directory',
+                    size: header.size || 0
+                });
+            }
+            
+            stream.resume();
+            next();
+        });
+        
+        extract.on('finish', () => {
+            // Cache the result
+            cache.set('archive-contents', cacheKey, contents, filePath);
+            resolve(contents);
+        });
+        
+        extract.on('error', reject);
+        
+        const readStream = fs.createReadStream(filePath);
+        if (isGzipped) {
+            const zlib = require('zlib');
+            readStream.pipe(zlib.createGunzip()).pipe(extract);
+        } else {
+            readStream.pipe(extract);
+        }
+    });
+}
+
+async function extractFileFromZip(archivePath, filePath, res) {
+    return new Promise((resolve, reject) => {
+        yauzl.open(archivePath, { lazyEntries: true }, (err, zipfile) => {
+            if (err) return reject(err);
+            
+            zipfile.readEntry();
+            zipfile.on('entry', (entry) => {
+                if (entry.fileName === filePath) {
+                    zipfile.openReadStream(entry, (err, readStream) => {
+                        if (err) return reject(err);
+                        
+                        const ext = path.extname(filePath).toLowerCase();
+                        const mimeType = mimeTypes[ext] || 'application/octet-stream';
+                        
+                        res.setHeader('Content-Type', mimeType);
+                        res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+                        
+                        readStream.pipe(res);
+                        readStream.on('end', resolve);
+                        readStream.on('error', reject);
+                    });
+                } else {
+                    zipfile.readEntry();
+                }
+            });
+            
+            zipfile.on('end', () => {
+                reject(new Error('File not found in archive'));
+            });
+        });
+    });
+}
+
+async function extractFileFromRar(archivePath, filePath, res) {
+    try {
+        const extractor = await createExtractorFromFile({ filepath: archivePath });
+        const extracted = await extractor.extract({ files: [filePath] });
+        
+        let fileBuffer = null;
+        let filesArray = [];
+        
+        if (extracted.files) {
+            filesArray = Array.isArray(extracted.files) ? extracted.files : Array.from(extracted.files);
+        }
+        
+        if (filesArray.length > 0) {
+            const file = filesArray[0];
+            if (file.extraction) {
+                fileBuffer = Buffer.from(file.extraction);
+            } else if (file.fileData) {
+                fileBuffer = Buffer.from(file.fileData);
+            } else if (file.data) {
+                fileBuffer = Buffer.from(file.data);
+            }
+        }
+        
+        if (!fileBuffer) {
+            throw new Error('Failed to extract file from RAR archive');
+        }
+        
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeType = mimeTypes[ext] || 'application/octet-stream';
+        
+        res.setHeader('Content-Type', mimeType);
+        res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+        res.send(fileBuffer);
+        
+    } catch (error) {
+        throw new Error(`Failed to extract file from RAR: ${error.message}`);
+    }
+}
+
+async function extractFileFromTar(archivePath, filePath, res, isGzipped) {
+    return new Promise((resolve, reject) => {
+        const extract = tar.extract();
+        let found = false;
+        
+        extract.on('entry', (header, stream, next) => {
+            if (header.name === filePath) {
+                found = true;
+                
+                const ext = path.extname(filePath).toLowerCase();
+                const mimeType = mimeTypes[ext] || 'application/octet-stream';
+                
+                res.setHeader('Content-Type', mimeType);
+                res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+                
+                stream.pipe(res);
+                stream.on('end', resolve);
+                stream.on('error', reject);
+            } else {
+                stream.resume();
+            }
+            next();
+        });
+        
+        extract.on('finish', () => {
+            if (!found) {
+                reject(new Error('File not found in archive'));
+            }
+        });
+        
+        extract.on('error', reject);
+        
+        const readStream = fs.createReadStream(archivePath);
+        if (isGzipped) {
+            const zlib = require('zlib');
+            readStream.pipe(zlib.createGunzip()).pipe(extract);
+        } else {
+            readStream.pipe(extract);
+        }
+    });
+}
+
+// Cache management endpoints
+app.get('/api/cache/stats', requireAuth, async (req, res) => {
+    try {
+        const stats = await cache.getStats();
+        const formattedStats = {
+            ...stats,
+            totalSizeFormatted: `${(stats.totalSize / 1024 / 1024).toFixed(1)} MB`,
+            categories: Object.keys(stats.categories).map(name => ({
+                name,
+                files: stats.categories[name].files,
+                size: stats.categories[name].size,
+                sizeFormatted: `${(stats.categories[name].size / 1024 / 1024).toFixed(1)} MB`
+            }))
+        };
+        res.json(formattedStats);
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Cache stats error: ${error.message}`);
+        res.status(500).json({ error: error.message });
+    }
+});
+
+app.post('/api/cache/clear', requireAuth, async (req, res) => {
+    try {
+        const success = await cache.clear();
+        if (success) {
+            res.json({ message: 'Cache cleared successfully' });
+        } else {
+            res.status(500).json({ error: 'Failed to clear cache' });
+        }
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ Cache clear error: ${error.message}`);
         res.status(500).json({ error: error.message });
     }
 });
