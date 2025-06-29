@@ -79,7 +79,7 @@ class FileRenderer {
             return 'comic';
         } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
             return 'audio';
-        } else if (['mp4', 'avi', 'mov', 'mkv', 'webm'].includes(extension)) {
+        } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(extension)) {
             return 'video';
         } else if (extension === 'docx') {
             return 'docx';

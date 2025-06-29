@@ -21,18 +21,18 @@ class VideoRenderer {
         video.style.maxWidth = '100%';
         video.style.height = 'auto';
         
-        // Check if this is an AVI file that needs transcoding
-        const isAVI = fileName.toLowerCase().endsWith('.avi');
+        // Check if this file needs transcoding
+        const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv');
         
-        if (isAVI) {
-            // Use transcoding endpoint for AVI files
+        if (needsTranscoding) {
+            // Use transcoding endpoint for AVI/WMV files
             video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
             
             // Add loading indicator for transcoding
             const loadingDiv = document.createElement('div');
             loadingDiv.style.color = '#666';
             loadingDiv.style.marginBottom = '10px';
-            loadingDiv.innerHTML = '🔄 Transcoding AVI file for playback...';
+            loadingDiv.innerHTML = `🔄 Transcoding ${fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 'WMV'} file for playback...`;
             contentOther.appendChild(loadingDiv);
             
             video.addEventListener('loadstart', () => {
@@ -60,7 +60,7 @@ class VideoRenderer {
                 <strong>Video Error:</strong><br>
                 ${this.getErrorMessage(video.error?.code)}<br>
                 <small>File: ${fileName}</small>
-                ${isAVI ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
+                ${needsTranscoding ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
             `;
         });
         
