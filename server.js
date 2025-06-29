@@ -90,6 +90,9 @@ const mimeTypes = {
     '.mov': 'video/quicktime',
     '.mkv': 'video/x-matroska',
     '.webm': 'video/webm',
+    '.mpg': 'video/mpeg',
+    '.mpeg': 'video/mpeg',
+    '.wmv': 'video/x-ms-wmv',
     '.woff': 'application/font-woff',
     '.ttf': 'application/font-ttf',
     '.eot': 'application/vnd.ms-fontobject',
@@ -292,14 +295,49 @@ app.get('/files', requireAuth, (req, res) => {
     const ext = path.extname(filePath).toLowerCase();
     const contentType = mimeTypes[ext] || 'application/octet-stream';
     console.log(`[${new Date().toISOString()}] 📁 Serving file: ${filePath} (${contentType})`);
-    res.setHeader('Content-Type', contentType);
+    
+    const stats = fs.statSync(filePath);
+    const fileSize = stats.size;
+    const range = req.headers.range;
 
-    const stream = fs.createReadStream(filePath);
-    stream.on('error', (err) => {
-        console.error(`[${new Date().toISOString()}] ❌ File stream error: ${err.message}`);
-        res.status(500).send(err.message);
-    });
-    stream.pipe(res);
+    if (range) {
+        // Parse Range header
+        const parts = range.replace(/bytes=/, "").split("-");
+        const start = parseInt(parts[0], 10);
+        const end = parts[1] ? parseInt(parts[1], 10) : fileSize - 1;
+        const chunksize = (end - start) + 1;
+        
+        console.log(`[${new Date().toISOString()}] 📁 Range request: ${start}-${end}/${fileSize}`);
+        
+        const stream = fs.createReadStream(filePath, { start, end });
+        
+        res.writeHead(206, {
+            'Content-Range': `bytes ${start}-${end}/${fileSize}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': chunksize,
+            'Content-Type': contentType,
+        });
+        
+        stream.on('error', (err) => {
+            console.error(`[${new Date().toISOString()}] ❌ File stream error: ${err.message}`);
+            res.status(500).send(err.message);
+        });
+        stream.pipe(res);
+    } else {
+        // Regular file serve
+        res.writeHead(200, {
+            'Content-Length': fileSize,
+            'Content-Type': contentType,
+            'Accept-Ranges': 'bytes'
+        });
+        
+        const stream = fs.createReadStream(filePath);
+        stream.on('error', (err) => {
+            console.error(`[${new Date().toISOString()}] ❌ File stream error: ${err.message}`);
+            res.status(500).send(err.message);
+        });
+        stream.pipe(res);
+    }
 });
 
 app.get('/pdf-preview', requireAuth, async (req, res) => {
