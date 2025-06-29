@@ -11,6 +11,7 @@ class AudioRenderer {
 class VideoRenderer {
     constructor() {
         this.handleKeyDown = null;
+        this.handleWheel = null;
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
@@ -88,6 +89,28 @@ class VideoRenderer {
         };
         
         document.addEventListener('keydown', this.handleKeyDown);
+        
+        // Add mouse wheel handler for fast forward/backward
+        this.handleWheel = (e) => {
+            // Only handle wheel events when mouse is over the video
+            if (e.target === video || video.contains(e.target)) {
+                e.preventDefault();
+                const skipAmount = 10; // seconds to skip
+                
+                // Ensure video is loaded and has duration
+                if (video.duration && !isNaN(video.duration)) {
+                    if (e.deltaY < 0) {
+                        // Wheel up - fast forward
+                        video.currentTime = Math.min(video.currentTime + skipAmount, video.duration);
+                    } else {
+                        // Wheel down - rewind
+                        video.currentTime = Math.max(video.currentTime - skipAmount, 0);
+                    }
+                }
+            }
+        };
+        
+        video.addEventListener('wheel', this.handleWheel);
     }
     
     togglePlayAndFullscreen(video) {
@@ -116,6 +139,11 @@ class VideoRenderer {
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
+        }
+        if (this.handleWheel) {
+            // Note: wheel event listener is attached to video element, not document
+            // It will be automatically cleaned up when video element is removed
+            this.handleWheel = null;
         }
     }
     
