@@ -85,33 +85,102 @@ class VideoRenderer {
             if (e.code === 'Space') {
                 e.preventDefault();
                 this.togglePlayAndFullscreen(video);
+            } else if (e.code === 'PageUp' || e.code === 'PageDown') {
+                e.preventDefault();
+                this.seekVideo(video, e.code === 'PageUp' ? -10 : 10);
             }
         };
         
         document.addEventListener('keydown', this.handleKeyDown);
         
         // Add mouse wheel handler for fast forward/backward
+        let wheelTimeout;
         this.handleWheel = (e) => {
             // Only handle wheel events when mouse is over the video
             if (e.target === video || video.contains(e.target)) {
                 e.preventDefault();
                 e.stopPropagation();
-                const skipAmount = 10; // seconds to skip
                 
-                // Ensure video is loaded and has duration
+                // Throttle wheel events to prevent rapid seeking
+                if (wheelTimeout) return;
+                wheelTimeout = setTimeout(() => wheelTimeout = null, 100);
+                
+                const skipAmount = 10; // seconds to skip for wheel
+                
+                // Simple check - just needs duration
                 if (video.duration && !isNaN(video.duration)) {
+                    
+                    const oldTime = video.currentTime;
+                    let newTime;
+                    
                     if (e.deltaY > 0) {
                         // Wheel down - fast forward
-                        video.currentTime = Math.min(video.currentTime + skipAmount, video.duration);
+                        newTime = Math.min(oldTime + skipAmount, video.duration);
                     } else if (e.deltaY < 0) {
-                        // Wheel up - rewind
-                        video.currentTime = Math.max(video.currentTime - skipAmount, 0);
+                        // Wheel up - rewind  
+                        newTime = Math.max(oldTime - skipAmount, 0);
                     }
+                    
+                    if (newTime !== undefined && newTime !== oldTime) {
+                        video.currentTime = newTime;
+                        console.log('Seek:', oldTime.toFixed(1), '->', newTime.toFixed(1));
+                        
+                        // Show visual feedback for successful seek
+                        const message = document.createElement('div');
+                        const direction = e.deltaY > 0 ? '⏩' : '⏪';
+                        message.textContent = `${direction} ${Math.round(newTime)}s`;
+                        message.style.cssText = `
+                            position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%);
+                            background: rgba(0,0,0,0.7); color: white; padding: 8px 16px;
+                            border-radius: 20px; z-index: 9999; font-size: 16px; font-weight: bold;
+                        `;
+                        document.body.appendChild(message);
+                        setTimeout(() => message.remove(), 1000);
+                    }
+                } else {
+                    // Show visual feedback when video isn't ready for seeking
+                    const message = document.createElement('div');
+                    message.textContent = '⏳ Video still loading - please wait';
+                    message.style.cssText = `
+                        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                        background: rgba(0,0,0,0.8); color: white; padding: 10px 20px;
+                        border-radius: 5px; z-index: 9999; font-size: 14px;
+                    `;
+                    document.body.appendChild(message);
+                    setTimeout(() => message.remove(), 2000);
                 }
             }
         };
         
         video.addEventListener('wheel', this.handleWheel);
+    }
+    
+    seekVideo(video, seconds) {
+        if (video.duration && !isNaN(video.duration) && video.readyState >= 2 && 
+            video.seekable.length > 0 && video.seekable.end(0) > 5) {
+            
+            const oldTime = video.currentTime;
+            const seekableEnd = video.seekable.end(video.seekable.length - 1);
+            const newTime = seconds > 0 
+                ? Math.min(oldTime + seconds, seekableEnd)
+                : Math.max(oldTime + seconds, 0);
+            
+            if (newTime !== oldTime) {
+                video.currentTime = newTime;
+                
+                // Show visual feedback
+                const message = document.createElement('div');
+                const direction = seconds > 0 ? '⏩' : '⏪';
+                message.textContent = `${direction} ${Math.round(newTime)}s`;
+                message.style.cssText = `
+                    position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%);
+                    background: rgba(0,0,0,0.7); color: white; padding: 8px 16px;
+                    border-radius: 20px; z-index: 9999; font-size: 16px; font-weight: bold;
+                `;
+                document.body.appendChild(message);
+                setTimeout(() => message.remove(), 1000);
+            }
+        }
     }
     
     togglePlayAndFullscreen(video) {
