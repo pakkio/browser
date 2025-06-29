@@ -95,15 +95,16 @@ class VideoRenderer {
             // Only handle wheel events when mouse is over the video
             if (e.target === video || video.contains(e.target)) {
                 e.preventDefault();
+                e.stopPropagation();
                 const skipAmount = 10; // seconds to skip
                 
                 // Ensure video is loaded and has duration
                 if (video.duration && !isNaN(video.duration)) {
-                    if (e.deltaY < 0) {
-                        // Wheel up - fast forward
+                    if (e.deltaY > 0) {
+                        // Wheel down - fast forward
                         video.currentTime = Math.min(video.currentTime + skipAmount, video.duration);
-                    } else {
-                        // Wheel down - rewind
+                    } else if (e.deltaY < 0) {
+                        // Wheel up - rewind
                         video.currentTime = Math.max(video.currentTime - skipAmount, 0);
                     }
                 }
