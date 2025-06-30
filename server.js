@@ -403,12 +403,12 @@ app.get('/video-transcode', requireAuth, async (req, res) => {
     }
     
     const ext = path.extname(filePath).toLowerCase();
-    if (ext !== '.avi') {
-        return res.status(400).send('Only AVI files supported for transcoding');
+    if (!['.avi', '.wmv'].includes(ext)) {
+        return res.status(400).send('Only AVI and WMV files supported for transcoding');
     }
     
     try {
-        console.log(`[${new Date().toISOString()}] 🔄 Transcoding AVI to WebM...`);
+        console.log(`[${new Date().toISOString()}] 🔄 Transcoding ${ext.toUpperCase()} to WebM...`);
         
         // Set headers for streaming (using WebM for better streaming support)
         res.setHeader('Content-Type', 'video/webm');

@@ -553,7 +553,9 @@ function initializeFileExplorer() {
         currentFiles: () => currentFiles,
         filteredFiles: () => filteredFiles,
         loadFiles: loadFiles,
-        updateDetails: updateDetails
+        updateDetails: updateDetails,
+        selectFile: selectFile,
+        showContent: showContent
     };
 }
 

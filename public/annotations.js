@@ -18,7 +18,7 @@ class AnnotationManager {
         if (extension === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(extension)) return 'comic';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
-        if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
+        if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
         if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
         if (extension === 'ipynb') return 'notebook';
@@ -465,9 +465,9 @@ class AnnotationManager {
             border: 1px solid #444444;
             border-radius: 8px;
             padding: 20px;
-            max-width: 800px;
+            max-width: 900px;
             width: 95%;
-            height: 80vh;
+            height: 85vh;
             color: #d4d4d4;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
             display: flex;
@@ -511,6 +511,8 @@ class AnnotationManager {
                     </select>
                     <button id="refresh-bookmarks" style="background: #444444; border: 1px solid #666666; 
                             color: #d4d4d4; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
+                    <button id="migrate-bookmarks" style="background: #ff9800; border: 1px solid #f57c00; 
+                            color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🔧 Migrate</button>
                 </div>
             </div>
             
@@ -527,7 +529,7 @@ class AnnotationManager {
         backdrop.appendChild(modal);
         document.body.appendChild(backdrop);
 
-        // Render bookmarks list
+        // Render bookmarks list with new three-part system
         const renderBookmarks = (annotations) => {
             const bookmarksList = modal.querySelector('#bookmarks-list');
             
@@ -545,62 +547,95 @@ class AnnotationManager {
                 const fileName = annotation.filePath.split('/').pop();
                 const directory = annotation.filePath.includes('/') ? 
                     annotation.filePath.substring(0, annotation.filePath.lastIndexOf('/')) : '';
+                const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+                const fileType = this.getFileTypeFromExtension(fileExtension, fileName);
                 
                 return `
-                    <div class="bookmark-item" data-path="${annotation.filePath}" 
-                         style="border: 1px solid #444444; border-radius: 6px; padding: 15px; margin-bottom: 12px; 
-                                background: #333333; cursor: pointer; transition: all 0.2s;">
-                        <div class="bookmark-header" style="display: flex; align-items: flex-start; gap: 12px; margin-bottom: 10px;">
-                            <div class="bookmark-indicators" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-                                ${annotation.color ? `<span style="width: 12px; height: 12px; border-radius: 50%; 
-                                    background-color: ${this.colors.find(c => c.name === annotation.color)?.hex}; 
-                                    display: inline-block;"></span>` : ''}
-                                ${annotation.stars ? `<span style="color: #ffeb3b; font-size: 14px;">
-                                    ${'⭐'.repeat(annotation.stars)}</span>` : ''}
-                                ${annotation.comment ? `<span style="color: #2196f3; font-size: 14px;">💬</span>` : ''}
-                            </div>
-                            <div class="bookmark-info" style="flex: 1; min-width: 0;">
-                                <div class="bookmark-filename" style="font-weight: 500; color: #00aacc; 
-                                     margin-bottom: 4px; word-break: break-all;">${fileName}</div>
-                                ${directory ? `<div class="bookmark-directory" style="font-size: 0.8rem; 
-                                    color: #888888; margin-bottom: 8px;">📁 ${directory}</div>` : ''}
-                                ${annotation.comment ? `<div class="bookmark-comment" style="color: #d4d4d4; 
-                                    font-size: 0.9rem; line-height: 1.4; background: #2a2a2a; padding: 8px; 
-                                    border-radius: 4px; margin-bottom: 8px;">${annotation.comment}</div>` : ''}
-                            </div>
-                            <div class="bookmark-actions" style="flex-shrink: 0;">
-                                <button class="edit-bookmark" data-path="${annotation.filePath}" data-filename="${fileName}"
-                                        style="background: transparent; border: 1px solid #555555; color: #d4d4d4; 
-                                               padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 12px;">
-                                    ✏️ Edit
-                                </button>
-                            </div>
+                    <div class="bookmark-item" data-path="${annotation.filePath}" data-file-type="${fileType}"
+                         style="border: 1px solid #444444; border-radius: 4px; padding: 8px 12px; margin-bottom: 4px; 
+                                background: #333333; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
+                        <div class="bookmark-indicators" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
+                            ${annotation.color ? `<span style="width: 12px; height: 12px; border-radius: 50%; 
+                                background-color: ${this.colors.find(c => c.name === annotation.color)?.hex}; 
+                                display: inline-block;"></span>` : ''}
+                            ${annotation.stars ? `<span style="color: #ffeb3b; font-size: 12px;">
+                                ${'⭐'.repeat(annotation.stars)}</span>` : ''}
+                            ${annotation.comment ? `<span style="color: #2196f3; font-size: 12px;">💬</span>` : ''}
                         </div>
-                        <div class="bookmark-meta" style="font-size: 0.75rem; color: #666666; text-align: right;">
-                            Last modified: ${new Date(annotation.lastModified).toLocaleString()}
+                        <div class="bookmark-info" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;">
+                            <span class="bookmark-filename" data-path="${annotation.filePath}" data-file-type="${fileType}"
+                                  style="font-weight: 500; color: #00aacc; cursor: pointer; text-decoration: underline; 
+                                         word-break: break-all; font-size: 0.9rem;" title="Click to open ${fileName}">${fileName}</span>
+                            ${directory ? `<span style="font-size: 0.75rem; color: #888888;">📁 ${directory}</span>` : ''}
+                            ${annotation.comment ? `<span style="font-size: 0.75rem; color: #ccc; 
+                                max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" 
+                                title="${annotation.comment}">- ${annotation.comment}</span>` : ''}
+                        </div>
+                        <div class="bookmark-actions" style="flex-shrink: 0; display: flex; gap: 4px; align-items: center;">
+                            <button class="detail-bookmark" data-path="${annotation.filePath}" data-filename="${fileName}"
+                                    style="background: transparent; border: 1px solid #555555; color: #d4d4d4; 
+                                           padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 11px;" title="Details">
+                                ℹ️
+                            </button>
+                            <button class="remove-bookmark" data-path="${annotation.filePath}" data-filename="${fileName}"
+                                    style="background: transparent; border: 1px solid #d32f2f; color: #f44336; 
+                                           padding: 2px 6px; border-radius: 3px; cursor: pointer; font-size: 11px;" title="Remove">
+                                🗑️
+                            </button>
                         </div>
                     </div>
                 `;
             }).join('');
 
-            // Add click handlers for bookmarks
-            bookmarksList.querySelectorAll('.bookmark-item').forEach(item => {
-                item.addEventListener('click', (e) => {
-                    if (e.target.closest('.bookmark-actions')) return;
+            // Add click handlers for filename (full preview)
+            bookmarksList.querySelectorAll('.bookmark-filename').forEach(filename => {
+                filename.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const filePath = filename.dataset.path;
+                    const fileType = filename.dataset.fileType;
                     
-                    const filePath = item.dataset.path;
-                    this.navigateToFile(filePath);
+                    // Close modal and open full preview
                     closeModal();
+                    this.openFullPreview(filePath, fileType);
                 });
             });
 
-            // Add edit button handlers
-            bookmarksList.querySelectorAll('.edit-bookmark').forEach(btn => {
+            // Add detail button handlers
+            bookmarksList.querySelectorAll('.detail-bookmark').forEach(btn => {
                 btn.addEventListener('click', (e) => {
                     e.stopPropagation();
                     const filePath = btn.dataset.path;
                     const fileName = btn.dataset.filename;
-                    this.showAnnotationDialog(filePath, fileName);
+                    this.showBookmarkDetail(filePath, fileName, closeModal);
+                });
+            });
+
+            // Add remove button handlers
+            bookmarksList.querySelectorAll('.remove-bookmark').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const filePath = btn.dataset.path;
+                    const fileName = btn.dataset.filename;
+                    
+                    if (confirm(`Are you sure you want to remove the bookmark for "${fileName}"?`)) {
+                        const success = await this.deleteAnnotation(filePath);
+                        if (success) {
+                            const refreshedAnnotations = await this.searchAnnotations();
+                            renderBookmarks(refreshedAnnotations);
+                        }
+                    }
+                });
+            });
+
+            // Add hover effects
+            bookmarksList.querySelectorAll('.bookmark-item').forEach(item => {
+                item.addEventListener('mouseenter', () => {
+                    item.style.background = '#3a3a3a';
+                    item.style.borderColor = '#555555';
+                });
+                item.addEventListener('mouseleave', () => {
+                    item.style.background = '#333333';
+                    item.style.borderColor = '#444444';
                 });
             });
         };
@@ -649,9 +684,26 @@ class AnnotationManager {
             filterSelect.value = '';
         });
 
+        // Migration button
+        modal.querySelector('#migrate-bookmarks').addEventListener('click', async () => {
+            if (confirm('This will attempt to fix bookmark paths. Continue?')) {
+                await this.migrateBookmarks();
+                // Refresh the bookmarks list
+                const refreshedAnnotations = await this.searchAnnotations();
+                renderBookmarks(refreshedAnnotations);
+            }
+        });
+
+        // Helper function to safely remove modal
+        const closeModal = () => {
+            if (backdrop && backdrop.parentNode) {
+                backdrop.parentNode.removeChild(backdrop);
+            }
+        };
+
         // Close button
         modal.querySelector('#close-bookmarks').addEventListener('click', () => {
-            document.body.removeChild(backdrop);
+            closeModal();
         });
 
         // Close on backdrop click
@@ -665,27 +717,323 @@ class AnnotationManager {
         setTimeout(() => searchInput.focus(), 100);
     }
 
-    navigateToFile(filePath) {
+    showBookmarkDetail(filePath, fileName, closeModalCallback = null) {
+        const annotation = this.annotations[filePath];
+        if (!annotation) return;
+
+        // Create detail modal backdrop
+        const detailBackdrop = document.createElement('div');
+        detailBackdrop.className = 'bookmark-detail-backdrop';
+        detailBackdrop.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1001;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        // Create detail modal
+        const detailModal = document.createElement('div');
+        detailModal.className = 'bookmark-detail-modal';
+        detailModal.style.cssText = `
+            background: #2a2a2a;
+            border: 1px solid #444444;
+            border-radius: 8px;
+            padding: 24px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            color: #d4d4d4;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+            overflow-y: auto;
+        `;
+
+        const directory = filePath.includes('/') ? 
+            filePath.substring(0, filePath.lastIndexOf('/')) : '';
+        const fileExtension = fileName.split('.').pop()?.toLowerCase() || '';
+        const fileType = this.getFileTypeFromExtension(fileExtension, fileName);
+
+        detailModal.innerHTML = `
+            <div class="detail-header" style="margin-bottom: 20px; border-bottom: 1px solid #444444; padding-bottom: 15px;">
+                <h3 style="margin: 0; color: #00aacc; font-size: 1.2rem; display: flex; align-items: center; gap: 10px;">
+                    ℹ️ Bookmark Details
+                </h3>
+            </div>
+            
+            <div class="detail-content">
+                <div class="detail-file-info" style="margin-bottom: 20px;">
+                    <h4 style="color: #00aacc; margin: 0 0 10px 0; font-size: 1.1rem;">📄 File Information</h4>
+                    <div style="background: #333333; padding: 15px; border-radius: 6px;">
+                        <div style="margin-bottom: 8px;"><strong>Name:</strong> ${fileName}</div>
+                        ${directory ? `<div style="margin-bottom: 8px;"><strong>Directory:</strong> ${directory}</div>` : ''}
+                        <div style="margin-bottom: 8px;"><strong>Type:</strong> ${fileType}</div>
+                        <div><strong>Full Path:</strong> <code style="background: #2a2a2a; padding: 2px 4px; border-radius: 3px;">${filePath}</code></div>
+                    </div>
+                </div>
+
+                <div class="detail-annotation-info" style="margin-bottom: 20px;">
+                    <h4 style="color: #00aacc; margin: 0 0 10px 0; font-size: 1.1rem;">🏷️ Bookmark Data</h4>
+                    <div style="background: #333333; padding: 15px; border-radius: 6px;">
+                        ${annotation.comment ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong style="color: #2196f3;">💬 Comment:</strong>
+                                <div style="margin-top: 5px; background: #2a2a2a; padding: 10px; border-radius: 4px; 
+                                     border-left: 3px solid #2196f3; line-height: 1.4;">${annotation.comment}</div>
+                            </div>
+                        ` : '<div style="margin-bottom: 10px; color: #888888;">💬 No comment</div>'}
+                        
+                        ${annotation.stars ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong style="color: #ffeb3b;">⭐ Rating:</strong>
+                                <span style="margin-left: 10px; color: #ffeb3b; font-size: 18px; text-shadow: 0 0 4px rgba(255,235,59,0.3);">
+                                    ${'⭐'.repeat(annotation.stars)} (${annotation.stars}/5)
+                                </span>
+                            </div>
+                        ` : '<div style="margin-bottom: 10px; color: #888888;">⭐ No rating</div>'}
+                        
+                        ${annotation.color ? `
+                            <div style="margin-bottom: 15px;">
+                                <strong>🎨 Color Label:</strong>
+                                <span style="margin-left: 10px; display: inline-flex; align-items: center; gap: 8px;">
+                                    <span style="width: 20px; height: 20px; border-radius: 50%; 
+                                        background-color: ${this.colors.find(c => c.name === annotation.color)?.hex}; 
+                                        display: inline-block; border: 2px solid #555;"></span>
+                                    ${this.colors.find(c => c.name === annotation.color)?.label}
+                                </span>
+                            </div>
+                        ` : '<div style="margin-bottom: 10px; color: #888888;">🎨 No color label</div>'}
+                        
+                        <div style="font-size: 0.9rem; color: #888888;">
+                            <strong>Last Modified:</strong> ${new Date(annotation.lastModified).toLocaleString()}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="detail-actions" style="display: flex; gap: 10px; justify-content: flex-end; padding-top: 15px; border-top: 1px solid #444444;">
+                <button id="edit-bookmark-detail" style="background: #444444; border: 1px solid #666666; 
+                        color: #d4d4d4; padding: 8px 16px; border-radius: 4px; cursor: pointer;">✏️ Edit</button>
+                <button id="open-bookmark-preview" style="background: #00aacc; border: 1px solid #0088aa; 
+                        color: white; padding: 8px 16px; border-radius: 4px; cursor: pointer;">🔍 Open Preview</button>
+                <button id="close-bookmark-detail" style="background: #666666; border: 1px solid #888888; 
+                        color: #d4d4d4; padding: 8px 16px; border-radius: 4px; cursor: pointer;">Close</button>
+            </div>
+        `;
+
+        detailBackdrop.appendChild(detailModal);
+        document.body.appendChild(detailBackdrop);
+
+        // Add event listeners
+        const closeDetail = () => {
+            if (detailBackdrop && detailBackdrop.parentNode) {
+                detailBackdrop.parentNode.removeChild(detailBackdrop);
+            }
+        };
+
+        detailModal.querySelector('#close-bookmark-detail').addEventListener('click', closeDetail);
+        detailModal.querySelector('#edit-bookmark-detail').addEventListener('click', () => {
+            closeDetail();
+            this.showAnnotationDialog(filePath, fileName);
+        });
+        detailModal.querySelector('#open-bookmark-preview').addEventListener('click', () => {
+            closeDetail();
+            if (closeModalCallback) closeModalCallback();
+            this.openFullPreview(filePath, fileType);
+        });
+
+        detailBackdrop.addEventListener('click', (e) => {
+            if (e.target === detailBackdrop) {
+                closeDetail();
+            }
+        });
+    }
+
+    openFullPreview(filePath, fileType) {
+        // Navigate to the file
+        this.navigateToFile(filePath);
+        
+        // For videos, wait a bit then try to autoplay and go fullscreen
+        if (fileType === 'video') {
+            setTimeout(() => {
+                const videoPlayer = document.querySelector('#media-player video');
+                if (videoPlayer) {
+                    console.log('Found video player, attempting autoplay and fullscreen');
+                    
+                    // Start playback and fullscreen
+                    videoPlayer.play().then(() => {
+                        console.log('Video playback started successfully');
+                        
+                        setTimeout(() => {
+                            if (videoPlayer.requestFullscreen) {
+                                videoPlayer.requestFullscreen().then(() => {
+                                    console.log('Entered fullscreen successfully');
+                                }).catch(err => {
+                                    console.log('Could not enter fullscreen:', err);
+                                });
+                            }
+                        }, 500);
+                        
+                    }).catch(err => {
+                        console.log('Could not start playback:', err);
+                    });
+                } else {
+                    console.log('Video player not found - file may not be a video or still loading');
+                }
+            }, 2000); // Wait longer for video to load
+        }
+    }
+
+    navigateToFile(filePath, closeModalCallback = null) {
+        // Close the bookmark modal first
+        if (closeModalCallback) {
+            closeModalCallback();
+        }
+        
         // Navigate to the directory containing the file and select it
         const directory = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
         const fileName = filePath.split('/').pop();
         
+        console.log('Navigating to file:', { filePath, directory, fileName });
+        
         // Use the existing file explorer to navigate
         if (window.fileExplorer && window.fileExplorer.loadFiles) {
-            window.fileExplorer.loadFiles(directory);
+            // If directory is empty, the file is in the root - use current path
+            const targetDirectory = directory || window.fileExplorer.currentPath();
+            console.log('Loading directory:', targetDirectory);
             
-            // After loading, try to select the file
-            setTimeout(() => {
-                const fileItems = document.querySelectorAll('.file-item .file-name');
-                fileItems.forEach((item, index) => {
-                    if (item.textContent === fileName) {
-                        if (window.fileExplorer.selectFile) {
-                            window.fileExplorer.selectFile(index, filePath, fileName);
-                        }
-                    }
-                });
-            }, 500);
+            // Load the directory first
+            window.fileExplorer.loadFiles(targetDirectory);
+            
+            // Wait for files to load and then select the target file
+            const attemptToSelectFile = (attempts = 0) => {
+                const filteredFiles = window.fileExplorer.filteredFiles();
+                console.log('Attempt', attempts, 'filteredFiles:', filteredFiles.map(f => f.name));
+                
+                const fileIndex = filteredFiles.findIndex(file => file.name === fileName);
+                console.log('Found file at index:', fileIndex);
+                
+                if (fileIndex >= 0) {
+                    // Use the exposed selectFile function to properly select and display the file
+                    console.log('Selecting file:', fileName);
+                    window.fileExplorer.selectFile(fileIndex, filePath, fileName);
+                } else if (attempts < 10) {
+                    // Retry if files haven't loaded yet
+                    setTimeout(() => attemptToSelectFile(attempts + 1), 200);
+                } else {
+                    console.error('Could not find file:', fileName, 'in directory:', directory);
+                }
+            };
+            
+            // Start attempting to select the file
+            setTimeout(() => attemptToSelectFile(), 100);
         }
+    }
+    // Migration utility to fix bookmark paths
+    async migrateBookmarks() {
+        console.log('Starting bookmark migration...');
+        
+        try {
+            // Get all current annotations
+            const fetchFn = window.authManager?.authenticatedFetch || fetch;
+            const response = await fetchFn('/api/annotations');
+            if (!response?.ok) {
+                throw new Error('Failed to fetch annotations');
+            }
+            
+            const allAnnotations = await response.json();
+            console.log('Found annotations:', allAnnotations);
+            
+            const migratedCount = { updated: 0, skipped: 0, errors: 0 };
+            
+            for (const [filePath, annotation] of Object.entries(allAnnotations)) {
+                console.log('Processing:', filePath);
+                
+                // Check if path needs migration (no directory separator)
+                if (!filePath.includes('/') && filePath !== '') {
+                    console.log('Found bookmark needing migration:', filePath);
+                    
+                    // Try to find the file in common directories
+                    const found = await this.findFileInDirectories(filePath);
+                    
+                    if (found) {
+                        console.log(`Migrating: ${filePath} -> ${found.fullPath}`);
+                        
+                        // Save with new path
+                        const success = await this.saveAnnotation(found.fullPath, annotation);
+                        if (success) {
+                            // Delete old bookmark
+                            await this.deleteAnnotation(filePath);
+                            migratedCount.updated++;
+                            console.log(`✅ Migrated: ${filePath}`);
+                        } else {
+                            migratedCount.errors++;
+                            console.log(`❌ Failed to migrate: ${filePath}`);
+                        }
+                    } else {
+                        migratedCount.skipped++;
+                        console.log(`⚠️ Could not find file: ${filePath}`);
+                    }
+                } else {
+                    migratedCount.skipped++;
+                    console.log(`✓ Already has path: ${filePath}`);
+                }
+            }
+            
+            console.log('Migration complete:', migratedCount);
+            alert(`Migration complete!\nUpdated: ${migratedCount.updated}\nSkipped: ${migratedCount.skipped}\nErrors: ${migratedCount.errors}`);
+            
+            // Reload annotations
+            await this.loadAnnotations();
+            
+        } catch (error) {
+            console.error('Migration failed:', error);
+            alert('Migration failed: ' + error.message);
+        }
+    }
+    
+    // Helper function to search for a file in common directories
+    async findFileInDirectories(fileName) {
+        const commonDirs = [
+            '', // root
+            '20.film',
+            '10.music', 
+            '99.my',
+            '99.my/01.magazines',
+            '99.my/01.magazines/bent',
+            '99.my/05.todo',
+            '30.comix',
+            '50.edu3d',
+            '00.IMPORTANT'
+        ];
+        
+        for (const dir of commonDirs) {
+            try {
+                console.log(`Searching in: ${dir || 'root'}`);
+                
+                const fetchFn = window.authManager?.authenticatedFetch || fetch;
+                const response = await fetchFn(`/api/browse?path=${encodeURIComponent(dir)}`);
+                
+                if (response?.ok) {
+                    const data = await response.json();
+                    const foundFile = data.files?.find(file => file.name === fileName);
+                    
+                    if (foundFile) {
+                        const fullPath = dir ? `${dir}/${fileName}` : fileName;
+                        console.log(`✅ Found file: ${fullPath}`);
+                        return { fullPath, directory: dir };
+                    }
+                }
+            } catch (error) {
+                console.log(`Error searching in ${dir}:`, error);
+            }
+        }
+        
+        return null;
     }
 }
 
