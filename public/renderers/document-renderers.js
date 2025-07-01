@@ -309,6 +309,17 @@ class EpubRenderer {
                     
                     contentArea.innerHTML = content;
                     
+                    // Remove duplicate navigation elements from EPUB content
+                    const navElements = contentArea.querySelectorAll('button, input[type="button"], input[type="submit"], a[href*="next"], a[href*="prev"], form');
+                    navElements.forEach(el => {
+                        const text = el.textContent?.toLowerCase() || '';
+                        const href = el.getAttribute('href')?.toLowerCase() || '';
+                        if (text.includes('next') || text.includes('prev') || text.includes('continue') || 
+                            href.includes('next') || href.includes('prev') || el.tagName === 'FORM') {
+                            el.remove();
+                        }
+                    });
+                    
                     // Style the content
                     const elements = contentArea.querySelectorAll('*');
                     elements.forEach(el => {
