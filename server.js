@@ -1302,6 +1302,16 @@ async function extractEpubContent(filePath) {
                                     }
                                 }
                                 
+                                // Decode HTML entities
+                                cleanContent = cleanContent
+                                    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
+                                    .replace(/&#x([a-fA-F0-9]+);/g, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+                                    .replace(/&quot;/g, '"')
+                                    .replace(/&apos;/g, "'")
+                                    .replace(/&lt;/g, '<')
+                                    .replace(/&gt;/g, '>')
+                                    .replace(/&amp;/g, '&');
+                                
                                 // Truncate content if too large (>50KB per chapter)
                                 if (cleanContent.length > 50000) {
                                     console.log(`[${new Date().toISOString()}] 📖 EPUB: Truncating large chapter content from ${cleanContent.length} chars`);
