@@ -307,6 +307,11 @@ class EpubRenderer {
                         return `href="/epub-cover?path=${encodeURIComponent(filePath)}&cover=${encodeURIComponent(cleanPath)}"`;
                     });
                     
+                    // Decode HTML entities in content
+                    const tempDiv = document.createElement('div');
+                    tempDiv.innerHTML = content;
+                    content = tempDiv.innerHTML; // This will decode entities but preserve HTML structure
+                    
                     contentArea.innerHTML = content;
                     
                     // Remove duplicate navigation elements from EPUB content
