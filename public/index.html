@@ -42,54 +42,56 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
         <button id="logout-btn" class="logout-btn">Sign Out</button>
     </div>
 
+    <!-- Top Controls Bar -->
+    <div class="top-controls-bar">
+        <div class="controls-section">
+            <h2>File Browser</h2>
+            <input type="text" id="search-input" class="search-input" placeholder="Search files...">
+            <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">📚</button>
+            <select id="file-type-filter" class="filter-select">
+                <option value="all">All Files</option>
+                <option value="directory">📁 Directories</option>
+                <option value="image">🖼️ Images</option>
+                <option value="video">🎬 Videos</option>
+                <option value="audio">🎵 Audio</option>
+                <option value="pdf">📄 PDF</option>
+                <option value="code">💻 Code</option>
+                <option value="notebook">📓 Notebooks</option>
+                <option value="text">📝 Text Documents</option>
+                <option value="table">📊 Spreadsheets</option>
+                <option value="presentation">📊 Presentations</option>
+                <option value="subtitle">💬 Subtitles</option>
+                <option value="comic">📚 Comics</option>
+                <option value="ebook">📖 E-books</option>
+                <option value="archive">📦 Archives</option>
+                <option value="file">📄 Other Files</option>
+            </select>
+        </div>
+        <div class="current-path">
+            <span class="path-label">Current directory:</span>
+            <span id="current-path-display">Loading...</span>
+        </div>
+    </div>
+    
     <div class="container">
         <div class="browser">
-            <h2>File Browser</h2>
-            <div class="current-path">
-                <span class="path-label">Current directory:</span>
-                <span id="current-path-display">Loading...</span>
-            </div>
-            <div class="filter-section">
-                <div class="search-section">
-                    <label for="search-input">Search files:</label>
-                    <input type="text" id="search-input" class="search-input" placeholder="e.g. physics manual pdf">
-                    <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">
-                        📚 Bookmarks
-                    </button>
-                </div>
-                <div class="type-filter-section">
-                    <label for="file-type-filter">Filter by type:</label>
-                    <select id="file-type-filter" class="filter-select">
-                        <option value="all">All Files</option>
-                        <option value="directory">📁 Directories</option>
-                        <option value="image">🖼️ Images</option>
-                        <option value="video">🎬 Videos</option>
-                        <option value="audio">🎵 Audio</option>
-                        <option value="pdf">📄 PDF</option>
-                        <option value="code">💻 Code</option>
-                        <option value="notebook">📓 Notebooks</option>
-                        <option value="text">📝 Text Documents</option>
-                        <option value="table">📊 Spreadsheets</option>
-                        <option value="presentation">📊 Presentations</option>
-                        <option value="subtitle">💬 Subtitles</option>
-                        <option value="comic">📚 Comics</option>
-                        <option value="ebook">📖 E-books</option>
-                        <option value="archive">📦 Archives</option>
-                        <option value="file">📄 Other Files</option>
-                    </select>
-                </div>
-            </div>
             <div class="tree-view">
                 <ul id="file-list"></ul>
-            </div>
-            <div id="details-pane" class="details-pane">
-                <h3>Details</h3>
-                <div id="file-details"></div>
             </div>
         </div>
         <div class="content-viewer">
             <pre><code id="content-code" class="plaintext"></code></pre>
             <div id="content-other"></div>
+        </div>
+        <div class="right-panel">
+            <div class="tab-container">
+                <div class="tab-buttons">
+                    <button class="tab-button active" data-tab="details">Details</button>
+                </div>
+                <div class="tab-content active" id="details-tab">
+                    <div id="file-details"></div>
+                </div>
+            </div>
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>

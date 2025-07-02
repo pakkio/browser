@@ -95,7 +95,37 @@ class FileRenderer {
         return 'unsupported';
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    stopAllMedia() {
+        // Stop all video elements
+        const videos = document.querySelectorAll('video');
+        videos.forEach(video => {
+            video.pause();
+            video.currentTime = 0;
+            video.src = '';
+            video.load(); // Reset the video element
+        });
+        
+        // Stop all audio elements
+        const audios = document.querySelectorAll('audio');
+        audios.forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+            audio.src = '';
+            audio.load(); // Reset the audio element
+        });
+        
+        // Exit fullscreen if active
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+                console.log('Error exiting fullscreen:', err);
+            });
+        }
+    }
+
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
+        // Stop all media playback before switching files
+        this.stopAllMedia();
+        
         // Cleanup previous renderer's specific event listeners or states
         if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
             this.currentHandler.cleanup();
@@ -111,7 +141,7 @@ class FileRenderer {
         contentOther.style.display = 'none';
         
         if (handler) {
-            await handler.render(filePath, fileName, contentCode, contentOther);
+            await handler.render(filePath, fileName, contentCode, contentOther, options);
         } else {
             contentOther.textContent = 'File type not supported for preview.';
             contentOther.style.display = 'block';

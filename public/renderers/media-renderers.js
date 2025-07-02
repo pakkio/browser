@@ -1,10 +1,19 @@
 class AudioRenderer {
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         const audio = document.createElement('audio');
         audio.controls = true;
         audio.src = `/files?path=${encodeURIComponent(filePath)}`;
         contentOther.appendChild(audio);
         contentOther.style.display = 'block';
+    }
+    
+    cleanup() {
+        // Stop any playing audio in content areas
+        const audios = document.querySelectorAll('#content-other audio');
+        audios.forEach(audio => {
+            audio.pause();
+            audio.currentTime = 0;
+        });
     }
 }
 
@@ -14,7 +23,7 @@ class VideoRenderer {
         this.handleWheel = null;
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         const video = document.createElement('video');
         video.controls = true;
         video.preload = 'metadata';
@@ -70,6 +79,16 @@ class VideoRenderer {
         
         video.addEventListener('canplay', () => {
             console.log('Video can play:', fileName);
+            
+            // Auto-play and auto-fullscreen if opened via keyboard navigation
+            if (options.autoPlay && options.keyboardNavigation) {
+                video.play().then(() => {
+                    // Enter fullscreen after play starts
+                    return video.requestFullscreen();
+                }).catch(err => {
+                    console.log('Auto-play/fullscreen error (may be due to browser policy):', err);
+                });
+            }
         });
         
         contentOther.appendChild(video);
@@ -215,6 +234,13 @@ class VideoRenderer {
             // It will be automatically cleaned up when video element is removed
             this.handleWheel = null;
         }
+        
+        // Stop any playing videos in content areas
+        const videos = document.querySelectorAll('#content-other video');
+        videos.forEach(video => {
+            video.pause();
+            video.currentTime = 0;
+        });
     }
     
     getErrorMessage(errorCode) {

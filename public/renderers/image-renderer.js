@@ -1,5 +1,5 @@
 class ImageRenderer {
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         const img = document.createElement('img');
         img.src = `/files?path=${encodeURIComponent(filePath)}`;
         img.style.maxWidth = '100%';

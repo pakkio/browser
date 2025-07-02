@@ -299,9 +299,9 @@ function initializeFileExplorer() {
         }, 100);
     }
 
-    function showContent(path, fileName) {
+    function showContent(path, fileName, options = {}) {
         const filePath = path ? `/${path}/${fileName}` : `/${fileName}`;
-        fileRenderer.render(filePath, fileName, contentCode, contentOther);
+        fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
     }
     
     function formatFileSize(bytes) {
@@ -395,7 +395,7 @@ function initializeFileExplorer() {
         pathDisplay.textContent = `${fullPath} (${fileCount} items)`;
     }
     
-    function selectFile(index, filePath, fileName) {
+    function selectFile(index, filePath, fileName, options = {}) {
         const items = document.querySelectorAll('.file-item');
         items.forEach(item => item.classList.remove('selected'));
 
@@ -404,7 +404,7 @@ function initializeFileExplorer() {
             items[index].classList.add('selected');
             // Update details instantly upon navigation
             // Render file instantly upon navigation
-            fileRenderer.render(filePath, fileName, contentCode, contentOther);
+            fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
 
             // Scroll into view if needed
             items[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -466,7 +466,7 @@ function initializeFileExplorer() {
                         loadFiles(currentPath);
                         updateDetails(null);
                     } else {
-                        showContent(currentPath, file.name);
+                        showContent(currentPath, file.name, { autoPlay: true, keyboardNavigation: true });
                     }
                 }
                 return;
@@ -497,7 +497,11 @@ function initializeFileExplorer() {
         if (newIndex !== selectedIndex) {
             const file = filteredFiles[newIndex];
             const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-            selectFile(newIndex, filePath, file.name);
+            const isVideo = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(
+                file.name.split('.').pop().toLowerCase()
+            );
+            const options = isVideo ? { autoPlay: true, keyboardNavigation: true } : {};
+            selectFile(newIndex, filePath, file.name, options);
             updateDetails(file);
         }
     }
