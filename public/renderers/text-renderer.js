@@ -13,7 +13,7 @@ class TextRenderer {
         }
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
         const extension = fileName.split('.').pop().toLowerCase();
         const response = await window.authManager.authenticatedFetch(`/files?path=${encodeURIComponent(filePath)}`);

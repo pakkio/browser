@@ -4,6 +4,8 @@ class ComicRenderer {
         this.currentPage = 1;
         this.totalPages = null;
         this.abortController = null;
+        this.pageCache = new Map();
+        this.preloadQueue = [];
     }
 
     cleanup() {
@@ -16,9 +18,16 @@ class ComicRenderer {
             this.abortController.abort();
             this.abortController = null;
         }
+        
+        // Clean up cached page URLs
+        for (const url of this.pageCache.values()) {
+            URL.revokeObjectURL(url);
+        }
+        this.pageCache.clear();
+        this.preloadQueue = [];
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
         this.currentPage = 1;
         this.totalPages = null;
@@ -26,10 +35,11 @@ class ComicRenderer {
 
         const comicContainer = document.createElement('div');
         comicContainer.className = 'comic-container';
+        comicContainer.style.cssText = `height: 100%; display: flex; flex-direction: column;`;
         
         const controls = document.createElement('div');
         controls.className = 'comic-controls';
-        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px;`;
+        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; flex-shrink: 0;`;
         controls.innerHTML = `
             <button id="comic-prev">Previous</button>
             <span id="comic-page-info">Page 1</span>
@@ -40,13 +50,20 @@ class ComicRenderer {
         `;
         
         const pageImg = document.createElement('img');
-        pageImg.style.maxWidth = '100%';
-        pageImg.style.border = '1px solid #ccc';
-        pageImg.style.display = 'block';
-        pageImg.style.margin = '0 auto';
+        pageImg.style.cssText = `
+            max-width: 100%;
+            max-height: calc(100% - 60px);
+            border: 1px solid #ccc;
+            display: block;
+            margin: 0 auto;
+            object-fit: contain;
+            flex: 1;
+        `;
         
         comicContainer.appendChild(controls);
         comicContainer.appendChild(pageImg);
+        
+        contentOther.innerHTML = '';
         contentOther.appendChild(comicContainer);
         contentOther.style.display = 'block';
         
@@ -77,6 +94,17 @@ class ComicRenderer {
                 return;
             }
             this.currentPage = page;
+            
+            // Check cache first
+            if (this.pageCache.has(page)) {
+                pageImg.src = this.pageCache.get(page);
+                pageImg.style.opacity = '1';
+                statusElement.textContent = '';
+                updatePageInfo();
+                this.preloadAdjacentPages(page);
+                return;
+            }
+            
             try {
                 if (this.totalPages) {
                     statusElement.innerHTML = `⏳ Loading page... fetching ${page}/${this.totalPages}`;
@@ -85,28 +113,14 @@ class ComicRenderer {
                 }
                 pageImg.style.opacity = '0.5';
                 
-                const response = await window.authManager.authenticatedFetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
-                    signal: this.abortController.signal
-                });
-                
-                if (!response.ok) {
-                    if (response.status === 500) { // Assume 500 means end of pages if total is unknown
-                        if (!this.totalPages) {
-                            this.totalPages = this.currentPage - 1;
-                        }
-                    }
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const url = await this.fetchAndCachePage(page);
+                if (url) {
+                    pageImg.src = url;
+                    pageImg.style.opacity = '1';
+                    statusElement.textContent = '';
+                    updatePageInfo();
+                    this.preloadAdjacentPages(page);
                 }
-                
-                const blob = await response.blob();
-                if (blob.size === 0) {
-                    throw new Error('Empty response');
-                }
-                
-                pageImg.src = URL.createObjectURL(blob);
-                pageImg.style.opacity = '1';
-                statusElement.textContent = '';
-                updatePageInfo();
             } catch (error) {
                 if (error.name === 'AbortError') {
                     console.log('Comic loading aborted');
@@ -116,6 +130,63 @@ class ComicRenderer {
                 pageImg.style.opacity = '1';
                 statusElement.textContent = `Error: ${error.message}`;
                 updatePageInfo();
+            }
+        };
+        
+        this.fetchAndCachePage = async (page) => {
+            const response = await window.authManager.authenticatedFetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
+                signal: this.abortController.signal
+            });
+            
+            if (!response.ok) {
+                if (response.status === 500) { // Assume 500 means end of pages if total is unknown
+                    if (!this.totalPages) {
+                        this.totalPages = this.currentPage - 1;
+                    }
+                }
+                throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+            }
+            
+            const blob = await response.blob();
+            if (blob.size === 0) {
+                throw new Error('Empty response');
+            }
+            
+            const url = URL.createObjectURL(blob);
+            this.pageCache.set(page, url);
+            return url;
+        };
+        
+        this.preloadAdjacentPages = async (currentPage) => {
+            const pagesToPreload = [currentPage + 1, currentPage - 1, currentPage + 2];
+            
+            for (const page of pagesToPreload) {
+                if (page > 0 && (!this.totalPages || page <= this.totalPages) && !this.pageCache.has(page)) {
+                    // Add to preload queue if not already there
+                    if (!this.preloadQueue.includes(page)) {
+                        this.preloadQueue.push(page);
+                    }
+                }
+            }
+            
+            // Process preload queue
+            this.processPreloadQueue();
+        };
+        
+        this.processPreloadQueue = async () => {
+            if (this.preloadQueue.length === 0) return;
+            
+            const page = this.preloadQueue.shift();
+            try {
+                await this.fetchAndCachePage(page);
+                console.log(`Preloaded page ${page}`);
+            } catch (error) {
+                console.log(`Failed to preload page ${page}:`, error.message);
+            }
+            
+            // Continue processing queue with a small delay
+            if (this.preloadQueue.length > 0) {
+                setTimeout(() => this.processPreloadQueue(), 100);
             }
         };
         
