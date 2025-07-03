@@ -572,6 +572,13 @@ class PDFRenderer {
 
         try {
             statusElement.textContent = 'Loading PDF...';
+            
+            // Validate that this is actually a PDF file
+            const extension = fileName.split('.').pop().toLowerCase();
+            if (extension !== 'pdf') {
+                throw new Error(`PDF renderer called with non-PDF file: ${fileName} (${extension})`);
+            }
+            
             const url = `/files?path=${encodeURIComponent(filePath)}`;
             const loadingTask = pdfjsLib.getDocument(url);
             this.pdfDoc = await loadingTask.promise;
