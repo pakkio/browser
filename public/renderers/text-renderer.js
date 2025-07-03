@@ -4,6 +4,7 @@ class TextRenderer {
         this.currentPage = 1;
         this.pages = [];
         this.linesPerPage = 50;
+        this.doublePageMode = false;
     }
 
     cleanup() {
@@ -47,24 +48,71 @@ class TextRenderer {
 
         const textContainer = document.createElement('div');
         textContainer.className = 'text-container';
+        textContainer.style.cssText = `height: 100%; display: flex; flex-direction: column;`;
 
         const controls = document.createElement('div');
         controls.className = 'text-controls';
-        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px;`;
+        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; flex-shrink: 0;`;
         controls.innerHTML = `
             <button id="text-prev">Previous</button>
             <span id="text-page-info" style="margin: 0 10px;"></span>
             <button id="text-next">Next</button>
             <input type="number" id="text-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
             <button id="text-jump-btn" style="margin-left: 5px;">Go</button>
+            <button id="text-double-page-toggle" style="margin-left: 20px;">Double Page</button>
         `;
 
-        const pageContent = document.createElement('pre');
-        const codeContent = document.createElement('code');
-        pageContent.appendChild(codeContent);
+        const pagesContainer = document.createElement('div');
+        pagesContainer.className = 'text-pages-container';
+        pagesContainer.style.cssText = `
+            display: flex;
+            gap: 20px;
+            flex: 1;
+            min-height: 0;
+        `;
+
+        const pageContent1 = document.createElement('pre');
+        pageContent1.id = 'text-page-left';
+        pageContent1.style.cssText = `
+            flex: 1;
+            margin: 0;
+            padding: 20px;
+            background: #222;
+            color: #f8f8f2;
+            border-radius: 8px;
+            font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', 'Liberation Mono', monospace;
+            line-height: 1.6;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+        `;
+        const codeContent1 = document.createElement('code');
+        pageContent1.appendChild(codeContent1);
+
+        const pageContent2 = document.createElement('pre');
+        pageContent2.id = 'text-page-right';
+        pageContent2.style.cssText = `
+            flex: 1;
+            margin: 0;
+            padding: 20px;
+            background: #222;
+            color: #f8f8f2;
+            border-radius: 8px;
+            font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', 'Liberation Mono', monospace;
+            line-height: 1.6;
+            overflow-y: auto;
+            white-space: pre-wrap;
+            word-break: break-word;
+            display: none;
+        `;
+        const codeContent2 = document.createElement('code');
+        pageContent2.appendChild(codeContent2);
+
+        pagesContainer.appendChild(pageContent1);
+        pagesContainer.appendChild(pageContent2);
 
         textContainer.appendChild(controls);
-        textContainer.appendChild(pageContent);
+        textContainer.appendChild(pagesContainer);
         contentOther.appendChild(textContainer);
         contentOther.style.display = 'block';
 
@@ -73,22 +121,82 @@ class TextRenderer {
         const pageInfo = controls.querySelector('#text-page-info');
         const jumpInput = controls.querySelector('#text-page-jump');
         const jumpBtn = controls.querySelector('#text-jump-btn');
+        const doublePageToggle = controls.querySelector('#text-double-page-toggle');
+
+        const toggleDoublePageMode = () => {
+            this.doublePageMode = !this.doublePageMode;
+            doublePageToggle.textContent = this.doublePageMode ? 'Single Page' : 'Double Page';
+            
+            const pageContent2 = document.getElementById('text-page-right');
+            if (this.doublePageMode) {
+                pageContent2.style.display = 'block';
+            } else {
+                pageContent2.style.display = 'none';
+            }
+            
+            showPage(this.currentPage);
+        };
 
         const showPage = (page) => {
             if (page < 1 || page > this.pages.length) {
                 return;
             }
+            
+            if (page < 1) page = 1;
+            if (this.doublePageMode && page > this.pages.length) {
+                page = this.pages.length % 2 === 0 ? this.pages.length - 1 : this.pages.length;
+                if (page < 1) page = 1;
+            } else if (page > this.pages.length) {
+                page = this.pages.length;
+            }
+            
             this.currentPage = page;
-            codeContent.textContent = this.pages[this.currentPage - 1];
-            codeContent.className = `language-${extension}`;
-            hljs.highlightElement(codeContent);
-            pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
+            
+            const codeContent1 = document.querySelector('#text-page-left code');
+            const codeContent2 = document.querySelector('#text-page-right code');
+            
+            // Show left/first page
+            codeContent1.textContent = this.pages[this.currentPage - 1];
+            codeContent1.className = `language-${extension}`;
+            hljs.highlightElement(codeContent1);
+            
+            // Show right/second page if in double page mode
+            if (this.doublePageMode && this.currentPage < this.pages.length) {
+                codeContent2.textContent = this.pages[this.currentPage];
+                codeContent2.className = `language-${extension}`;
+                hljs.highlightElement(codeContent2);
+            } else if (this.doublePageMode) {
+                codeContent2.textContent = ''; // Clear if no more pages
+            }
+            
+            // Update page info
+            if (this.doublePageMode && this.currentPage < this.pages.length) {
+                pageInfo.textContent = `Pages ${this.currentPage}-${this.currentPage + 1} of ${this.pages.length}`;
+            } else {
+                pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
+            }
+            
             prevBtn.disabled = this.currentPage === 1;
-            nextBtn.disabled = this.currentPage === this.pages.length;
+            if (this.doublePageMode) {
+                nextBtn.disabled = this.currentPage >= this.pages.length;
+            } else {
+                nextBtn.disabled = this.currentPage === this.pages.length;
+            }
         };
 
-        prevBtn.addEventListener('click', () => showPage(this.currentPage - 1));
-        nextBtn.addEventListener('click', () => showPage(this.currentPage + 1));
+        const navigatePrev = () => {
+            const step = this.doublePageMode ? 2 : 1;
+            showPage(this.currentPage - step);
+        };
+
+        const navigateNext = () => {
+            const step = this.doublePageMode ? 2 : 1;
+            showPage(this.currentPage + step);
+        };
+
+        prevBtn.addEventListener('click', navigatePrev);
+        nextBtn.addEventListener('click', navigateNext);
+        doublePageToggle.addEventListener('click', toggleDoublePageMode);
         jumpBtn.addEventListener('click', () => {
             const page = parseInt(jumpInput.value, 10);
             if (!isNaN(page)) {
@@ -100,10 +208,13 @@ class TextRenderer {
             if (e.target.tagName === 'INPUT') return;
             if (e.key === 'ArrowLeft') {
                 e.preventDefault();
-                prevBtn.click();
+                navigatePrev();
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
-                nextBtn.click();
+                navigateNext();
+            } else if (e.key === 'd' || e.key === 'D') {
+                e.preventDefault();
+                toggleDoublePageMode();
             }
         };
         document.addEventListener('keydown', this.handleKeyDown);
