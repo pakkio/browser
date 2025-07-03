@@ -98,6 +98,9 @@ class VideoRenderer {
         contentOther.appendChild(video);
         contentOther.appendChild(errorDiv);
         
+        // Explicitly call load() to prevent premature load attempts
+        video.load();
+        
         // Add annotation status overlay
         this.annotationOverlay = document.createElement('div');
         this.annotationOverlay.style.cssText = `
