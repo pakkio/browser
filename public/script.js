@@ -493,6 +493,46 @@ function initializeFileExplorer() {
                     document.querySelector('.file-item.selected')?.focus();
                 }
                 return;
+            case 'r':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#f44336');
+                }
+                return;
+            case 'g':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#4caf50');
+                }
+                return;
+            case 'y':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#ffeb3b');
+                }
+                return;
+            case 'b':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#2196f3');
+                }
+                return;
+            case 'c':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'comment');
+                }
+                return;
+            case '1':
+            case '2':
+            case '3':
+            case '4':
+            case '5':
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'stars', parseInt(event.key));
+                }
+                return;
         }
         if (newIndex !== selectedIndex) {
             const file = filteredFiles[newIndex];
@@ -551,6 +591,105 @@ function initializeFileExplorer() {
 
     loadFiles(currentPath);
     
+    // Quick annotation function for keyboard shortcuts
+    function quickAnnotate(file, type, value) {
+        const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+        
+        if (type === 'comment') {
+            // Show comment dialog
+            if (window.showAnnotationDialog) {
+                window.showAnnotationDialog(filePath, file.name);
+            }
+            return;
+        }
+        
+        // For color and stars, update annotation directly
+        const existingAnnotation = window.annotationsCache?.[filePath] || {};
+        const annotation = {
+            comment: existingAnnotation.comment || '',
+            color: type === 'color' ? value : existingAnnotation.color,
+            stars: type === 'stars' ? value : existingAnnotation.stars
+        };
+        
+        // Save annotation
+        fetch('/api/annotations', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                filePath: filePath,
+                ...annotation
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Update cache
+                if (!window.annotationsCache) window.annotationsCache = {};
+                window.annotationsCache[filePath] = annotation;
+                
+                // Refresh display
+                displayFiles(currentFiles, currentPath);
+                
+                // Show feedback
+                showQuickAnnotationFeedback(type, value);
+            }
+        })
+        .catch(error => {
+            console.error('Error saving annotation:', error);
+            showQuickAnnotationFeedback('error', 'Failed to save');
+        });
+    }
+    
+    // Show visual feedback for quick annotations
+    function showQuickAnnotationFeedback(type, value) {
+        const feedback = document.createElement('div');
+        feedback.className = 'quick-annotation-feedback';
+        
+        let message = '';
+        if (type === 'color') {
+            const colorNames = {
+                '#f44336': 'Red',
+                '#4caf50': 'Green', 
+                '#ffeb3b': 'Yellow',
+                '#2196f3': 'Blue'
+            };
+            message = `Color: ${colorNames[value]}`;
+            feedback.style.backgroundColor = value;
+        } else if (type === 'stars') {
+            message = `Rating: ${'⭐'.repeat(value)}`;
+        } else if (type === 'error') {
+            message = value;
+            feedback.style.backgroundColor = '#f44336';
+        }
+        
+        feedback.textContent = message;
+        feedback.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 15px;
+            border-radius: 5px;
+            color: white;
+            font-weight: bold;
+            z-index: 1000;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        `;
+        
+        document.body.appendChild(feedback);
+        
+        // Animate in
+        setTimeout(() => feedback.style.opacity = '1', 10);
+        
+        // Remove after 2 seconds
+        setTimeout(() => {
+            feedback.style.opacity = '0';
+            setTimeout(() => feedback.remove(), 300);
+        }, 2000);
+    }
+
     // Expose file explorer state for keyboard navigation
     window.fileExplorer = {
         currentPath: () => currentPath,
@@ -559,7 +698,8 @@ function initializeFileExplorer() {
         loadFiles: loadFiles,
         updateDetails: updateDetails,
         selectFile: selectFile,
-        showContent: showContent
+        showContent: showContent,
+        quickAnnotate: quickAnnotate
     };
 }
 
