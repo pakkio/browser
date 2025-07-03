@@ -135,6 +135,8 @@ class FileRenderer {
         const handler = this.handlers.get(fileType);
         this.currentHandler = handler; // Set the new handler
 
+        console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
+
         contentCode.innerHTML = '';
         contentOther.innerHTML = '';
         contentCode.parentElement.style.display = 'none';
