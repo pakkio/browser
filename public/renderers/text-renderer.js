@@ -5,6 +5,7 @@ class TextRenderer {
         this.pages = [];
         this.linesPerPage = 50;
         this.doublePageMode = false;
+        this.coverMode = false;
     }
 
     cleanup() {
@@ -60,6 +61,7 @@ class TextRenderer {
             <input type="number" id="text-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
             <button id="text-jump-btn" style="margin-left: 5px;">Go</button>
             <button id="text-double-page-toggle" style="margin-left: 20px;">Double Page</button>
+            <button id="text-cover-mode-toggle" style="margin-left: 10px; background: #9C27B0; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;" title="Treat first page as cover for proper document layout">📚 Cover Mode</button>
         `;
 
         const pagesContainer = document.createElement('div');
@@ -122,6 +124,24 @@ class TextRenderer {
         const jumpInput = controls.querySelector('#text-page-jump');
         const jumpBtn = controls.querySelector('#text-jump-btn');
         const doublePageToggle = controls.querySelector('#text-double-page-toggle');
+        const coverModeToggle = controls.querySelector('#text-cover-mode-toggle');
+
+        const toggleCoverMode = () => {
+            this.coverMode = !this.coverMode;
+            coverModeToggle.innerHTML = this.coverMode ? '📚 Cover Mode ON' : '📚 Cover Mode';
+            coverModeToggle.style.background = this.coverMode ? '#4CAF50' : '#9C27B0';
+            
+            // Adjust current page if needed for proper pairing
+            if (this.coverMode && this.doublePageMode && this.currentPage > 1 && this.currentPage % 2 === 0) {
+                // In cover mode, pages should be 1, 2-3, 4-5, etc.
+                this.currentPage = this.currentPage;
+            } else if (!this.coverMode && this.doublePageMode && this.currentPage > 1 && this.currentPage % 2 === 1) {
+                // In normal mode, pages should be 1-2, 3-4, etc.
+                this.currentPage = this.currentPage - 1;
+            }
+            
+            showPage(this.currentPage);
+        };
 
         const toggleDoublePageMode = () => {
             this.doublePageMode = !this.doublePageMode;
@@ -161,17 +181,51 @@ class TextRenderer {
             hljs.highlightElement(codeContent1);
             
             // Show right/second page if in double page mode
-            if (this.doublePageMode && this.currentPage < this.pages.length) {
-                codeContent2.textContent = this.pages[this.currentPage];
-                codeContent2.className = `language-${extension}`;
-                hljs.highlightElement(codeContent2);
-            } else if (this.doublePageMode) {
-                codeContent2.textContent = ''; // Clear if no more pages
+            if (this.doublePageMode) {
+                let shouldShowRightPage = false;
+                let rightPageIndex = this.currentPage;
+                
+                if (this.coverMode) {
+                    // In cover mode: page 1 alone, then 2-3, 4-5, etc.
+                    if (this.currentPage === 1) {
+                        shouldShowRightPage = false; // Cover page alone
+                    } else if (this.currentPage % 2 === 0 && this.currentPage < this.pages.length) {
+                        shouldShowRightPage = true; // Even pages (2,4,6) pair with next
+                        rightPageIndex = this.currentPage;
+                    } else if (this.currentPage % 2 === 1 && this.currentPage > 1) {
+                        shouldShowRightPage = false; // Odd pages > 1 shown alone in cover mode
+                    }
+                } else {
+                    // Normal mode: 1-2, 3-4, 5-6, etc.
+                    shouldShowRightPage = this.currentPage < this.pages.length;
+                    rightPageIndex = this.currentPage;
+                }
+                
+                if (shouldShowRightPage) {
+                    codeContent2.textContent = this.pages[rightPageIndex];
+                    codeContent2.className = `language-${extension}`;
+                    hljs.highlightElement(codeContent2);
+                } else {
+                    codeContent2.textContent = ''; // Clear if no more pages
+                }
             }
             
             // Update page info
-            if (this.doublePageMode && this.currentPage < this.pages.length) {
-                pageInfo.textContent = `Pages ${this.currentPage}-${this.currentPage + 1} of ${this.pages.length}`;
+            if (this.doublePageMode) {
+                if (this.coverMode && this.currentPage === 1) {
+                    pageInfo.textContent = `Page 1 (Cover) of ${this.pages.length}`;
+                } else if (this.coverMode && this.currentPage > 1) {
+                    const endPage = Math.min(this.currentPage + 1, this.pages.length);
+                    if (this.currentPage % 2 === 0 && endPage > this.currentPage) {
+                        pageInfo.textContent = `Pages ${this.currentPage}-${endPage} of ${this.pages.length}`;
+                    } else {
+                        pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
+                    }
+                } else if (this.currentPage < this.pages.length) {
+                    pageInfo.textContent = `Pages ${this.currentPage}-${this.currentPage + 1} of ${this.pages.length}`;
+                } else {
+                    pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
+                }
             } else {
                 pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
             }
@@ -185,18 +239,53 @@ class TextRenderer {
         };
 
         const navigatePrev = () => {
-            const step = this.doublePageMode ? 2 : 1;
-            showPage(this.currentPage - step);
+            if (!this.doublePageMode) {
+                showPage(this.currentPage - 1);
+                return;
+            }
+            
+            if (this.coverMode) {
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
+                if (this.currentPage === 1) {
+                    return; // Already at cover
+                } else if (this.currentPage === 2) {
+                    showPage(1); // Go to cover
+                } else if (this.currentPage % 2 === 0) {
+                    showPage(this.currentPage - 2); // From even page, go back 2
+                } else {
+                    showPage(this.currentPage - 1); // From odd page > 1, go back 1
+                }
+            } else {
+                // Normal mode: 1-2, 3-4, 5-6, etc.
+                showPage(this.currentPage - 2);
+            }
         };
 
         const navigateNext = () => {
-            const step = this.doublePageMode ? 2 : 1;
-            showPage(this.currentPage + step);
+            if (!this.doublePageMode) {
+                showPage(this.currentPage + 1);
+                return;
+            }
+            
+            if (this.coverMode) {
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
+                if (this.currentPage === 1) {
+                    showPage(2); // From cover to page 2
+                } else if (this.currentPage % 2 === 0) {
+                    showPage(this.currentPage + 2); // From even page, advance 2
+                } else {
+                    showPage(this.currentPage + 1); // From odd page > 1, advance 1
+                }
+            } else {
+                // Normal mode: 1-2, 3-4, 5-6, etc.
+                showPage(this.currentPage + 2);
+            }
         };
 
         prevBtn.addEventListener('click', navigatePrev);
         nextBtn.addEventListener('click', navigateNext);
         doublePageToggle.addEventListener('click', toggleDoublePageMode);
+        coverModeToggle.addEventListener('click', toggleCoverMode);
         jumpBtn.addEventListener('click', () => {
             const page = parseInt(jumpInput.value, 10);
             if (!isNaN(page)) {
@@ -215,6 +304,9 @@ class TextRenderer {
             } else if (e.key === 'd' || e.key === 'D') {
                 e.preventDefault();
                 toggleDoublePageMode();
+            } else if (e.key === 'c' || e.key === 'C') {
+                e.preventDefault();
+                toggleCoverMode();
             }
         };
         document.addEventListener('keydown', this.handleKeyDown);
