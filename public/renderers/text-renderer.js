@@ -186,11 +186,13 @@ class TextRenderer {
                 let rightPageIndex = this.currentPage;
                 
                 if (this.coverMode) {
-                    // In cover mode: page 1 alone, then 2-3, 4-5, etc.
+                    // In cover mode: page 1 alone, then 2-3, 4-5, etc., last page alone
                     if (this.currentPage === 1) {
-                        shouldShowRightPage = false; // Cover page alone
-                    } else if (this.currentPage % 2 === 0 && this.currentPage < this.pages.length) {
-                        shouldShowRightPage = true; // Even pages (2,4,6) pair with next
+                        shouldShowRightPage = false; // Front cover page alone
+                    } else if (this.currentPage === this.pages.length) {
+                        shouldShowRightPage = false; // Rear cover page alone
+                    } else if (this.currentPage % 2 === 0 && this.currentPage < this.pages.length - 1) {
+                        shouldShowRightPage = true; // Even pages (2,4,6) pair with next (but not if next is last page)
                         rightPageIndex = this.currentPage;
                     } else if (this.currentPage % 2 === 1 && this.currentPage > 1) {
                         shouldShowRightPage = false; // Odd pages > 1 shown alone in cover mode
@@ -213,10 +215,12 @@ class TextRenderer {
             // Update page info
             if (this.doublePageMode) {
                 if (this.coverMode && this.currentPage === 1) {
-                    pageInfo.textContent = `Page 1 (Cover) of ${this.pages.length}`;
+                    pageInfo.textContent = `Page 1 (Front Cover) of ${this.pages.length}`;
+                } else if (this.coverMode && this.currentPage === this.pages.length) {
+                    pageInfo.textContent = `Page ${this.pages.length} (Rear Cover) of ${this.pages.length}`;
                 } else if (this.coverMode && this.currentPage > 1) {
                     const endPage = Math.min(this.currentPage + 1, this.pages.length);
-                    if (this.currentPage % 2 === 0 && endPage > this.currentPage) {
+                    if (this.currentPage % 2 === 0 && endPage > this.currentPage && endPage < this.pages.length) {
                         pageInfo.textContent = `Pages ${this.currentPage}-${endPage} of ${this.pages.length}`;
                     } else {
                         pageInfo.textContent = `Page ${this.currentPage} of ${this.pages.length}`;
@@ -245,11 +249,18 @@ class TextRenderer {
             }
             
             if (this.coverMode) {
-                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc., last page alone
                 if (this.currentPage === 1) {
-                    return; // Already at cover
+                    return; // Already at front cover
+                } else if (this.currentPage === this.pages.length) {
+                    // From rear cover, go to previous page or pair
+                    if (this.pages.length % 2 === 0) {
+                        showPage(this.pages.length - 2); // Go to pair before rear cover
+                    } else {
+                        showPage(this.pages.length - 1); // Go to page before rear cover
+                    }
                 } else if (this.currentPage === 2) {
-                    showPage(1); // Go to cover
+                    showPage(1); // Go to front cover
                 } else if (this.currentPage % 2 === 0) {
                     showPage(this.currentPage - 2); // From even page, go back 2
                 } else {
@@ -268,13 +279,25 @@ class TextRenderer {
             }
             
             if (this.coverMode) {
-                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
-                if (this.currentPage === 1) {
-                    showPage(2); // From cover to page 2
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc., last page alone
+                if (this.currentPage === this.pages.length) {
+                    return; // Already at rear cover
+                } else if (this.currentPage === 1) {
+                    showPage(2); // From front cover to page 2
                 } else if (this.currentPage % 2 === 0) {
-                    showPage(this.currentPage + 2); // From even page, advance 2
+                    // From even page, check if next would be the last page
+                    if (this.currentPage + 2 === this.pages.length) {
+                        showPage(this.pages.length); // Jump to rear cover
+                    } else {
+                        showPage(this.currentPage + 2); // From even page, advance 2
+                    }
                 } else {
-                    showPage(this.currentPage + 1); // From odd page > 1, advance 1
+                    // From odd page > 1, advance 1
+                    if (this.currentPage + 1 === this.pages.length) {
+                        showPage(this.pages.length); // Go to rear cover
+                    } else {
+                        showPage(this.currentPage + 1);
+                    }
                 }
             } else {
                 // Normal mode: 1-2, 3-4, 5-6, etc.
