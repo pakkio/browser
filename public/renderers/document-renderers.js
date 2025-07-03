@@ -216,12 +216,15 @@ class PDFRenderer {
         const updatePageInfo = () => {
             if (this.doublePageMode && this.totalPages) {
                 if (this.coverMode && this.currentPage === 1) {
-                    // Cover page shown alone
-                    pageInfo.textContent = `Page 1 (Cover) of ${this.totalPages}`;
+                    // Front cover shown alone
+                    pageInfo.textContent = `Page 1 (Front Cover) of ${this.totalPages}`;
+                } else if (this.coverMode && this.currentPage === this.totalPages) {
+                    // Rear cover shown alone
+                    pageInfo.textContent = `Page ${this.totalPages} (Rear Cover) of ${this.totalPages}`;
                 } else if (this.coverMode && this.currentPage > 1) {
-                    // In cover mode, pair pages 2-3, 4-5, etc.
+                    // In cover mode, pair pages 2-3, 4-5, etc. (but not last page)
                     const endPage = Math.min(this.currentPage + 1, this.totalPages);
-                    if (endPage > this.currentPage) {
+                    if (endPage > this.currentPage && endPage < this.totalPages) {
                         pageInfo.textContent = `Pages ${this.currentPage}-${endPage} of ${this.totalPages}`;
                     } else {
                         pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
@@ -372,11 +375,13 @@ class PDFRenderer {
                     let rightPageNumber = pageNumber + 1;
                     
                     if (this.coverMode) {
-                        // In cover mode: page 1 alone, then 2-3, 4-5, etc.
+                        // In cover mode: page 1 alone, then 2-3, 4-5, etc., last page alone
                         if (pageNumber === 1) {
-                            shouldShowRightPage = false; // Cover page alone
-                        } else if (pageNumber % 2 === 0 && pageNumber + 1 <= this.totalPages) {
-                            shouldShowRightPage = true; // Even pages (2,4,6) pair with next
+                            shouldShowRightPage = false; // Front cover page alone
+                        } else if (pageNumber === this.totalPages) {
+                            shouldShowRightPage = false; // Rear cover page alone
+                        } else if (pageNumber % 2 === 0 && pageNumber + 1 < this.totalPages) {
+                            shouldShowRightPage = true; // Even pages (2,4,6) pair with next (but not if next is last page)
                             rightPageNumber = pageNumber + 1;
                         } else if (pageNumber % 2 === 1 && pageNumber > 1) {
                             shouldShowRightPage = false; // Odd pages > 1 shown alone in cover mode
@@ -422,11 +427,18 @@ class PDFRenderer {
             }
             
             if (this.coverMode) {
-                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc., last page alone
                 if (this.currentPage === 1) {
-                    return; // Already at cover
+                    return; // Already at front cover
+                } else if (this.currentPage === this.totalPages) {
+                    // From rear cover, go to previous page or pair
+                    if (this.totalPages % 2 === 0) {
+                        renderPage(this.totalPages - 2); // Go to pair before rear cover
+                    } else {
+                        renderPage(this.totalPages - 1); // Go to page before rear cover
+                    }
                 } else if (this.currentPage === 2) {
-                    renderPage(1); // Go to cover
+                    renderPage(1); // Go to front cover
                 } else if (this.currentPage % 2 === 0) {
                     renderPage(this.currentPage - 2); // From even page, go back 2
                 } else {
@@ -445,13 +457,25 @@ class PDFRenderer {
             }
             
             if (this.coverMode) {
-                // In cover mode: 1, 2-3, 4-5, 6-7, etc.
-                if (this.currentPage === 1) {
-                    renderPage(2); // From cover to page 2
+                // In cover mode: 1, 2-3, 4-5, 6-7, etc., last page alone
+                if (this.currentPage === this.totalPages) {
+                    return; // Already at rear cover
+                } else if (this.currentPage === 1) {
+                    renderPage(2); // From front cover to page 2
                 } else if (this.currentPage % 2 === 0) {
-                    renderPage(this.currentPage + 2); // From even page, advance 2
+                    // From even page, check if next would be the last page
+                    if (this.currentPage + 2 === this.totalPages) {
+                        renderPage(this.totalPages); // Jump to rear cover
+                    } else {
+                        renderPage(this.currentPage + 2); // From even page, advance 2
+                    }
                 } else {
-                    renderPage(this.currentPage + 1); // From odd page > 1, advance 1
+                    // From odd page > 1, advance 1
+                    if (this.currentPage + 1 === this.totalPages) {
+                        renderPage(this.totalPages); // Go to rear cover
+                    } else {
+                        renderPage(this.currentPage + 1);
+                    }
                 }
             } else {
                 // Normal mode: 1-2, 3-4, 5-6, etc.
@@ -864,11 +888,13 @@ class EpubRenderer {
                         let secondChapterIndex = chapterIndex + 1;
                         
                         if (this.coverMode) {
-                            // In cover mode: chapter 0 alone, then 1-2, 3-4, etc.
+                            // In cover mode: chapter 0 alone, then 1-2, 3-4, etc., last chapter alone
                             if (chapterIndex === 0) {
-                                shouldShowSecondChapter = false; // Cover chapter alone
-                            } else if (chapterIndex % 2 === 1 && chapterIndex + 1 < this.totalChapters) {
-                                shouldShowSecondChapter = true; // Odd chapters (1,3,5) pair with next
+                                shouldShowSecondChapter = false; // Front cover chapter alone
+                            } else if (chapterIndex === this.totalChapters - 1) {
+                                shouldShowSecondChapter = false; // Rear cover chapter alone
+                            } else if (chapterIndex % 2 === 1 && chapterIndex + 1 < this.totalChapters - 1) {
+                                shouldShowSecondChapter = true; // Odd chapters (1,3,5) pair with next (but not if next is last)
                                 secondChapterIndex = chapterIndex + 1;
                             } else if (chapterIndex % 2 === 0 && chapterIndex > 0) {
                                 shouldShowSecondChapter = false; // Even chapters > 0 shown alone in cover mode
@@ -892,10 +918,12 @@ class EpubRenderer {
                     // Update page info and navigation
                     if (this.doublePageMode) {
                         if (this.coverMode && chapterIndex === 0) {
-                            pageInfo.textContent = `Chapter 1 (Cover) of ${this.totalChapters}`;
+                            pageInfo.textContent = `Chapter 1 (Front Cover) of ${this.totalChapters}`;
+                        } else if (this.coverMode && chapterIndex === this.totalChapters - 1) {
+                            pageInfo.textContent = `Chapter ${this.totalChapters} (Rear Cover) of ${this.totalChapters}`;
                         } else if (this.coverMode && chapterIndex > 0) {
                             const endChapter = Math.min(chapterIndex + 1, this.totalChapters - 1);
-                            if (chapterIndex % 2 === 1 && endChapter > chapterIndex) {
+                            if (chapterIndex % 2 === 1 && endChapter > chapterIndex && endChapter < this.totalChapters - 1) {
                                 pageInfo.textContent = `Chapters ${chapterIndex + 1}-${endChapter + 1} of ${this.totalChapters}`;
                             } else {
                                 pageInfo.textContent = `Chapter ${chapterIndex + 1} of ${this.totalChapters}`;
@@ -928,11 +956,18 @@ class EpubRenderer {
                 }
                 
                 if (this.coverMode) {
-                    // In cover mode: 0, 1-2, 3-4, 5-6, etc.
+                    // In cover mode: 0, 1-2, 3-4, 5-6, etc., last chapter alone
                     if (this.currentChapter === 0) {
-                        return; // Already at cover
+                        return; // Already at front cover
+                    } else if (this.currentChapter === this.totalChapters - 1) {
+                        // From rear cover, go to previous chapter or pair
+                        if ((this.totalChapters - 1) % 2 === 0) {
+                            showChapter(this.totalChapters - 3); // Go to pair before rear cover
+                        } else {
+                            showChapter(this.totalChapters - 2); // Go to chapter before rear cover
+                        }
                     } else if (this.currentChapter === 1) {
-                        showChapter(0); // Go to cover
+                        showChapter(0); // Go to front cover
                     } else if (this.currentChapter % 2 === 1) {
                         showChapter(this.currentChapter - 2); // From odd chapter, go back 2
                     } else {
@@ -951,13 +986,25 @@ class EpubRenderer {
                 }
                 
                 if (this.coverMode) {
-                    // In cover mode: 0, 1-2, 3-4, 5-6, etc.
-                    if (this.currentChapter === 0) {
-                        showChapter(1); // From cover to chapter 1
+                    // In cover mode: 0, 1-2, 3-4, 5-6, etc., last chapter alone
+                    if (this.currentChapter === this.totalChapters - 1) {
+                        return; // Already at rear cover
+                    } else if (this.currentChapter === 0) {
+                        showChapter(1); // From front cover to chapter 1
                     } else if (this.currentChapter % 2 === 1) {
-                        showChapter(this.currentChapter + 2); // From odd chapter, advance 2
+                        // From odd chapter, check if next would be the last chapter
+                        if (this.currentChapter + 2 === this.totalChapters - 1) {
+                            showChapter(this.totalChapters - 1); // Jump to rear cover
+                        } else {
+                            showChapter(this.currentChapter + 2); // From odd chapter, advance 2
+                        }
                     } else {
-                        showChapter(this.currentChapter + 1); // From even chapter > 0, advance 1
+                        // From even chapter > 0, advance 1
+                        if (this.currentChapter + 1 === this.totalChapters - 1) {
+                            showChapter(this.totalChapters - 1); // Go to rear cover
+                        } else {
+                            showChapter(this.currentChapter + 1);
+                        }
                     }
                 } else {
                     // Normal mode: 0-1, 2-3, 4-5, etc.
