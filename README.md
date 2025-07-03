@@ -18,12 +18,12 @@ A sleek, modern web-based file browser with support for multiple file types incl
 - **Security**: Path traversal protection and access control
 
 ### 📄 Document Support
-- **PDF Viewer** - Page-by-page PDF navigation with image conversion
-- **EPUB Reader** - E-book support with page navigation
+- **PDF Viewer** - Enhanced page navigation with double-page mode and text selection overlay
+- **EPUB Reader** - E-book support with double-chapter viewing and improved styling
 - **Office Documents** - DOCX, XLSX, PPTX preview and rendering
 - **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats
-- **Code Highlighting** - Syntax highlighting for programming languages
-- **Subtitles** - SRT subtitle file support
+- **Code Highlighting** - Syntax highlighting with double-page viewing for better code review
+- **Subtitles** - SRT subtitle file support with enhanced formatting
 
 ### 🎨 Media Support
 - **Images** - JPG, JPEG, PNG, GIF, WebP, BMP, SVG preview
@@ -148,15 +148,15 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 
 | Type | Extensions | Features |
 |------|------------|----------|
-| **Documents** | PDF | Page navigation, image conversion |
-| **E-books** | EPUB | Page navigation, chapter support |
+| **Documents** | PDF | Double-page mode, text selection overlay, keyboard navigation (d/t keys) |
+| **E-books** | EPUB | Double-chapter viewing, enhanced typography, improved image handling |
 | **Office** | DOCX, XLSX, PPTX | Document rendering, spreadsheet viewing |
 | **Comics** | CBZ, CBR | Page navigation, archive extraction |
 | **Images** | JPG, JPEG, PNG, GIF, WebP, BMP, SVG | Full-size preview, hover effects |
 | **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls, AVI transcoding |
 | **Audio** | MP3, WAV, FLAC, OGG, AAC | HTML5 audio player with controls |
-| **Subtitles** | SRT | Text overlay support |
-| **Code** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | Syntax highlighting |
+| **Subtitles** | SRT | Enhanced formatting with styled time codes |
+| **Code** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | Syntax highlighting with double-page mode for code review |
 
 ## 🎨 UI Features
 
@@ -167,8 +167,10 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 - **Glassmorphism effects** with translucent backgrounds
 
 ### Document Viewer
-- **PDF Controls** - Blue gradient buttons for PDF navigation
-- **Comic Controls** - Green gradient buttons for comic navigation
+- **Enhanced PDF Controls** - Double-page toggle, text selection overlay, keyboard shortcuts
+- **EPUB Double-Chapter Mode** - Side-by-side chapter viewing with improved styling
+- **Text File Double-Page** - Code and text viewing with syntax highlighting in dual panes
+- **Keyboard Navigation** - Arrow keys for page navigation, 'd' for double-page toggle, 't' for text overlay
 - **Responsive images** with hover zoom effects
 - **Professional typography** with modern fonts
 
@@ -192,28 +194,32 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 - **jest-environment-jsdom** - DOM testing environment
 
 ### Frontend
+- **pdf.js** - PDF rendering with text layer support for text selection
 - **highlight.js** - Code syntax highlighting
 - **mammoth.js** - DOCX document processing
 - **xlsx.js** - Excel spreadsheet processing
 - **jszip.js** - ZIP file handling
-- **Modern CSS** - Glassmorphism and animations
+- **Modern CSS** - Glassmorphism and animations with double-page layouts
 
 ## 📁 Project Structure
 
 ```
 browser/
-├── public/                    # Frontend assets
-│   ├── index.html            # Main HTML file
-│   ├── script.js             # Client-side JavaScript
-│   ├── style.css             # Modern glassmorphism styles
-│   └── file-renderer.js      # File type rendering logic
-├── tests/                     # Test suite
-│   ├── server.test.js        # Server-side unit tests
-│   ├── client.test.js        # Client-side unit tests
-│   └── integration.test.js   # Integration tests
-├── server.js                 # Express server with file handling
-├── package.json              # Dependencies and scripts
-└── README.md                 # This file
+├── public/                         # Frontend assets
+│   ├── index.html                 # Main HTML file
+│   ├── script.js                  # Client-side JavaScript
+│   ├── style.css                  # Modern glassmorphism styles
+│   ├── file-renderer.js           # File type rendering logic
+│   └── renderers/                 # Specialized document renderers
+│       ├── document-renderers.js  # PDF and EPUB rendering with double-page modes
+│       └── text-renderer.js       # Text and code rendering with syntax highlighting
+├── tests/                          # Test suite
+│   ├── server.test.js             # Server-side unit tests
+│   ├── client.test.js             # Client-side unit tests
+│   └── integration.test.js        # Integration tests
+├── server.js                      # Express server with file handling
+├── package.json                   # Dependencies and scripts
+└── README.md                      # This file
 ```
 
 ## 🔧 API Endpoints
@@ -233,16 +239,50 @@ browser/
 Navigate through directories by clicking on folders. Files display with appropriate icons based on their type.
 
 ### View PDFs
-Click on any PDF file to open the document viewer with page navigation controls.
+Click on any PDF file to open the enhanced document viewer with:
+- Page-by-page navigation with Previous/Next buttons
+- Double-page mode toggle for side-by-side viewing
+- Text selection overlay for copying PDF text
+- Keyboard shortcuts: Arrow keys (navigation), 'd' (double-page), 't' (text overlay)
+
+### Read EPUBs  
+E-book files open with enhanced reader featuring:
+- Chapter navigation and selection dropdown
+- Double-chapter mode for side-by-side reading
+- Improved typography and image handling
+- Keyboard navigation support
 
 ### Read Comics
 Click on CBZ or CBR files to open the comic reader with page-by-page navigation.
 
 ### Preview Code
-Text and code files open with syntax highlighting for better readability.
+Text and code files open with enhanced features:
+- Syntax highlighting for programming languages
+- Double-page mode for better code review
+- Pagination for large files
+- Keyboard navigation with 'd' key for double-page toggle
 
 ### Play AVI Videos
 AVI files are automatically transcoded to WebM format for browser compatibility. The transcoding happens in real-time using FFmpeg, providing seamless playback without requiring pre-conversion.
+
+## ⌨️ Keyboard Shortcuts
+
+### PDF Viewer
+- `←` / `→` Arrow keys - Navigate between pages
+- `d` or `D` - Toggle double-page viewing mode
+- `t` or `T` - Toggle text selection overlay
+
+### EPUB Reader
+- `←` / `→` Arrow keys - Navigate between chapters
+- `d` or `D` - Toggle double-chapter viewing mode
+
+### Text/Code Viewer
+- `←` / `→` Arrow keys - Navigate between pages
+- `d` or `D` - Toggle double-page viewing mode
+
+### General Navigation
+- Click on page numbers or use jump inputs for direct navigation
+- All viewers support mouse wheel scrolling within content areas
 
 ## 🔒 Security Features
 
