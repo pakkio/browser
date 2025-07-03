@@ -690,8 +690,8 @@ async function getComicFileList(filePath) {
     }
     
     return new Promise((resolve, reject) => {
-        console.log(`[${new Date().toISOString()}] 📖 CBR: Running unrar lb "${filePath}"`);
-        exec(`unrar lb "${filePath}"`, (err, stdout, stderr) => {
+        console.log(`[${new Date().toISOString()}] 📖 CBR: Running unrar l "${filePath}"`);
+        exec(`unrar l "${filePath}"`, (err, stdout, stderr) => {
             if (err) {
                 console.error(`[${new Date().toISOString()}] ❌ CBR: unrar error: ${err.message}`);
                 console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
@@ -699,7 +699,31 @@ async function getComicFileList(filePath) {
             }
             
             console.log(`[${new Date().toISOString()}] 📖 CBR: unrar stdout length: ${stdout.length}`);
-            const files = stdout.split('\n').filter(line => line.trim());
+            const lines = stdout.split('\n');
+            
+            // Find the line with dashes (separator between header and file list)
+            const separatorIndex = lines.findIndex(line => line.includes('-------'));
+            if (separatorIndex === -1) {
+                console.error(`[${new Date().toISOString()}] ❌ CBR: Could not find separator in unrar output`);
+                return reject(new Error('Invalid unrar output format'));
+            }
+            
+            // Extract filenames from the lines after the separator
+            const files = [];
+            for (let i = separatorIndex + 1; i < lines.length; i++) {
+                const line = lines[i].trim();
+                if (!line || line.includes('-------')) break; // End of file list
+                
+                // Split by spaces and take the last part (filename)
+                const parts = line.split(/\s+/);
+                if (parts.length >= 5) { // Should have at least: attributes, size, date, time, name
+                    const filename = parts[parts.length - 1];
+                    if (filename && filename !== '1') { // Skip the summary line
+                        files.push(filename);
+                    }
+                }
+            }
+            
             console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${files.length} total files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
             
             const imageFiles = files
@@ -1302,15 +1326,16 @@ async function extractEpubContent(filePath) {
                                     }
                                 }
                                 
-                                // Decode HTML entities
+                                // Decode HTML entities (including incomplete ones)
                                 cleanContent = cleanContent
-                                    .replace(/&#(\d+);/g, (match, dec) => String.fromCharCode(dec))
-                                    .replace(/&#x([a-fA-F0-9]+);/g, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
-                                    .replace(/&quot;/g, '"')
-                                    .replace(/&apos;/g, "'")
-                                    .replace(/&lt;/g, '<')
-                                    .replace(/&gt;/g, '>')
-                                    .replace(/&amp;/g, '&');
+                                    .replace(/&#(\d+);?/g, (match, dec) => String.fromCharCode(dec))
+                                    .replace(/&#x([a-fA-F0-9]+);?/g, (match, hex) => String.fromCharCode(parseInt(hex, 16)))
+                                    .replace(/&quot;?/g, '"')
+                                    .replace(/&apos;?/g, "'")
+                                    .replace(/&lt;?/g, '<')
+                                    .replace(/&gt;?/g, '>')
+                                    .replace(/&nbsp;?/g, ' ')
+                                    .replace(/&amp;?/g, '&');
                                 
                                 // Truncate content if too large (>50KB per chapter)
                                 if (cleanContent.length > 50000) {
