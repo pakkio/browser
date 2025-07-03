@@ -6,6 +6,9 @@ class PDFRenderer {
         this.pdfDoc = null;
         this.doublePageMode = false;
         this.coverMode = false;
+        this.renderTask1 = null;
+        this.renderTask2 = null;
+        this.renderTimeout = null;
     }
 
     cleanup() {
@@ -13,6 +16,21 @@ class PDFRenderer {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
         }
+        
+        // Cancel any pending render tasks
+        if (this.renderTask1) {
+            this.renderTask1.cancel();
+            this.renderTask1 = null;
+        }
+        if (this.renderTask2) {
+            this.renderTask2.cancel();
+            this.renderTask2 = null;
+        }
+        if (this.renderTimeout) {
+            clearTimeout(this.renderTimeout);
+            this.renderTimeout = null;
+        }
+        
         this.pdfDoc = null;
     }
 
@@ -320,6 +338,22 @@ class PDFRenderer {
                 if (pageNumber < 1) pageNumber = 1;
             }
             
+            // Cancel any pending render timeout
+            if (this.renderTimeout) {
+                clearTimeout(this.renderTimeout);
+                this.renderTimeout = null;
+            }
+            
+            // Cancel any pending render tasks
+            if (this.renderTask1) {
+                this.renderTask1.cancel();
+                this.renderTask1 = null;
+            }
+            if (this.renderTask2) {
+                this.renderTask2.cancel();
+                this.renderTask2 = null;
+            }
+            
             this.currentPage = pageNumber;
             statusElement.textContent = 'Loading...';
             
@@ -366,8 +400,18 @@ class PDFRenderer {
                     canvasContext: context1,
                     viewport: viewport1
                 };
-                await page1.render(renderContext1).promise;
-                await renderTextLayer(page1, viewport1, textLayer1, canvas1);
+                this.renderTask1 = page1.render(renderContext1);
+                try {
+                    await this.renderTask1.promise;
+                    this.renderTask1 = null;
+                    await renderTextLayer(page1, viewport1, textLayer1, canvas1);
+                } catch (renderError) {
+                    if (renderError.name === 'RenderingCancelledException') {
+                        console.log('Page 1 render cancelled');
+                        return;
+                    }
+                    throw renderError;
+                }
                 
                 // Render right page if in double page mode and page exists
                 if (this.doublePageMode) {
@@ -402,8 +446,18 @@ class PDFRenderer {
                             canvasContext: context2,
                             viewport: viewport2
                         };
-                        await page2.render(renderContext2).promise;
-                        await renderTextLayer(page2, viewport2, textLayer2, canvas2);
+                        this.renderTask2 = page2.render(renderContext2);
+                        try {
+                            await this.renderTask2.promise;
+                            this.renderTask2 = null;
+                            await renderTextLayer(page2, viewport2, textLayer2, canvas2);
+                        } catch (renderError) {
+                            if (renderError.name === 'RenderingCancelledException') {
+                                console.log('Page 2 render cancelled');
+                                return;
+                            }
+                            throw renderError;
+                        }
                     } else {
                         // Clear right canvas and text layer if no page to show
                         const context2 = canvas2.getContext('2d');
