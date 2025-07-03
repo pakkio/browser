@@ -1,3 +1,38 @@
+// Shared annotation shortcut handler for all renderers
+function handleAnnotationShortcut(key) {
+    // Get current file info from window.fileExplorer
+    const fileExplorer = window.fileExplorer;
+    if (!fileExplorer) return;
+    
+    // Find currently selected file
+    const selectedItems = document.querySelectorAll('.file-item.selected');
+    if (selectedItems.length === 0) return;
+    
+    const selectedItem = selectedItems[0];
+    const fileName = selectedItem.querySelector('.file-name').textContent;
+    
+    // Create file object
+    const file = { name: fileName, isDirectory: false };
+    
+    // Map key to annotation action
+    let type, value;
+    switch (key) {
+        case 'r': type = 'color'; value = '#f44336'; break;
+        case 'g': type = 'color'; value = '#4caf50'; break;
+        case 'y': type = 'color'; value = '#ffeb3b'; break;
+        case 'b': type = 'color'; value = '#2196f3'; break;
+        case 'c': type = 'comment'; break;
+        case '1': case '2': case '3': case '4': case '5':
+            type = 'stars'; value = parseInt(key); break;
+        default: return;
+    }
+    
+    // Use the quickAnnotate function from file explorer
+    if (fileExplorer.quickAnnotate) {
+        fileExplorer.quickAnnotate(file, type, value);
+    }
+}
+
 class ComicRenderer {
     constructor() {
         this.handleKeyDown = null;
@@ -7,6 +42,7 @@ class ComicRenderer {
         this.pageCache = new Map();
         this.preloadQueue = [];
     }
+
 
     cleanup() {
         if (this.handleKeyDown) {
@@ -207,6 +243,10 @@ class ComicRenderer {
             } else if (e.key === 'ArrowRight') {
                 e.preventDefault();
                 nextBtn.click();
+            } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'b' || e.key === 'c' || 
+                       (e.key >= '1' && e.key <= '5')) {
+                e.preventDefault();
+                handleAnnotationShortcut(e.key);
             }
         };
         document.addEventListener('keydown', this.handleKeyDown);
@@ -325,6 +365,10 @@ class DocxRenderer {
                     } else if (e.key === 'ArrowRight') {
                         e.preventDefault();
                         nextBtn.click();
+                    } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'b' || e.key === 'c' || 
+                               (e.key >= '1' && e.key <= '5')) {
+                        e.preventDefault();
+                        handleAnnotationShortcut(e.key);
                     }
                 };
                 document.addEventListener('keydown', this.handleKeyDown);
