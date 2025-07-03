@@ -85,19 +85,42 @@ class ComicRenderer {
             <span id="comic-status" style="margin-left: 10px; font-style: italic;"></span>
         `;
         
-        const pageImg = document.createElement('img');
-        pageImg.style.cssText = `
-            max-width: 100%;
+        const pagesContainer = document.createElement('div');
+        pagesContainer.className = 'pages-container';
+        pagesContainer.style.cssText = `
+            display: flex;
+            gap: 10px;
+            flex: 1;
+            align-items: center;
+            justify-content: center;
+            min-height: 0;
+        `;
+        
+        const pageImg1 = document.createElement('img');
+        pageImg1.id = 'page-left';
+        pageImg1.style.cssText = `
+            max-width: 48%;
             max-height: calc(100% - 60px);
             border: 1px solid #ccc;
-            display: block;
-            margin: 0 auto;
             object-fit: contain;
             flex: 1;
         `;
         
+        const pageImg2 = document.createElement('img');
+        pageImg2.id = 'page-right';
+        pageImg2.style.cssText = `
+            max-width: 48%;
+            max-height: calc(100% - 60px);
+            border: 1px solid #ccc;
+            object-fit: contain;
+            flex: 1;
+        `;
+        
+        pagesContainer.appendChild(pageImg1);
+        pagesContainer.appendChild(pageImg2);
+        
         comicContainer.appendChild(controls);
-        comicContainer.appendChild(pageImg);
+        comicContainer.appendChild(pagesContainer);
         
         contentOther.innerHTML = '';
         contentOther.appendChild(comicContainer);
@@ -117,53 +140,97 @@ class ComicRenderer {
 
         const updatePageInfo = () => {
             if (this.totalPages) {
-                pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+                const endPage = Math.min(this.currentPage + 1, this.totalPages);
+                if (endPage > this.currentPage) {
+                    pageInfo.textContent = `Pages ${this.currentPage}-${endPage} of ${this.totalPages}`;
+                } else {
+                    pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
+                }
             } else {
-                pageInfo.textContent = `Page ${this.currentPage}`;
+                pageInfo.textContent = `Page ${this.currentPage}+`;
             }
             prevBtn.disabled = this.currentPage === 1;
-            nextBtn.disabled = this.totalPages !== null && this.currentPage === this.totalPages;
+            // For two-page spreads, disable next when we can't show any more pages
+            nextBtn.disabled = this.totalPages !== null && this.currentPage >= this.totalPages;
         };
         
         const loadPage = async (page) => {
-            if (page < 1 || (this.totalPages && page > this.totalPages)) {
-                return;
+            // Ensure we don't go below 1
+            if (page < 1) {
+                page = 1;
+            }
+            
+            // If we know total pages, ensure we don't go beyond them
+            if (this.totalPages && page > this.totalPages) {
+                // Find the last valid starting page for a two-page spread
+                page = this.totalPages % 2 === 0 ? this.totalPages - 1 : this.totalPages;
+                if (page < 1) page = 1;
             }
             this.currentPage = page;
             
-            // Check cache first
-            if (this.pageCache.has(page)) {
-                pageImg.src = this.pageCache.get(page);
-                pageImg.style.opacity = '1';
-                statusElement.textContent = '';
-                updatePageInfo();
-                this.preloadAdjacentPages(page);
-                return;
-            }
+            const pageImg1 = document.getElementById('page-left');
+            const pageImg2 = document.getElementById('page-right');
+            
+            // Calculate which pages to load (current page and next page)
+            const leftPage = page;
+            const rightPage = page + 1;
             
             try {
                 if (this.totalPages) {
-                    statusElement.innerHTML = `⏳ Loading page... fetching ${page}/${this.totalPages}`;
+                    statusElement.innerHTML = `⏳ Loading pages... fetching ${leftPage}${rightPage <= this.totalPages ? `-${rightPage}` : ''}/${this.totalPages}`;
                 } else {
-                    statusElement.innerHTML = '⏳ Loading page...';
+                    statusElement.innerHTML = '⏳ Loading pages...';
                 }
-                pageImg.style.opacity = '0.5';
                 
-                const url = await this.fetchAndCachePage(page);
-                if (url) {
-                    pageImg.src = url;
-                    pageImg.style.opacity = '1';
-                    statusElement.textContent = '';
-                    updatePageInfo();
-                    this.preloadAdjacentPages(page);
+                // Set opacity to indicate loading
+                pageImg1.style.opacity = '0.5';
+                pageImg2.style.opacity = '0.5';
+                
+                // Load left page
+                const leftUrl = this.pageCache.has(leftPage) ? this.pageCache.get(leftPage) : await this.fetchAndCachePage(leftPage);
+                if (leftUrl) {
+                    pageImg1.src = leftUrl;
+                    pageImg1.style.opacity = '1';
+                    pageImg1.style.display = 'block';
                 }
+                
+                // Load right page if it exists
+                if (rightPage <= this.totalPages || !this.totalPages) {
+                    try {
+                        const rightUrl = this.pageCache.has(rightPage) ? this.pageCache.get(rightPage) : await this.fetchAndCachePage(rightPage);
+                        if (rightUrl) {
+                            pageImg2.src = rightUrl;
+                            pageImg2.style.opacity = '1';
+                            pageImg2.style.display = 'block';
+                        }
+                    } catch (error) {
+                        // If right page doesn't exist, hide it
+                        pageImg2.style.display = 'none';
+                        pageImg2.style.opacity = '1';
+                        
+                        // If we don't know total pages yet, set it
+                        if (!this.totalPages && error.message.includes('HTTP 500')) {
+                            this.totalPages = leftPage;
+                        }
+                    }
+                } else {
+                    // Right page is beyond total pages, hide it
+                    pageImg2.style.display = 'none';
+                    pageImg2.style.opacity = '1';
+                }
+                
+                statusElement.textContent = '';
+                updatePageInfo();
+                this.preloadAdjacentPages(leftPage);
+                
             } catch (error) {
                 if (error.name === 'AbortError') {
                     console.log('Comic loading aborted');
                     return;
                 }
                 console.error('Comic load error:', error);
-                pageImg.style.opacity = '1';
+                pageImg1.style.opacity = '1';
+                pageImg2.style.opacity = '1';
                 statusElement.textContent = `Error: ${error.message}`;
                 updatePageInfo();
             }
@@ -194,7 +261,13 @@ class ComicRenderer {
         };
         
         this.preloadAdjacentPages = async (currentPage) => {
-            const pagesToPreload = [currentPage + 1, currentPage - 1, currentPage + 2];
+            // For two-page spreads, preload the next two-page spread and previous pages
+            const pagesToPreload = [
+                currentPage + 2,  // Next left page
+                currentPage + 3,  // Next right page
+                currentPage - 2,  // Previous left page
+                currentPage - 1   // Previous right page (if current is odd)
+            ];
             
             for (const page of pagesToPreload) {
                 if (page > 0 && (!this.totalPages || page <= this.totalPages) && !this.pageCache.has(page)) {
@@ -226,8 +299,8 @@ class ComicRenderer {
             }
         };
         
-        prevBtn.addEventListener('click', () => loadPage(this.currentPage - 1));
-        nextBtn.addEventListener('click', () => loadPage(this.currentPage + 1));
+        prevBtn.addEventListener('click', () => loadPage(this.currentPage - 2));
+        nextBtn.addEventListener('click', () => loadPage(this.currentPage + 2));
         jumpBtn.addEventListener('click', () => {
             const page = parseInt(jumpInput.value, 10);
             if (!isNaN(page)) {
