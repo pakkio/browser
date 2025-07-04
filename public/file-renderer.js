@@ -137,16 +137,33 @@ class FileRenderer {
 
         console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
 
+        // Show progress for file rendering
+        if (window.debugConsole) {
+            window.debugConsole.showProgress(`Rendering ${fileType}: ${fileName}`, 20);
+        }
+
         contentCode.innerHTML = '';
         contentOther.innerHTML = '';
         contentCode.parentElement.style.display = 'none';
         contentOther.style.display = 'none';
         
         if (handler) {
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress(`Processing ${fileType}...`, 60);
+            }
             await handler.render(filePath, fileName, contentCode, contentOther, options);
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('Rendering complete', 100);
+                setTimeout(() => {
+                    window.debugConsole.hideProgress();
+                }, 300);
+            }
         } else {
             contentOther.textContent = 'File type not supported for preview.';
             contentOther.style.display = 'block';
+            if (window.debugConsole) {
+                window.debugConsole.hideProgress();
+            }
         }
     }
 

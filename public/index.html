@@ -87,13 +87,37 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
             <div class="tab-container">
                 <div class="tab-buttons">
                     <button class="tab-button active" data-tab="details">Details</button>
+                    <button class="tab-button" data-tab="debug">Debug Console</button>
                 </div>
                 <div class="tab-content active" id="details-tab">
                     <div id="file-details"></div>
                 </div>
+                <div class="tab-content" id="debug-tab">
+                    <div class="debug-console">
+                        <div class="debug-header">
+                            <h3>Debug Console</h3>
+                            <button id="clear-debug-btn" class="clear-btn">Clear</button>
+                        </div>
+                        <div id="debug-messages" class="debug-messages"></div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+
+    <!-- Progress Bar Overlay -->
+    <div id="progress-container" class="progress-overlay" style="display: none;">
+        <div class="progress-content">
+            <div class="progress-info">
+                <span id="progress-text">Loading...</span>
+                <span id="progress-percentage">0%</span>
+            </div>
+            <div class="progress-bar">
+                <div id="progress-fill" class="progress-fill"></div>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
@@ -104,6 +128,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     <script src="renderers/document-renderers.js"></script>
     <script src="renderers/media-renderers.js"></script>
     <script src="renderers/other-renderers.js"></script>
+    <!-- Debug console and progress tracking -->
+    <script src="debug-console.js"></script>
     <!-- Main file renderer and application -->
     <script src="file-renderer.js"></script>
     <script src="annotations.js"></script>
