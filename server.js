@@ -721,6 +721,12 @@ async function getComicFileList(filePath) {
                     if (filename && filename !== '1') { // Skip the summary line
                         files.push(filename);
                     }
+                } else if (parts.length > 0) {
+                    // Fallback: try to extract just the filename if parsing fails
+                    const lastPart = parts[parts.length - 1];
+                    if (lastPart && lastPart.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
+                        files.push(lastPart);
+                    }
                 }
             }
             
@@ -757,9 +763,17 @@ async function extractFromCBR(filePath, page, res) {
             
             const targetFile = imageFiles[page - 1];
             
-            // Extract the specific file
-            exec(`unrar p -inul "${filePath}" "${targetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+            // Extract the specific file with proper escaping
+            console.log(`[${new Date().toISOString()}] 📖 CBR: Extracting file ${targetFile} from ${path.basename(filePath)}`);
+            
+            // Use shell escaping for the target file to handle special characters
+            const escapedTargetFile = targetFile.replace(/"/g, '\\"');
+            exec(`unrar p -inul "${filePath}" "${escapedTargetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
                 if (err) {
+                    console.error(`[${new Date().toISOString()}] ❌ CBR: Extraction failed for ${targetFile}`);
+                    console.error(`[${new Date().toISOString()}] ❌ CBR: Error: ${err.message}`);
+                    console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
+                    console.error(`[${new Date().toISOString()}] ❌ CBR: Available files: ${imageFiles.slice(0, 10).join(', ')}`);
                     return reject(new Error(`Failed to extract ${targetFile}: ${err.message}`));
                 }
                 
