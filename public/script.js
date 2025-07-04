@@ -40,10 +40,16 @@ function initializeFileExplorer() {
     function loadFiles(path) {
         console.log('Loading files for path:', path);
         
-        // Show loading indicator
+        // Show loading indicator and progress
         const loadingIndicator = document.getElementById('loading-indicator');
         loadingIndicator.style.display = 'block';
         loadingIndicator.textContent = 'Loading directory...';
+        
+        // Show progress overlay
+        if (window.debugConsole) {
+            window.debugConsole.showProgress('Loading directory...', 10);
+            window.debugConsole.trackServerRequest(`/api/browse?path=${encodeURIComponent(path)}`);
+        }
         
         // Clear current file list
         fileList.innerHTML = '<li style="color: #666;">Loading...</li>';
@@ -55,6 +61,9 @@ function initializeFileExplorer() {
                     return;
                 }
                 console.log('Response status:', response.status);
+                if (window.debugConsole) {
+                    window.debugConsole.updateProgress('Processing response...', 50);
+                }
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
@@ -63,9 +72,15 @@ function initializeFileExplorer() {
             .then(data => {
                 if (!data) return; // Handle auth failure
                 console.log('Received data:', data);
+                if (window.debugConsole) {
+                    window.debugConsole.updateProgress('Rendering file list...', 80);
+                }
                 currentFiles = data.files;
                 displayFiles(data.files, path);
                 updateCurrentPathDisplay(data.currentPath, data.files.length);
+                if (window.debugConsole) {
+                    window.debugConsole.updateProgress('Complete', 100);
+                }
             })
             .catch(error => {
                 console.error('Error loading files:', error);
@@ -73,8 +88,13 @@ function initializeFileExplorer() {
                 fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
             })
             .finally(() => {
-                // Hide loading indicator
+                // Hide loading indicator and progress
                 loadingIndicator.style.display = 'none';
+                if (window.debugConsole) {
+                    setTimeout(() => {
+                        window.debugConsole.hideProgress();
+                    }, 500); // Small delay to show completion
+                }
             });
     }
     
@@ -301,6 +321,13 @@ function initializeFileExplorer() {
 
     function showContent(path, fileName, options = {}) {
         const filePath = path ? `/${path}/${fileName}` : `/${fileName}`;
+        
+        // Track file rendering in debug console
+        if (window.debugConsole) {
+            const fileType = fileRenderer.getFileType(fileName);
+            window.debugConsole.trackRenderOperation(fileType, fileName);
+        }
+        
         fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
     }
     
