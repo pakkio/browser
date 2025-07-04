@@ -377,6 +377,12 @@ class PDFRenderer {
                 const textLayer1 = document.getElementById('pdf-text-layer-left');
                 const textLayer2 = document.getElementById('pdf-text-layer-right');
                 
+                // Clear canvases before new render to prevent concurrent render errors
+                const context1 = canvas1.getContext('2d');
+                const context2 = canvas2.getContext('2d');
+                context1.clearRect(0, 0, canvas1.width, canvas1.height);
+                context2.clearRect(0, 0, canvas2.width, canvas2.height);
+                
                 // Helper function to render text layer
                 const renderTextLayer = async (page, viewport, textLayerDiv, canvas) => {
                     textLayerDiv.innerHTML = '';
@@ -407,7 +413,6 @@ class PDFRenderer {
                 // Render left page
                 const page1 = await this.pdfDoc.getPage(pageNumber);
                 const viewport1 = page1.getViewport({ scale: 1.5 });
-                const context1 = canvas1.getContext('2d');
                 canvas1.height = viewport1.height;
                 canvas1.width = viewport1.width;
                 const renderContext1 = {
@@ -453,7 +458,6 @@ class PDFRenderer {
                     if (shouldShowRightPage) {
                         const page2 = await this.pdfDoc.getPage(rightPageNumber);
                         const viewport2 = page2.getViewport({ scale: 1.5 });
-                        const context2 = canvas2.getContext('2d');
                         canvas2.height = viewport2.height;
                         canvas2.width = viewport2.width;
                         const renderContext2 = {
@@ -474,7 +478,6 @@ class PDFRenderer {
                         }
                     } else {
                         // Clear right canvas and text layer if no page to show
-                        const context2 = canvas2.getContext('2d');
                         context2.clearRect(0, 0, canvas2.width, canvas2.height);
                         textLayer2.innerHTML = '';
                     }
