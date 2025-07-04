@@ -4,8 +4,8 @@ class TextRenderer {
         this.currentPage = 1;
         this.pages = [];
         this.linesPerPage = 50;
-        this.doublePageMode = false;
-        this.coverMode = false;
+        this.doublePageMode = true;
+        this.coverMode = true;
     }
 
     cleanup() {
@@ -49,19 +49,38 @@ class TextRenderer {
 
         const textContainer = document.createElement('div');
         textContainer.className = 'text-container';
-        textContainer.style.cssText = `height: 100%; display: flex; flex-direction: column;`;
+        textContainer.style.cssText = `height: 100%; display: flex; flex-direction: column; position: relative;`;
 
         const controls = document.createElement('div');
         controls.className = 'text-controls';
-        controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; flex-shrink: 0;`;
+        controls.style.cssText = `
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            display: flex; 
+            align-items: center; 
+            justify-content: center;
+            padding: 10px; 
+            background: rgba(0, 0, 0, 0.6); 
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 10; 
+            flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
+        `;
+        textContainer.addEventListener('mouseenter', () => controls.style.opacity = '1');
+        textContainer.addEventListener('mouseleave', () => controls.style.opacity = '0');
+
         controls.innerHTML = `
             <button id="text-prev">Previous</button>
-            <span id="text-page-info" style="margin: 0 10px;"></span>
+            <span id="text-page-info" style="margin: 0 10px; color: white;"></span>
             <button id="text-next">Next</button>
             <input type="number" id="text-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
             <button id="text-jump-btn" style="margin-left: 5px;">Go</button>
-            <button id="text-double-page-toggle" style="margin-left: 20px;">Double Page</button>
-            <button id="text-cover-mode-toggle" style="margin-left: 10px; background: #9C27B0; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;" title="Treat first page as cover for proper document layout">📚 Cover Mode</button>
+            <button id="text-double-page-toggle" style="margin-left: 20px;" title="Toggle Double Page View">📖</button>
+            <button id="text-cover-mode-toggle" style="margin-left: 10px;" title="Treat first page as cover">📚</button>
         `;
 
         const pagesContainer = document.createElement('div');
@@ -71,6 +90,7 @@ class TextRenderer {
             gap: 20px;
             flex: 1;
             min-height: 0;
+            height: 100%;
         `;
 
         const pageContent1 = document.createElement('pre');
@@ -105,7 +125,7 @@ class TextRenderer {
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-word;
-            display: none;
+            display: block;
         `;
         const codeContent2 = document.createElement('code');
         pageContent2.appendChild(codeContent2);
@@ -113,8 +133,8 @@ class TextRenderer {
         pagesContainer.appendChild(pageContent1);
         pagesContainer.appendChild(pageContent2);
 
-        textContainer.appendChild(controls);
         textContainer.appendChild(pagesContainer);
+        textContainer.appendChild(controls);
         contentOther.appendChild(textContainer);
         contentOther.style.display = 'block';
 
@@ -125,6 +145,12 @@ class TextRenderer {
         const jumpBtn = controls.querySelector('#text-jump-btn');
         const doublePageToggle = controls.querySelector('#text-double-page-toggle');
         const coverModeToggle = controls.querySelector('#text-cover-mode-toggle');
+
+        // Set initial button states to reflect default enabled modes
+        doublePageToggle.innerHTML = '📄 Single Page';
+        doublePageToggle.style.background = '#4CAF50';
+        coverModeToggle.innerHTML = '📚 Cover Mode ON';
+        coverModeToggle.style.background = '#4CAF50';
 
         const toggleCoverMode = () => {
             this.coverMode = !this.coverMode;
