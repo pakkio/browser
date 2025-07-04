@@ -836,7 +836,6 @@ class EpubRenderer {
                 this.doublePageMode = !this.doublePageMode;
                 doublePageToggle.textContent = this.doublePageMode ? 'Single Chapter' : 'Double Chapter';
                 
-                const contentArea2 = document.getElementById('epub-content-2');
                 if (this.doublePageMode) {
                     contentArea2.style.display = 'block';
                 } else {
@@ -968,7 +967,6 @@ class EpubRenderer {
                     styleContent(contentArea);
                     
                     // Load content for right/second area if in double page mode
-                    const contentArea2 = document.getElementById('epub-content-2');
                     if (this.doublePageMode) {
                         let shouldShowSecondChapter = false;
                         let secondChapterIndex = chapterIndex + 1;
