@@ -4,8 +4,8 @@ class PDFRenderer {
         this.currentPage = 1;
         this.totalPages = null;
         this.pdfDoc = null;
-        this.doublePageMode = false;
-        this.coverMode = false;
+        this.doublePageMode = true;
+        this.coverMode = true;
         this.renderTask1 = null;
         this.renderTask2 = null;
         this.renderTimeout = null;
@@ -39,24 +39,32 @@ class PDFRenderer {
 
         const pdfContainer = document.createElement('div');
         pdfContainer.className = 'pdf-container';
-        pdfContainer.style.cssText = `height: 100%; display: flex; flex-direction: column;`;
+        pdfContainer.style.cssText = `height: 100%; display: flex; flex-direction: column; position: relative;`;
         
         const controls = document.createElement('div');
         controls.className = 'pdf-controls';
         controls.style.cssText = `
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
             display: flex; 
             align-items: center; 
-            margin-bottom: 20px; 
-            padding: 15px; 
-            background: rgba(255, 255, 255, 0.95); 
-            border-radius: 8px; 
-            box-shadow: 0 2px 8px rgba(0,0,0,0.1); 
+            justify-content: center;
+            padding: 10px; 
+            background: rgba(0, 0, 0, 0.6); 
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.2);
             z-index: 10; 
-            position: relative; 
             flex-shrink: 0;
+            opacity: 0;
+            transition: opacity 0.3s ease-in-out;
         `;
+        pdfContainer.addEventListener('mouseenter', () => controls.style.opacity = '1');
+        pdfContainer.addEventListener('mouseleave', () => controls.style.opacity = '0');
+
         controls.innerHTML = `
-            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
+            <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: white;">
                 <div style="display: flex; align-items: center; gap: 5px;">
                     <button id="pdf-prev">Previous</button>
                     <span id="pdf-page-info" style="margin: 0 10px;">Page 1</span>
@@ -67,14 +75,13 @@ class PDFRenderer {
                     <button id="pdf-jump-btn">Go</button>
                 </div>
                 <div style="display: flex; align-items: center; gap: 5px;">
-                    <button id="pdf-double-page-toggle" style="background: #2196F3; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-weight: bold;">📖 Double Page</button>
-                    <button id="pdf-cover-mode-toggle" style="background: #9C27B0; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;" title="Treat first page as cover for proper book layout">📚 Cover Mode</button>
-                    <button id="pdf-text-toggle" style="background: #FF9800; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;" title="Toggle text selection overlay">🔤 Text Selection</button>
+                    <button id="pdf-double-page-toggle" title="Toggle Double Page View">📖</button>
+                    <button id="pdf-cover-mode-toggle" title="Treat first page as cover">📚</button>
+                    <button id="pdf-text-toggle" title="Toggle Text Selection">🔤</button>
                 </div>
-                <span id="pdf-status" style="font-style: italic; color: #666;"></span>
+                <span id="pdf-status" style="font-style: italic; color: #ccc;"></span>
             </div>
         `;
-        
         const pagesContainer = document.createElement('div');
         pagesContainer.className = 'pdf-pages-container';
         pagesContainer.style.cssText = `
@@ -86,6 +93,7 @@ class PDFRenderer {
             min-height: 0;
             padding: 10px;
             overflow: hidden;
+            height: 100%;
         `;
         
         // Create containers for canvas + text layer
@@ -135,7 +143,7 @@ class PDFRenderer {
             position: relative;
             flex: 1;
             max-height: 100%;
-            display: none;
+            display: flex;
             justify-content: center;
             align-items: center;
             overflow: hidden;
@@ -172,8 +180,8 @@ class PDFRenderer {
         pagesContainer.appendChild(pageContainer1);
         pagesContainer.appendChild(pageContainer2);
         
-        pdfContainer.appendChild(controls);
         pdfContainer.appendChild(pagesContainer);
+        pdfContainer.appendChild(controls);
         contentOther.appendChild(pdfContainer);
         contentOther.style.display = 'block';
         
@@ -228,6 +236,12 @@ class PDFRenderer {
         const coverModeToggle = controls.querySelector('#pdf-cover-mode-toggle');
         const textToggle = controls.querySelector('#pdf-text-toggle');
         const statusElement = controls.querySelector('#pdf-status');
+        
+        // Set initial button states to reflect default enabled modes
+        doublePageToggle.innerHTML = '📄 Single Page';
+        doublePageToggle.style.background = '#4CAF50';
+        coverModeToggle.innerHTML = '📚 Cover Mode ON';
+        coverModeToggle.style.background = '#4CAF50';
         
         let textLayerVisible = false;
 
@@ -594,8 +608,8 @@ class PDFRenderer {
 class EpubRenderer {
     constructor() {
         this.handleKeyDown = null;
-        this.doublePageMode = false;
-        this.coverMode = false;
+        this.doublePageMode = true;
+        this.coverMode = true;
         this.currentChapter = 0;
         this.totalChapters = 0;
     }
@@ -624,14 +638,13 @@ class EpubRenderer {
                 padding: 20px;
                 border-radius: 15px;
                 border: 1px solid rgba(255, 255, 255, 0.2);
-                min-height: 70vh;
-                max-height: 85vh;
+                height: 100%;
                 overflow: visible;
                 display: flex;
                 flex-direction: column;
+                position: relative;
             `;
             
-            // Create header with book info and cover
             const header = document.createElement('div');
             header.className = 'epub-header';
             header.style.cssText = `
@@ -668,29 +681,36 @@ class EpubRenderer {
             
             header.innerHTML = headerContent;
             
-            // Create navigation controls
             const controls = document.createElement('div');
             controls.className = 'epub-controls';
             controls.style.cssText = `
+                position: absolute;
+                bottom: 0;
+                left: 0;
+                right: 0;
                 display: flex;
-                justify-content: space-between;
+                justify-content: center;
                 align-items: center;
-                margin-bottom: 20px;
-                padding: 15px;
-                background: rgba(255, 255, 255, 0.05);
-                border-radius: 10px;
-                border: 1px solid rgba(255, 255, 255, 0.1);
+                padding: 10px;
+                background: rgba(0, 0, 0, 0.6);
+                backdrop-filter: blur(10px);
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
                 flex-wrap: wrap;
                 gap: 10px;
+                z-index: 10;
+                opacity: 0;
+                transition: opacity 0.3s ease-in-out;
             `;
+            epubContainer.addEventListener('mouseenter', () => controls.style.opacity = '1');
+            epubContainer.addEventListener('mouseleave', () => controls.style.opacity = '0');
             
             controls.innerHTML = `
                 <button id="epub-prev">‹ Previous</button>
                 <select id="epub-chapter-select" style="flex: 1; max-width: 300px;"></select>
                 <button id="epub-next">Next ›</button>
-                <button id="epub-double-page-toggle" style="margin-left: 10px;">Double Chapter</button>
-                <button id="epub-cover-mode-toggle" style="margin-left: 10px; background: #9C27B0; color: white; padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer;" title="Treat first chapter as cover for proper book layout">📚 Cover Mode</button>
-                <span id="epub-page-info" style="margin: 0 10px;"></span>
+                <button id="epub-double-page-toggle" style="margin-left: 10px;" title="Toggle Double Chapter View">📖</button>
+                <button id="epub-cover-mode-toggle" style="margin-left: 10px;" title="Treat first chapter as cover for proper book layout">📚</button>
+                <span id="epub-page-info" style="margin: 0 10px; color: white;"></span>
                 <input type="number" id="epub-page-jump" placeholder="Chapter" style="width: 80px;">
                 <button id="epub-jump-btn">Go</button>
             `;
@@ -748,7 +768,7 @@ class EpubRenderer {
                 box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
                 scrollbar-width: thin;
                 scrollbar-color: #4ecdc4 transparent;
-                display: none;
+                display: block;
             `;
             
             contentContainer.appendChild(contentArea);
@@ -776,8 +796,8 @@ class EpubRenderer {
             
             // Assemble the container
             epubContainer.appendChild(header);
-            epubContainer.appendChild(controls);
             epubContainer.appendChild(contentContainer);
+            epubContainer.appendChild(controls);
             
             const prevBtn = controls.querySelector('#epub-prev');
             const nextBtn = controls.querySelector('#epub-next');
@@ -786,6 +806,11 @@ class EpubRenderer {
             const jumpBtn = controls.querySelector('#epub-jump-btn');
             const doublePageToggle = controls.querySelector('#epub-double-page-toggle');
             const coverModeToggle = controls.querySelector('#epub-cover-mode-toggle');
+
+            // Set initial button states to reflect default enabled modes
+            doublePageToggle.textContent = 'Single Chapter';
+            coverModeToggle.innerHTML = '📚 Cover Mode ON';
+            coverModeToggle.style.background = '#4CAF50';
 
             this.currentChapter = 0;
             this.totalChapters = epubData.chapters.length;
@@ -1103,10 +1128,10 @@ class EpubRenderer {
             };
             document.addEventListener('keydown', this.handleKeyDown);
             
-            showChapter(0);
-            
             contentOther.appendChild(epubContainer);
             contentOther.style.display = 'block';
+            
+            showChapter(0);
             
         } catch (error) {
             console.error('EPUB render error:', error);

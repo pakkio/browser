@@ -18,11 +18,12 @@ A sleek, modern web-based file browser with support for multiple file types incl
 - **Security**: Path traversal protection and access control
 
 ### 📄 Document Support
-- **PDF Viewer** - Enhanced page navigation with double-page mode and text selection overlay
-- **EPUB Reader** - E-book support with double-chapter viewing and improved styling
+- **PDF Viewer** - Enhanced navigation with **double-page and cover modes enabled by default**, text selection overlay, keyboard shortcuts
+- **EPUB Reader** - E-book support with **double-chapter and cover modes enabled by default**, enhanced typography and styling
 - **Office Documents** - DOCX, XLSX, PPTX preview and rendering
-- **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats
-- **Code Highlighting** - Syntax highlighting with double-page viewing for better code review
+- **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats with page navigation
+- **Code Highlighting** - Syntax highlighting with **double-page mode enabled by default** for better code review
+- **Text Files** - Enhanced text viewing with **double-page and cover modes enabled by default**, pagination support
 - **Subtitles** - SRT subtitle file support with enhanced formatting
 
 ### 🎨 Media Support
@@ -148,15 +149,15 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 
 | Type | Extensions | Features |
 |------|------------|----------|
-| **Documents** | PDF | Double-page mode, text selection overlay, keyboard navigation (d/t keys) |
-| **E-books** | EPUB | Double-chapter viewing, enhanced typography, improved image handling |
+| **Documents** | PDF | **Double-page & cover modes by default**, text selection overlay, keyboard navigation (d/c/t keys) |
+| **E-books** | EPUB | **Double-chapter & cover modes by default**, enhanced typography, improved image handling |
 | **Office** | DOCX, XLSX, PPTX | Document rendering, spreadsheet viewing |
 | **Comics** | CBZ, CBR | Page navigation, archive extraction |
 | **Images** | JPG, JPEG, PNG, GIF, WebP, BMP, SVG | Full-size preview, hover effects |
 | **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls, AVI transcoding |
 | **Audio** | MP3, WAV, FLAC, OGG, AAC | HTML5 audio player with controls |
 | **Subtitles** | SRT | Enhanced formatting with styled time codes |
-| **Code** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | Syntax highlighting with double-page mode for code review |
+| **Code/Text** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | **Double-page & cover modes by default**, syntax highlighting |
 
 ## 🎨 UI Features
 
@@ -167,10 +168,11 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 - **Glassmorphism effects** with translucent backgrounds
 
 ### Document Viewer
-- **Enhanced PDF Controls** - Double-page toggle, text selection overlay, keyboard shortcuts
-- **EPUB Double-Chapter Mode** - Side-by-side chapter viewing with improved styling
-- **Text File Double-Page** - Code and text viewing with syntax highlighting in dual panes
-- **Keyboard Navigation** - Arrow keys for page navigation, 'd' for double-page toggle, 't' for text overlay
+- **Enhanced PDF Controls** - **Double-page & cover modes enabled by default**, text selection overlay, keyboard shortcuts
+- **EPUB Double-Chapter Mode** - **Side-by-side chapter viewing enabled by default** with cover mode and improved styling
+- **Text File Double-Page** - **Code and text viewing enabled by default** with syntax highlighting in dual panes and cover mode
+- **Keyboard Navigation** - Arrow keys for page navigation, 'd' for double-page toggle, 'c' for cover mode, 't' for text overlay
+- **Cover Mode** - Proper book-like layout treating first/last pages as covers in double-page view
 - **Responsive images** with hover zoom effects
 - **Professional typography** with modern fonts
 
@@ -210,9 +212,14 @@ browser/
 │   ├── script.js                  # Client-side JavaScript
 │   ├── style.css                  # Modern glassmorphism styles
 │   ├── file-renderer.js           # File type rendering logic
+│   ├── auth.js                    # Authentication management
+│   ├── annotations.js             # File annotation system
 │   └── renderers/                 # Specialized document renderers
-│       ├── document-renderers.js  # PDF and EPUB rendering with double-page modes
-│       └── text-renderer.js       # Text and code rendering with syntax highlighting
+│       ├── document-renderers.js  # PDF and EPUB rendering with double-page/cover modes
+│       ├── text-renderer.js       # Text and code rendering with double-page/cover modes
+│       ├── image-renderer.js      # Image viewing and preview
+│       ├── media-renderers.js     # Audio and video playback
+│       └── other-renderers.js     # Comics, Office docs, Archives, HTML
 ├── tests/                          # Test suite
 │   ├── server.test.js             # Server-side unit tests
 │   ├── client.test.js             # Client-side unit tests
@@ -240,27 +247,30 @@ Navigate through directories by clicking on folders. Files display with appropri
 
 ### View PDFs
 Click on any PDF file to open the enhanced document viewer with:
+- **Double-page and cover modes enabled by default** for optimal reading experience
 - Page-by-page navigation with Previous/Next buttons
-- Double-page mode toggle for side-by-side viewing
 - Text selection overlay for copying PDF text
-- Keyboard shortcuts: Arrow keys (navigation), 'd' (double-page), 't' (text overlay)
+- Cover mode treats first/last pages as covers in double-page view
+- Keyboard shortcuts: Arrow keys (navigation), 'd' (toggle double-page), 'c' (toggle cover mode), 't' (text overlay)
 
 ### Read EPUBs  
 E-book files open with enhanced reader featuring:
+- **Double-chapter and cover modes enabled by default** for optimal reading experience
 - Chapter navigation and selection dropdown
-- Double-chapter mode for side-by-side reading
+- Cover mode treats first/last chapters as covers in double-chapter view
 - Improved typography and image handling
-- Keyboard navigation support
+- Keyboard shortcuts: Arrow keys (navigation), 'd' (toggle double-chapter), 'c' (toggle cover mode)
 
 ### Read Comics
 Click on CBZ or CBR files to open the comic reader with page-by-page navigation.
 
-### Preview Code
+### Preview Code/Text
 Text and code files open with enhanced features:
+- **Double-page and cover modes enabled by default** for optimal reading/reviewing experience
 - Syntax highlighting for programming languages
-- Double-page mode for better code review
+- Cover mode treats first/last pages as covers in double-page view
 - Pagination for large files
-- Keyboard navigation with 'd' key for double-page toggle
+- Keyboard shortcuts: Arrow keys (navigation), 'd' (toggle double-page), 'c' (toggle cover mode)
 
 ### Play AVI Videos
 AVI files are automatically transcoded to WebM format for browser compatibility. The transcoding happens in real-time using FFmpeg, providing seamless playback without requiring pre-conversion.
@@ -269,20 +279,41 @@ AVI files are automatically transcoded to WebM format for browser compatibility.
 
 ### PDF Viewer
 - `←` / `→` Arrow keys - Navigate between pages
-- `d` or `D` - Toggle double-page viewing mode
+- `d` or `D` - Toggle double-page viewing mode (enabled by default)
+- `c` or `C` - Toggle cover mode (enabled by default)
 - `t` or `T` - Toggle text selection overlay
 
 ### EPUB Reader
 - `←` / `→` Arrow keys - Navigate between chapters
-- `d` or `D` - Toggle double-chapter viewing mode
+- `d` or `D` - Toggle double-chapter viewing mode (enabled by default)
+- `c` or `C` - Toggle cover mode (enabled by default)
 
 ### Text/Code Viewer
 - `←` / `→` Arrow keys - Navigate between pages
-- `d` or `D` - Toggle double-page viewing mode
+- `d` or `D` - Toggle double-page viewing mode (enabled by default)
+- `c` or `C` - Toggle cover mode (enabled by default)
 
 ### General Navigation
 - Click on page numbers or use jump inputs for direct navigation
 - All viewers support mouse wheel scrolling within content areas
+
+## 📖 Enhanced Reading Modes
+
+### Double-Page Mode (Default)
+All document viewers (PDF, EPUB, Text/Code) start with double-page mode enabled by default for:
+- **Better Reading Experience** - Side-by-side pages mimic real book reading
+- **Efficient Screen Usage** - Utilizes wider screens effectively
+- **Faster Navigation** - See more content at once
+- **Code Review** - Compare code sections side-by-side
+
+### Cover Mode (Default)
+Cover mode is enabled by default and provides:
+- **Proper Book Layout** - First page/chapter displayed alone as front cover
+- **Natural Pagination** - Subsequent pages paired correctly (2-3, 4-5, etc.)
+- **Rear Cover Handling** - Last page/chapter displayed alone as back cover
+- **Professional Presentation** - Mimics real book/magazine reading experience
+
+Both modes can be toggled individually using keyboard shortcuts ('d' for double-page, 'c' for cover mode) if you prefer single-page viewing.
 
 ## 🔒 Security Features
 

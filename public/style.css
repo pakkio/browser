@@ -614,59 +614,25 @@ pre {
 }
 
 /* Control buttons styling */
-.pdf-controls, .comic-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 15px;
-    padding: 10px;
-    background: #252526;
-    border-radius: 5px;
-    border: 1px solid #333333;
-}
 
-.pdf-controls button, .comic-controls button {
-    padding: 8px 16px;
-    border: 1px solid #333333;
+
+.pdf-controls button, .comic-controls button, .epub-controls button, .text-controls button {
+    background: rgba(255, 255, 255, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white;
+    padding: 8px 12px;
     border-radius: 5px;
-    font-weight: 600;
-    font-size: 13px;
     cursor: pointer;
-    transition: all 0.2s ease;
-    text-transform: none;
-    letter-spacing: 0;
+    transition: background-color 0.3s, border-color 0.3s;
 }
 
-.pdf-controls button {
-    background: #333333;
-    color: #d4d4d4;
+.pdf-controls button:hover, .comic-controls button:hover, .epub-controls button:hover, .text-controls button:hover {
+    background: rgba(255, 255, 255, 0.4);
+    border-color: rgba(255, 255, 255, 0.5);
 }
+    
 
-.comic-controls button {
-    background: #333333;
-    color: #d4d4d4;
-}
 
-.pdf-controls button:hover, .comic-controls button:hover {
-    background: #3c3c3c;
-    border-color: #555555;
-}
-
-.pdf-controls button:disabled, .comic-controls button:disabled {
-    background: #2a2a2a;
-    color: #888888;
-    cursor: not-allowed;
-}
-
-#pdf-page-info, #comic-page-info {
-    font-weight: 600;
-    font-size: 14px;
-    padding: 8px 16px;
-    background: #252526;
-    border-radius: 5px;
-    border: 1px solid #333333;
-}
 
 /* Image styling */
 img {
@@ -939,4 +905,89 @@ audio, video {
 
 .epub-container::-webkit-scrollbar-thumb:hover {
     background: rgba(78, 205, 196, 0.5);
+}
+
+
+/* Comic viewer styling */
+.comic-viewer {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+}
+
+#comic-image-container {
+    flex-grow: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    overflow: hidden;
+}
+
+#comic-image-container img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.2s ease;
+}
+
+.comic-controls {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    padding: 10px;
+    width: 100%;
+    background: rgba(37, 37, 38, 0.8);
+    border-top: 1px solid #333333;
+}
+
+/* Annotation styles */
+.annotation-highlight {
+    background-color: rgba(255, 255, 0, 0.3);
+    cursor: pointer;
+}
+
+.annotation-highlight:hover {
+    background-color: rgba(255, 255, 0, 0.5);
+}
+
+.annotation-tooltip {
+    position: absolute;
+    background-color: #333;
+    color: #fff;
+    padding: 10px;
+    border-radius: 5px;
+    z-index: 1000;
+    display: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+    max-width: 300px;
+}
+
+.annotation-tooltip textarea {
+    width: 100%;
+    min-height: 60px;
+    background-color: #444;
+    color: #fff;
+    border: 1px solid #555;
+    border-radius: 3px;
+    padding: 5px;
+    margin-bottom: 5px;
+}
+
+.annotation-tooltip button {
+    background-color: #007acc;
+    color: #fff;
+    border: none;
+    padding: 5px 10px;
+    border-radius: 3px;
+    cursor: pointer;
+    margin-right: 5px;
+}
+
+.annotation-tooltip button.delete {
+    background-color: #cc0000;
 }
