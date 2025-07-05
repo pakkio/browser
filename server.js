@@ -766,15 +766,17 @@ async function extractFromCBR(filePath, page, res) {
             // Extract the specific file with proper escaping
             console.log(`[${new Date().toISOString()}] 📖 CBR: Extracting file ${targetFile} from ${path.basename(filePath)}`);
             
-            // Use shell escaping for the target file to handle special characters
+            // Use shell escaping for both file path and target file to handle special characters
+            const escapedFilePath = filePath.replace(/"/g, '\\"');
             const escapedTargetFile = targetFile.replace(/"/g, '\\"');
-            exec(`unrar p -inul "${filePath}" "${escapedTargetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
+            exec(`unrar p -inul "${escapedFilePath}" "${escapedTargetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
                 if (err) {
                     console.error(`[${new Date().toISOString()}] ❌ CBR: Extraction failed for ${targetFile}`);
                     console.error(`[${new Date().toISOString()}] ❌ CBR: Error: ${err.message}`);
                     console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
                     console.error(`[${new Date().toISOString()}] ❌ CBR: Available files: ${imageFiles.slice(0, 10).join(', ')}`);
-                    return reject(new Error(`Failed to extract ${targetFile}: ${err.message}`));
+                    console.log(`[${new Date().toISOString()}] 🔄 CBR: Trying fallback extraction method`);
+                    return extractFromCBRFallback(filePath, page, res).then(resolve).catch(reject);
                 }
                 
                 const mimeType = getImageMimeType(targetFile);
