@@ -21,7 +21,7 @@ A sleek, modern web-based file browser with support for multiple file types incl
 - **PDF Viewer** - Enhanced navigation with **double-page and cover modes enabled by default**, text selection overlay, keyboard shortcuts
 - **EPUB Reader** - E-book support with **double-chapter and cover modes enabled by default**, enhanced typography and styling
 - **Office Documents** - DOCX, XLSX, PPTX preview and rendering
-- **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats with page navigation
+- **Comic Book Archives** - Support for CBZ (ZIP) and CBR (RAR) formats with page navigation. Automatically handles misnamed `.cbr` files that are actually ZIP archives.
 - **Code Highlighting** - Syntax highlighting with **double-page mode enabled by default** for better code review
 - **Text Files** - Enhanced text viewing with **double-page and cover modes enabled by default**, pagination support
 - **Subtitles** - SRT subtitle file support with enhanced formatting
