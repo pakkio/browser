@@ -48,7 +48,6 @@ function initializeFileExplorer() {
         // Show progress overlay
         if (window.debugConsole) {
             window.debugConsole.showProgress('Loading directory...', 10);
-            window.debugConsole.trackServerRequest(`/api/browse?path=${encodeURIComponent(path)}`);
         }
         
         // Clear current file list
@@ -62,7 +61,7 @@ function initializeFileExplorer() {
                 }
                 console.log('Response status:', response.status);
                 if (window.debugConsole) {
-                    window.debugConsole.updateProgress('Processing response...', 50);
+                    window.debugConsole.showProgress('Processing response...', 50);
                 }
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
@@ -73,13 +72,13 @@ function initializeFileExplorer() {
                 if (!data) return; // Handle auth failure
                 console.log('Received data:', data);
                 if (window.debugConsole) {
-                    window.debugConsole.updateProgress('Rendering file list...', 80);
+                    window.debugConsole.showProgress('Rendering file list...', 80);
                 }
                 currentFiles = data.files;
                 displayFiles(data.files, path);
                 updateCurrentPathDisplay(data.currentPath, data.files.length);
                 if (window.debugConsole) {
-                    window.debugConsole.updateProgress('Complete', 100);
+                    window.debugConsole.showProgress('Complete', 100);
                 }
             })
             .catch(error => {
@@ -321,12 +320,6 @@ function initializeFileExplorer() {
 
     function showContent(path, fileName, options = {}) {
         const filePath = path ? `/${path}/${fileName}` : `/${fileName}`;
-        
-        // Track file rendering in debug console
-        if (window.debugConsole) {
-            const fileType = fileRenderer.getFileType(fileName);
-            window.debugConsole.trackRenderOperation(fileType, fileName);
-        }
         
         fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
     }

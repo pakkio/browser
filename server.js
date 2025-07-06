@@ -682,67 +682,44 @@ async function extractFromCBZ(filePath, page, res) {
 async function getComicFileList(filePath) {
     // Generate cache key
     const cacheKey = cache.generateKey(filePath, 'comic-list');
-    
+
     // Check disk cache first
     const cachedList = await cache.get('comic-lists', cacheKey, filePath);
     if (cachedList) {
         return cachedList;
     }
-    
-    return new Promise((resolve, reject) => {
-        console.log(`[${new Date().toISOString()}] 📖 CBR: Running unrar l "${filePath}"`);
-        exec(`unrar l "${filePath}"`, (err, stdout, stderr) => {
-            if (err) {
-                console.error(`[${new Date().toISOString()}] ❌ CBR: unrar error: ${err.message}`);
-                console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
-                return reject(err);
-            }
-            
-            console.log(`[${new Date().toISOString()}] 📖 CBR: unrar stdout length: ${stdout.length}`);
-            const lines = stdout.split('\n');
-            
-            // Find the line with dashes (separator between header and file list)
-            const separatorIndex = lines.findIndex(line => line.includes('-------'));
-            if (separatorIndex === -1) {
-                console.error(`[${new Date().toISOString()}] ❌ CBR: Could not find separator in unrar output`);
-                return reject(new Error('Invalid unrar output format'));
-            }
-            
-            // Extract filenames from the lines after the separator
-            const files = [];
-            for (let i = separatorIndex + 1; i < lines.length; i++) {
-                const line = lines[i].trim();
-                if (!line || line.includes('-------')) break; // End of file list
-                
-                // Split by spaces and take the last part (filename)
-                const parts = line.split(/\s+/);
-                if (parts.length >= 5) { // Should have at least: attributes, size, date, time, name
-                    const filename = parts[parts.length - 1];
-                    if (filename && filename !== '1') { // Skip the summary line
-                        files.push(filename);
-                    }
-                } else if (parts.length > 0) {
-                    // Fallback: try to extract just the filename if parsing fails
-                    const lastPart = parts[parts.length - 1];
-                    if (lastPart && lastPart.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
-                        files.push(lastPart);
-                    }
-                }
-            }
-            
-            console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${files.length} total files: ${files.slice(0, 5).join(', ')}${files.length > 5 ? '...' : ''}`);
-            
-            const imageFiles = files
-                .filter(file => file.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i))
-                .sort();
-            
-            console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${imageFiles.length} image files: ${imageFiles.slice(0, 3).join(', ')}${imageFiles.length > 3 ? '...' : ''}`);
-            
-            // Cache the result to disk
-            cache.set('comic-lists', cacheKey, imageFiles, filePath);
-            resolve(imageFiles);
-        });
-    });
+
+    try {
+        const extractor = await createExtractorFromFile({ filepath: filePath });
+        const list = await extractor.getFileList();
+
+        let fileHeaders = [];
+        if (list && list.fileHeaders) {
+            // node-unrar-js can return a generator, so we convert it to an array
+            fileHeaders = Array.isArray(list.fileHeaders) ? list.fileHeaders : Array.from(list.fileHeaders);
+        } else if (Array.isArray(list)) {
+            fileHeaders = list;
+        } else if (list && typeof list === 'object' && list.files) {
+            fileHeaders = Array.isArray(list.files) ? list.files : Array.from(list.files);
+        } else {
+            console.error(`[${new Date().toISOString()}] ❌ Unexpected list structure from node-unrar-js:`, list);
+            throw new Error('Unexpected file list structure from RAR extractor');
+        }
+
+        const imageFiles = fileHeaders
+            .map(header => header.name || header.filename)
+            .filter(name => name && name.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i))
+            .sort();
+
+        console.log(`[${new Date().toISOString()}] 📖 CBR: Found ${imageFiles.length} image files using node-unrar-js`);
+
+        // Cache the result to disk
+        await cache.set('comic-lists', cacheKey, imageFiles, filePath);
+        return imageFiles;
+    } catch (error) {
+        console.error(`[${new Date().toISOString()}] ❌ CBR: getComicFileList error with node-unrar-js: ${error.message}`);
+        throw error;
+    }
 }
 
 async function extractFromCBR(filePath, page, res) {
