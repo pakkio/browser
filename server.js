@@ -491,8 +491,18 @@ app.get('/comic-preview', requireAuth, async (req, res) => {
         }
         console.log(`[${new Date().toISOString()}] ✅ Comic extraction completed`);
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] ❌ Comic extraction error: ${error.message}`);
-        res.status(500).send(`Comic extraction error: ${error.message}`);
+        if (error.message.includes('File is not RAR archive')) {
+            console.warn(`[${new Date().toISOString()}] ⚠️ CBR is not a RAR, attempting to extract as ZIP: ${filePath}`);
+            try {
+                await extractFromCBZ(filePath, page, res);
+            } catch (zipError) {
+                console.error(`[${new Date().toISOString()}] ❌ Comic extraction error (fallback): ${zipError.message}`);
+                res.status(500).send(`Comic extraction error: ${zipError.message}`);
+            }
+        } else {
+            console.error(`[${new Date().toISOString()}] ❌ Comic extraction error: ${error.message}`);
+            res.status(500).send(`Comic extraction error: ${error.message}`);
+        }
     }
 });
 
@@ -530,8 +540,22 @@ app.get('/api/comic-info', requireAuth, async (req, res) => {
         
         console.log(`[${new Date().toISOString()}] ✅ Comic info: Found ${imageFiles.length} pages`);
     } catch (error) {
-        console.error(`[${new Date().toISOString()}] ❌ Comic info error: ${error.message}`);
-        res.status(500).send(`Comic info error: ${error.message}`);
+        if (error.message.includes('File is not RAR archive')) {
+            console.warn(`[${new Date().toISOString()}] ⚠️ CBR is not a RAR, attempting to read as ZIP: ${filePath}`);
+            try {
+                const imageFiles = await getZipComicFileList(filePath);
+                res.json({
+                    pages: imageFiles.length,
+                    format: 'CBR (ZIP)'
+                });
+            } catch (zipError) {
+                console.error(`[${new Date().toISOString()}] ❌ Comic info error (fallback): ${zipError.message}`);
+                res.status(500).send(`Comic info error: ${zipError.message}`);
+            }
+        } else {
+            console.error(`[${new Date().toISOString()}] ❌ Comic info error: ${error.message}`);
+            res.status(500).send(`Comic info error: ${error.message}`);
+        }
     }
 });
 
@@ -679,6 +703,27 @@ async function extractFromCBZ(filePath, page, res) {
     });
 }
 
+async function getZipComicFileList(filePath) {
+    return new Promise((resolve, reject) => {
+        yauzl.open(filePath, { lazyEntries: true, autoClose: true }, (err, zipfile) => {
+            if (err) return reject(err);
+            const imageFiles = [];
+            zipfile.readEntry();
+            zipfile.on('entry', (entry) => {
+                if (entry.fileName.match(/\.(jpg|jpeg|png|gif|webp|bmp|tiff|tif)$/i)) {
+                    imageFiles.push(entry.fileName);
+                }
+                zipfile.readEntry();
+            });
+            zipfile.on('end', () => {
+                imageFiles.sort();
+                resolve(imageFiles);
+            });
+            zipfile.on('error', reject);
+        });
+    });
+}
+
 async function getComicFileList(filePath) {
     // Generate cache key
     const cacheKey = cache.generateKey(filePath, 'comic-list');
@@ -744,8 +789,8 @@ async function extractFromCBR(filePath, page, res) {
             console.log(`[${new Date().toISOString()}] 📖 CBR: Extracting file ${targetFile} from ${path.basename(filePath)}`);
             
             // Use shell escaping for both file path and target file to handle special characters
-            const escapedFilePath = filePath.replace(/"/g, '\\"');
-            const escapedTargetFile = targetFile.replace(/"/g, '\\"');
+            const escapedFilePath = filePath.replace(/"/g, '\"');
+            const escapedTargetFile = targetFile.replace(/"/g, '\"');
             exec(`unrar p -inul "${escapedFilePath}" "${escapedTargetFile}"`, { encoding: 'buffer', maxBuffer: 50 * 1024 * 1024 }, (err, stdout, stderr) => {
                 if (err) {
                     console.error(`[${new Date().toISOString()}] ❌ CBR: Extraction failed for ${targetFile}`);
@@ -753,7 +798,7 @@ async function extractFromCBR(filePath, page, res) {
                     console.error(`[${new Date().toISOString()}] ❌ CBR: stderr: ${stderr}`);
                     console.error(`[${new Date().toISOString()}] ❌ CBR: Available files: ${imageFiles.slice(0, 10).join(', ')}`);
                     console.log(`[${new Date().toISOString()}] 🔄 CBR: Trying fallback extraction method`);
-                    return extractFromCBRFallback(filePath, page, res).then(resolve).catch(reject);
+                    return extractFromCBZ(filePath, page, res).then(resolve).catch(reject);
                 }
                 
                 const mimeType = getImageMimeType(targetFile);
@@ -763,7 +808,7 @@ async function extractFromCBR(filePath, page, res) {
                 resolve();
             });
         } catch (error) {
-            extractFromCBRFallback(filePath, page, res).then(resolve).catch(reject);
+            extractFromCBZ(filePath, page, res).then(resolve).catch(reject);
         }
     });
     
