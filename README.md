@@ -88,6 +88,22 @@ cp .env.example .env
 npm start
 ```
 
+### Windows Compatibility
+
+This project is partially runnable on Windows. The core file browsing and viewing of most file types will work. However, the following features will likely fail without manual intervention:
+
+*   **PDF page count:** The server won't be able to determine the number of pages in a PDF.
+*   **CBR (RAR) comic book viewing:** The server won't be able to extract pages from `.cbr` files.
+*   **Video transcoding:** The server won't be able to transcode `.avi` and `.wmv` files.
+
+To make the project fully runnable on Windows, you will need to install the following dependencies and ensure they are available in your system's `PATH`:
+
+*   **`pdfinfo`:** Part of the [Xpdf](https://www.xpdfreader.com/download.html) command-line tools.
+*   **`unrar`:** The command-line version of WinRAR. You can find it on the [RARLAB website](https://www.rarlab.com/rar_add.htm).
+*   **`ffmpeg`:** A powerful multimedia framework. You can download it from the [official FFmpeg website](https://ffmpeg.org/download.html).
+
+After installing these tools, make sure to add their installation directories to your system's `PATH` environment variable.
+
 The application will be available at `http://localhost:3000`
 
 #### Authentication Setup (Optional)
