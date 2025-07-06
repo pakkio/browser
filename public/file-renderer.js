@@ -153,7 +153,7 @@ class FileRenderer {
             }
             await handler.render(filePath, fileName, contentCode, contentOther, options);
             if (window.debugConsole) {
-                window.debugConsole.updateProgress('Rendering complete', 100);
+                window.debugConsole.showProgress('Rendering complete', 100);
                 setTimeout(() => {
                     window.debugConsole.hideProgress();
                 }, 300);

@@ -36,6 +36,7 @@ function handleAnnotationShortcut(key) {
 class ComicRenderer {
     constructor() {
         this.handleKeyDown = null;
+        this.handleWheel = null;
         this.currentPage = 1;
         this.totalPages = null;
         this.abortController = null;
@@ -49,9 +50,13 @@ class ComicRenderer {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
         }
+        if (this.handleWheel) {
+            document.removeEventListener('wheel', this.handleWheel);
+            this.handleWheel = null;
+        }
         
         if (this.abortController) {
-            this.abortController.abort();
+            this.abortController.abort('cleanup'); // Pass a reason
             this.abortController = null;
         }
         
@@ -82,7 +87,7 @@ class ComicRenderer {
             <button id="comic-next">Next</button>
             <input type="number" id="comic-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
             <button id="comic-jump-btn" style="margin-left: 5px;">Go</button>
-            <span id="comic-status" style="margin-left: 10px; font-style: italic;"></span>
+            <span id="comic-status" style="margin-left: 10px; font-style: italic;">Loading comic info...</span>
         `;
         
         const pagesContainer = document.createElement('div');
@@ -147,46 +152,30 @@ class ComicRenderer {
                     pageInfo.textContent = `Page ${this.currentPage} of ${this.totalPages}`;
                 }
             } else {
-                pageInfo.textContent = `Page ${this.currentPage}+`;
+                pageInfo.textContent = `Page ${this.currentPage}`;
             }
             prevBtn.disabled = this.currentPage === 1;
-            // For two-page spreads, disable next when we can't show any more pages
             nextBtn.disabled = this.totalPages !== null && this.currentPage >= this.totalPages;
         };
         
         const loadPage = async (page) => {
-            // Ensure we don't go below 1
-            if (page < 1) {
-                page = 1;
-            }
-            
-            // If we know total pages, ensure we don't go beyond them
+            if (page < 1) page = 1;
             if (this.totalPages && page > this.totalPages) {
-                // Find the last valid starting page for a two-page spread
-                page = this.totalPages % 2 === 0 ? this.totalPages - 1 : this.totalPages;
-                if (page < 1) page = 1;
+                page = this.totalPages;
             }
             this.currentPage = page;
             
             const pageImg1 = document.getElementById('page-left');
             const pageImg2 = document.getElementById('page-right');
             
-            // Calculate which pages to load (current page and next page)
             const leftPage = page;
             const rightPage = page + 1;
             
             try {
-                if (this.totalPages) {
-                    statusElement.innerHTML = `⏳ Loading pages... fetching ${leftPage}${rightPage <= this.totalPages ? `-${rightPage}` : ''}/${this.totalPages}`;
-                } else {
-                    statusElement.innerHTML = '⏳ Loading pages...';
-                }
-                
-                // Set opacity to indicate loading
+                statusElement.innerHTML = `⏳ Loading page ${leftPage}...`;
                 pageImg1.style.opacity = '0.5';
                 pageImg2.style.opacity = '0.5';
                 
-                // Load left page
                 const leftUrl = this.pageCache.has(leftPage) ? this.pageCache.get(leftPage) : await this.fetchAndCachePage(leftPage);
                 if (leftUrl) {
                     pageImg1.src = leftUrl;
@@ -194,29 +183,16 @@ class ComicRenderer {
                     pageImg1.style.display = 'block';
                 }
                 
-                // Load right page if it exists
-                if (rightPage <= this.totalPages || !this.totalPages) {
-                    try {
-                        const rightUrl = this.pageCache.has(rightPage) ? this.pageCache.get(rightPage) : await this.fetchAndCachePage(rightPage);
-                        if (rightUrl) {
-                            pageImg2.src = rightUrl;
-                            pageImg2.style.opacity = '1';
-                            pageImg2.style.display = 'block';
-                        }
-                    } catch (error) {
-                        // If right page doesn't exist, hide it
-                        pageImg2.style.display = 'none';
+                if (this.totalPages && rightPage <= this.totalPages) {
+                    statusElement.innerHTML = `⏳ Loading page ${rightPage}...`;
+                    const rightUrl = this.pageCache.has(rightPage) ? this.pageCache.get(rightPage) : await this.fetchAndCachePage(rightPage);
+                    if (rightUrl) {
+                        pageImg2.src = rightUrl;
                         pageImg2.style.opacity = '1';
-                        
-                        // If we don't know total pages yet, set it
-                        if (!this.totalPages && error.message.includes('HTTP 500')) {
-                            this.totalPages = leftPage;
-                        }
+                        pageImg2.style.display = 'block';
                     }
                 } else {
-                    // Right page is beyond total pages, hide it
                     pageImg2.style.display = 'none';
-                    pageImg2.style.opacity = '1';
                 }
                 
                 statusElement.textContent = '';
@@ -224,14 +200,14 @@ class ComicRenderer {
                 this.preloadAdjacentPages(leftPage);
                 
             } catch (error) {
-                if (error.name === 'AbortError') {
-                    console.log('Comic loading aborted');
-                    return;
+                if (error.name === 'AbortError' && this.abortController.signal.reason !== 'cleanup') {
+                    console.log('Comic loading aborted by user.');
+                } else if (error.name !== 'AbortError') {
+                    console.error('Comic load error:', error);
+                    statusElement.textContent = `Error: ${error.message}`;
                 }
-                console.error('Comic load error:', error);
                 pageImg1.style.opacity = '1';
                 pageImg2.style.opacity = '1';
-                statusElement.textContent = `Error: ${error.message}`;
                 updatePageInfo();
             }
         };
@@ -242,11 +218,6 @@ class ComicRenderer {
             });
             
             if (!response.ok) {
-                if (response.status === 500) { // Assume 500 means end of pages if total is unknown
-                    if (!this.totalPages) {
-                        this.totalPages = this.currentPage - 1;
-                    }
-                }
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
             }
             
@@ -261,24 +232,19 @@ class ComicRenderer {
         };
         
         this.preloadAdjacentPages = async (currentPage) => {
-            // For two-page spreads, preload the next two-page spread and previous pages
             const pagesToPreload = [
-                currentPage + 2,  // Next left page
-                currentPage + 3,  // Next right page
-                currentPage - 2,  // Previous left page
-                currentPage - 1   // Previous right page (if current is odd)
+                currentPage + 2,
+                currentPage + 3,
+                currentPage - 2,
+                currentPage - 1
             ];
             
             for (const page of pagesToPreload) {
-                if (page > 0 && (!this.totalPages || page <= this.totalPages) && !this.pageCache.has(page)) {
-                    // Add to preload queue if not already there
-                    if (!this.preloadQueue.includes(page)) {
-                        this.preloadQueue.push(page);
-                    }
+                if (page > 0 && (!this.totalPages || page <= this.totalPages) && !this.pageCache.has(page) && !this.preloadQueue.includes(page)) {
+                    this.preloadQueue.push(page);
                 }
             }
             
-            // Process preload queue
             this.processPreloadQueue();
         };
         
@@ -290,10 +256,11 @@ class ComicRenderer {
                 await this.fetchAndCachePage(page);
                 console.log(`Preloaded page ${page}`);
             } catch (error) {
-                console.log(`Failed to preload page ${page}:`, error.message);
+                if (error.name !== 'AbortError') {
+                    console.log(`Failed to preload page ${page}:`, error.message);
+                }
             }
             
-            // Continue processing queue with a small delay
             if (this.preloadQueue.length > 0) {
                 setTimeout(() => this.processPreloadQueue(), 100);
             }
@@ -324,6 +291,15 @@ class ComicRenderer {
         };
         document.addEventListener('keydown', this.handleKeyDown);
 
+        this.handleWheel = (e) => {
+            if (e.deltaY > 0) {
+                nextBtn.click();
+            } else {
+                prevBtn.click();
+            }
+        };
+        document.addEventListener('wheel', this.handleWheel);
+
         // Fetch total pages
         try {
             const infoResponse = await window.authManager.authenticatedFetch(`/api/comic-info?path=${encodeURIComponent(filePath)}`, {
@@ -332,13 +308,17 @@ class ComicRenderer {
             if (infoResponse.ok) {
                 const info = await infoResponse.json();
                 updateTotalPages(info.pages);
+                statusElement.textContent = '';
+            } else {
+                statusElement.textContent = 'Could not load comic info.';
             }
         } catch (e) {
-            if (e.name === 'AbortError') {
-                console.log('Comic info fetch aborted');
-                return;
+            if (e.name === 'AbortError' && this.abortController.signal.reason !== 'cleanup') {
+                console.log('Comic info fetch aborted by user.');
+            } else if (e.name !== 'AbortError') {
+                console.error("Could not fetch comic info", e);
+                statusElement.textContent = 'Error fetching comic info.';
             }
-            console.error("Could not fetch comic info", e);
         }
         
         await loadPage(1);

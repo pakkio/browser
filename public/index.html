@@ -43,38 +43,34 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     </div>
 
     <!-- Top Controls Bar -->
-    <div class="top-controls-bar">
-        <div class="controls-section">
-            <h2>File Browser</h2>
-            <input type="text" id="search-input" class="search-input" placeholder="Search files...">
-            <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">📚</button>
-            <select id="file-type-filter" class="filter-select">
-                <option value="all">All Files</option>
-                <option value="directory">📁 Directories</option>
-                <option value="image">🖼️ Images</option>
-                <option value="video">🎬 Videos</option>
-                <option value="audio">🎵 Audio</option>
-                <option value="pdf">📄 PDF</option>
-                <option value="code">💻 Code</option>
-                <option value="notebook">📓 Notebooks</option>
-                <option value="text">📝 Text Documents</option>
-                <option value="table">📊 Spreadsheets</option>
-                <option value="presentation">📊 Presentations</option>
-                <option value="subtitle">💬 Subtitles</option>
-                <option value="comic">📚 Comics</option>
-                <option value="ebook">📖 E-books</option>
-                <option value="archive">📦 Archives</option>
-                <option value="file">📄 Other Files</option>
-            </select>
-        </div>
-        <div class="current-path">
-            <span class="path-label">Current directory:</span>
-            <span id="current-path-display">Loading...</span>
-        </div>
+    <div class="top-controls-bar" style="display: none;">
     </div>
     
     <div class="container">
         <div class="browser">
+            <div class="controls-section">
+                <h2>File Browser</h2>
+                <input type="text" id="search-input" class="search-input" placeholder="Search files...">
+                <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">📚</button>
+                <select id="file-type-filter" class="filter-select">
+                    <option value="all">All Files</option>
+                    <option value="directory">📁 Directories</option>
+                    <option value="image">🖼️ Images</option>
+                    <option value="video">🎬 Videos</option>
+                    <option value="audio">🎵 Audio</option>
+                    <option value="pdf">📄 PDF</option>
+                    <option value="code">💻 Code</option>
+                    <option value="notebook">📓 Notebooks</option>
+                    <option value="text">📝 Text Documents</option>
+                    <option value="table">📊 Spreadsheets</option>
+                    <option value="presentation">📊 Presentations</option>
+                    <option value="subtitle">💬 Subtitles</option>
+                    <option value="comic">📚 Comics</option>
+                    <option value="ebook">📖 E-books</option>
+                    <option value="archive">📦 Archives</option>
+                    <option value="file">📄 Other Files</option>
+                </select>
+            </div>
             <div class="tree-view">
                 <ul id="file-list"></ul>
             </div>
@@ -90,6 +86,10 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
                     <button class="tab-button" data-tab="debug">Debug Console</button>
                 </div>
                 <div class="tab-content active" id="details-tab">
+                    <div class="current-path">
+                        <span class="path-label">Current directory:</span>
+                        <span id="current-path-display">Loading...</span>
+                    </div>
                     <div id="file-details"></div>
                 </div>
                 <div class="tab-content" id="debug-tab">
