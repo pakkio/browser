@@ -53,14 +53,18 @@ class FileCache {
     async isValidCache(cacheFilePath, sourceFilePath) {
         try {
             if (!fs.existsSync(cacheFilePath)) {
+                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: File does not exist ${cacheFilePath}`);
                 return false;
             }
 
             const cacheStats = fs.statSync(cacheFilePath);
             const sourceStats = fs.statSync(sourceFilePath);
             
-            // Check if cache is newer than source file
-            if (sourceStats.mtime > cacheStats.mtime) {
+            console.log(`[${new Date().toISOString()}] 🔍 Cache validation: source mtime=${sourceStats.mtime.getTime()}, cache mtime=${cacheStats.mtime.getTime()}, diff=${sourceStats.mtime.getTime() - cacheStats.mtime.getTime()}ms`);
+            
+            // Check if cache is newer than source file (allow 1 second tolerance for filesystem timing)
+            if (sourceStats.mtime.getTime() > cacheStats.mtime.getTime() + 1000) {
+                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Source file is newer than cache`);
                 return false;
             }
 
@@ -68,11 +72,14 @@ class FileCache {
             const now = Date.now();
             const cacheAge = now - cacheStats.mtime.getTime();
             if (cacheAge > this.maxAge) {
+                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Cache is too old (${cacheAge}ms > ${this.maxAge}ms)`);
                 return false;
             }
 
+            console.log(`[${new Date().toISOString()}] 🔍 Cache valid: All checks passed`);
             return true;
         } catch (error) {
+            console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Error ${error.message}`);
             return false;
         }
     }
@@ -80,26 +87,31 @@ class FileCache {
     // Get cached data
     async get(category, key, sourceFilePath = null) {
         if (!this.initialized) {
+            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Not initialized`);
             return null;
         }
 
         try {
             const cacheFilePath = this.getCacheFilePath(category, key);
+            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Looking for ${cacheFilePath}`);
             
             // Check if cache is valid
             if (sourceFilePath && !(await this.isValidCache(cacheFilePath, sourceFilePath))) {
+                console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Invalid cache for ${key}`);
                 return null;
             }
 
             if (!fs.existsSync(cacheFilePath)) {
+                console.log(`[${new Date().toISOString()}] 🔍 Cache GET: File does not exist ${cacheFilePath}`);
                 return null;
             }
 
             const cacheData = JSON.parse(fs.readFileSync(cacheFilePath, 'utf8'));
+            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Successfully loaded ${Array.isArray(cacheData) ? cacheData.length : 'non-array'} items`);
             
-            // Update access time for LRU
+            // Update access time for LRU (keep mtime as current time to prevent cache invalidation)
             const now = new Date();
-            fs.utimesSync(cacheFilePath, now, cacheData.mtime ? new Date(cacheData.mtime) : now);
+            fs.utimesSync(cacheFilePath, now, now);
 
             console.log(`[${new Date().toISOString()}] 📋 Cache HIT: ${category}/${key}`);
             return cacheData.data;
@@ -126,7 +138,9 @@ class FileCache {
             };
 
             fs.writeFileSync(cacheFilePath, JSON.stringify(cacheData, null, 2));
-            console.log(`[${new Date().toISOString()}] 💾 Cache SET: ${category}/${key}`);
+            // Ensure the file is written to disk
+            fs.fsyncSync(fs.openSync(cacheFilePath, 'r'));
+            console.log(`[${new Date().toISOString()}] 💾 Cache SET: ${category}/${key} -> ${cacheFilePath}`);
             
             // Trigger cleanup if cache is getting large
             setImmediate(() => this.cleanup());
