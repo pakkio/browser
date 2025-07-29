@@ -4,6 +4,7 @@ class ComicRenderer {
         this.handleWheel = null;
         this.currentPage = 1;
         this.totalPages = null;
+        this.currentFilePath = null;
         this.abortController = null;
         this.pageCache = new Map();
         this.preloadQueue = [];
@@ -29,12 +30,14 @@ class ComicRenderer {
         }
         this.pageCache.clear();
         this.preloadQueue = [];
+        this.currentFilePath = null;
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
         this.currentPage = 1;
         this.totalPages = null;
+        this.currentFilePath = filePath; // Store the file path for later use
         this.abortController = new AbortController();
 
         const comicContainer = this.createComicContainer();
@@ -191,10 +194,17 @@ class ComicRenderer {
 
     async loadComicInfo(filePath) {
         try {
+            console.log(`[ComicRenderer] Loading comic info for: ${filePath}`);
             const response = await fetch(`/api/comic-info?path=${encodeURIComponent(filePath)}`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`[ComicRenderer] Comic info HTTP error: ${response.status} - ${errorText}`);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
             
             const info = await response.json();
+            console.log(`[ComicRenderer] Comic info received:`, info);
             this.totalPages = info.pages;
             this.updatePageInfo();
             
@@ -203,7 +213,7 @@ class ComicRenderer {
                 statusElement.textContent = `${info.format} - ${info.pages} pages`;
             }
         } catch (error) {
-            console.error('Failed to load comic info:', error);
+            console.error('[ComicRenderer] Failed to load comic info:', error);
             throw error;
         }
     }
@@ -232,8 +242,15 @@ class ComicRenderer {
                 await this.fetchAndCachePage(leftPage);
             
             if (leftUrl) {
+                pageImg1.onload = () => {
+                    console.log(`[ComicRenderer] Page ${leftPage} image loaded successfully`);
+                    pageImg1.style.opacity = '1';
+                };
+                pageImg1.onerror = (e) => {
+                    console.error(`[ComicRenderer] Failed to load image for page ${leftPage}`, e);
+                    pageImg1.style.opacity = '0.3';
+                };
                 pageImg1.src = leftUrl;
-                pageImg1.style.opacity = '1';
                 pageImg1.style.display = 'block';
             }
             
@@ -244,8 +261,15 @@ class ComicRenderer {
                     await this.fetchAndCachePage(rightPage);
                 
                 if (rightUrl) {
+                    pageImg2.onload = () => {
+                        console.log(`[ComicRenderer] Page ${rightPage} image loaded successfully`);
+                        pageImg2.style.opacity = '1';
+                    };
+                    pageImg2.onerror = (e) => {
+                        console.error(`[ComicRenderer] Failed to load image for page ${rightPage}`, e);
+                        pageImg2.style.opacity = '0.3';
+                    };
                     pageImg2.src = rightUrl;
-                    pageImg2.style.opacity = '1';
                     pageImg2.style.display = 'block';
                 }
             } else {
@@ -265,33 +289,42 @@ class ComicRenderer {
     async fetchAndCachePage(page) {
         try {
             const filePath = this.getCurrentFilePath();
+            console.log(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
+            
             const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
                 signal: this.abortController?.signal
             });
             
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            console.log(`[ComicRenderer] Response status: ${response.status}, Content-Type: ${response.headers.get('Content-Type')}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error(`[ComicRenderer] HTTP error: ${response.status} - ${errorText}`);
+                throw new Error(`HTTP ${response.status}: ${errorText}`);
+            }
             
             const blob = await response.blob();
+            console.log(`[ComicRenderer] Received blob: size=${blob.size}, type=${blob.type}`);
+            
+            if (blob.size === 0) {
+                throw new Error(`Empty response received for page ${page}`);
+            }
+            
             const url = URL.createObjectURL(blob);
             this.pageCache.set(page, url);
+            console.log(`[ComicRenderer] Created object URL for page ${page}: ${url}`);
             return url;
             
         } catch (error) {
             if (error.name === 'AbortError') return null;
-            console.error(`Error fetching page ${page}:`, error);
+            console.error(`[ComicRenderer] Error fetching page ${page}:`, error);
             throw error;
         }
     }
 
     getCurrentFilePath() {
-        // This should be passed or stored when render is called
-        // For now, we'll try to get it from the current context
-        const selectedItems = document.querySelectorAll('.file-item.selected');
-        if (selectedItems.length > 0) {
-            const fileName = selectedItems[0].querySelector('.file-name').textContent;
-            return fileName;
-        }
-        return '';
+        // Return the stored file path from the render method
+        return this.currentFilePath || '';
     }
 
     preloadAdjacentPages(currentPage) {
