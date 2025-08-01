@@ -195,6 +195,12 @@ app.get('/auth/user', (req, res) => {
 
 app.use(express.static(path.join(__dirname, 'public')));
 
+// Handle missing favicon.ico
+app.get('/favicon.ico', (req, res) => {
+    console.log(`[${new Date().toISOString()}] [Debug] Favicon requested, returning 204`);
+    res.status(204).end();
+});
+
 app.get('/api/browse', requireAuth, (req, res) => {
     const requestedPath = req.query.path || '';
     const dirPath = path.join(baseDir, requestedPath);
@@ -1043,6 +1049,9 @@ app.get('/epub-cover', requireAuth, async (req, res) => {
 app.get('/epub-preview', requireAuth, async (req, res) => {
     const requestedFile = req.query.path;
     console.log(`[${new Date().toISOString()}] GET /epub-preview - file: "${requestedFile}"`);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Full URL: ${req.url}`);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Query params:`, req.query);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Headers:`, req.headers);
     
     if (!requestedFile) {
         console.log(`[${new Date().toISOString()}] ❌ EPUB preview: File path is required`);
@@ -1050,10 +1059,19 @@ app.get('/epub-preview', requireAuth, async (req, res) => {
     }
     
     const filePath = path.join(baseDir, requestedFile);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Base dir: ${baseDir}`);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Requested file: ${requestedFile}`);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] Full file path: ${filePath}`);
+    console.log(`[${new Date().toISOString()}] [EPUB Debug] File exists: ${fs.existsSync(filePath)}`);
     
     if (!filePath.startsWith(baseDir)) {
         console.log(`[${new Date().toISOString()}] ❌ EPUB preview: Forbidden access to ${filePath}`);
         return res.status(403).json({ error: 'Forbidden' });
+    }
+    
+    if (!fs.existsSync(filePath)) {
+        console.log(`[${new Date().toISOString()}] ❌ EPUB preview: File not found: ${filePath}`);
+        return res.status(404).json({ error: 'File not found' });
     }
     
     if (path.extname(filePath).toLowerCase() !== '.epub') {
@@ -1065,9 +1083,13 @@ app.get('/epub-preview', requireAuth, async (req, res) => {
         console.log(`[${new Date().toISOString()}] 🔄 Extracting EPUB content...`);
         const epubData = await extractEpubContent(filePath);
         console.log(`[${new Date().toISOString()}] ✅ EPUB extraction completed - ${epubData.chapters.length} chapters`);
+        console.log(`[${new Date().toISOString()}] [EPUB Debug] Setting Content-Type to application/json`);
+        res.setHeader('Content-Type', 'application/json');
         res.json(epubData);
     } catch (error) {
         console.error(`[${new Date().toISOString()}] ❌ EPUB extraction error: ${error.message}`);
+        console.error(`[${new Date().toISOString()}] [EPUB Debug] Error stack:`, error.stack);
+        res.setHeader('Content-Type', 'application/json');
         res.status(500).json({ error: `EPUB extraction error: ${error.message}` });
     }
 });

@@ -627,8 +627,26 @@ class EpubRenderer {
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
         try {
+            console.log(`[EPUB Debug] Fetching: /epub-preview?path=${encodeURIComponent(filePath)}`);
             const response = await window.authManager.authenticatedFetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
-            const epubData = await response.json();
+            console.log(`[EPUB Debug] Response status: ${response.status}`);
+            console.log(`[EPUB Debug] Response headers:`, response.headers);
+            
+            // Check if response is actually JSON
+            const contentType = response.headers.get('content-type');
+            console.log(`[EPUB Debug] Content-Type: ${contentType}`);
+            
+            const responseText = await response.text();
+            console.log(`[EPUB Debug] Raw response:`, responseText.substring(0, 500));
+            
+            let epubData;
+            try {
+                epubData = JSON.parse(responseText);
+            } catch (parseError) {
+                console.error(`[EPUB Debug] JSON parse error:`, parseError);
+                console.error(`[EPUB Debug] Response was not JSON:`, responseText);
+                throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}`);
+            }
             
             if (!response.ok) {
                 throw new Error(epubData.error || 'Failed to load EPUB');

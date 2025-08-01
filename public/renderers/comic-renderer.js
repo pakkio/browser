@@ -34,28 +34,34 @@ class ComicRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
-        this.cleanup();
-        this.currentPage = 1;
-        this.totalPages = null;
-        this.currentFilePath = filePath; // Store the file path for later use
-        this.abortController = new AbortController();
-
-        const comicContainer = this.createComicContainer();
-        const { controls, pagesContainer } = this.createUIElements(comicContainer);
-        
-        contentOther.innerHTML = '';
-        contentOther.appendChild(comicContainer);
-        contentOther.style.display = 'block';
-        
-        this.setupEventHandlers(controls, filePath);
-        this.setupKeyboardNavigation();
-        
         try {
-            await this.loadComicInfo(filePath);
-            await this.loadPage(1);
+            this.cleanup();
+            this.currentPage = 1;
+            this.totalPages = null;
+            this.currentFilePath = filePath; // Store the file path for later use
+            this.abortController = new AbortController();
+            this.fileName = fileName; // Store filename for error messages
+
+            const comicContainer = this.createComicContainer();
+            const { controls, pagesContainer } = this.createUIElements(comicContainer);
+            
+            contentOther.innerHTML = '';
+            contentOther.appendChild(comicContainer);
+            contentOther.style.display = 'block';
+            
+            this.setupEventHandlers(controls, filePath);
+            this.setupKeyboardNavigation();
+            
+            try {
+                await this.loadComicInfo(filePath);
+                await this.loadPage(1);
+            } catch (error) {
+                console.error('Error loading comic:', error);
+                this.showComicError(controls, pagesContainer, error, fileName, filePath);
+            }
         } catch (error) {
-            console.error('Error loading comic:', error);
-            controls.querySelector('#comic-status').textContent = `Error: ${error.message}`;
+            console.error(`Fatal error in ComicRenderer for ${fileName}:`, error);
+            throw new Error(`Comic rendering failed: ${error.message}`);
         }
     }
 
@@ -123,6 +129,77 @@ class ComicRenderer {
             flex: 1;
         `;
         return pageImg;
+    }
+
+    showComicError(controls, pagesContainer, error, fileName, filePath) {
+        const statusElement = controls.querySelector('#comic-status');
+        if (statusElement) {
+            statusElement.textContent = `Error: ${error.message}`;
+        }
+
+        // Clear pages container and show error
+        pagesContainer.innerHTML = '';
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 300px;
+            padding: 30px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 2px dashed rgba(255, 0, 0, 0.3);
+            border-radius: 8px;
+            color: #ff6b6b;
+            text-align: center;
+            margin: 20px;
+        `;
+
+        const isCorrupted = this.isComicCorruptionError(error);
+        
+        errorDiv.innerHTML = `
+            <div style="font-size: 64px; margin-bottom: 20px;">📚</div>
+            <h3 style="margin: 0 0 15px 0; color: #ff6b6b;">
+                ${isCorrupted ? 'Comic File Corrupted' : 'Comic Load Failed'}
+            </h3>
+            <p style="margin: 10px 0; font-size: 14px;">
+                <strong>File:</strong> ${fileName}
+            </p>
+            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8; max-width: 400px;">
+                ${isCorrupted 
+                    ? 'The comic archive appears to be damaged, incomplete, or password-protected. Some pages may be missing or unreadable.'
+                    : 'Failed to load the comic file. This may be due to an unsupported format or network issues.'}
+            </p>
+            <details style="margin: 15px 0; text-align: left; max-width: 500px;">
+                <summary style="cursor: pointer; color: #ff9999; text-align: center;">Show error details</summary>
+                <pre style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px; overflow-x: auto; text-align: left;">${error.message || error.toString()}</pre>
+            </details>
+            <div style="margin-top: 20px;">
+                <a href="/files?path=${encodeURIComponent(filePath)}" 
+                   download="${fileName}"
+                   style="display: inline-block; padding: 10px 20px; background: #4ecdc4; color: white; text-decoration: none; border-radius: 4px; margin-right: 10px;">
+                    📥 Download Comic
+                </a>
+                <button onclick="location.reload()" 
+                        style="padding: 10px 20px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    🔄 Retry
+                </button>
+            </div>
+        `;
+        
+        pagesContainer.appendChild(errorDiv);
+    }
+
+    isComicCorruptionError(error) {
+        const errorMessage = (error.message || error.toString()).toLowerCase();
+        const corruptionIndicators = [
+            'corrupt', 'corrupted', 'damaged', 'invalid', 'malformed',
+            'unexpected end', 'truncated', 'bad format', 'parse error',
+            'failed to load', 'network error', 'decode error', 'format error',
+            'cannot extract', 'archive error', 'zip error', 'rar error',
+            'password', 'encrypted', 'access denied', 'permission denied'
+        ];
+        return corruptionIndicators.some(indicator => errorMessage.includes(indicator));
     }
 
     setupEventHandlers(controls, filePath) {
@@ -249,6 +326,8 @@ class ComicRenderer {
                 pageImg1.onerror = (e) => {
                     console.error(`[ComicRenderer] Failed to load image for page ${leftPage}`, e);
                     pageImg1.style.opacity = '0.3';
+                    pageImg1.alt = `Failed to load page ${leftPage}`;
+                    pageImg1.title = `Page ${leftPage} failed to load - may be corrupted`;
                 };
                 pageImg1.src = leftUrl;
                 pageImg1.style.display = 'block';
@@ -268,6 +347,8 @@ class ComicRenderer {
                     pageImg2.onerror = (e) => {
                         console.error(`[ComicRenderer] Failed to load image for page ${rightPage}`, e);
                         pageImg2.style.opacity = '0.3';
+                        pageImg2.alt = `Failed to load page ${rightPage}`;
+                        pageImg2.title = `Page ${rightPage} failed to load - may be corrupted`;
                     };
                     pageImg2.src = rightUrl;
                     pageImg2.style.display = 'block';
@@ -292,22 +373,42 @@ class ComicRenderer {
             console.log(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
             
             const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
-                signal: this.abortController?.signal
+                signal: this.abortController?.signal,
+                timeout: 30000 // 30 second timeout
             });
             
             console.log(`[ComicRenderer] Response status: ${response.status}, Content-Type: ${response.headers.get('Content-Type')}`);
             
             if (!response.ok) {
-                const errorText = await response.text();
+                const errorText = await response.text().catch(() => 'Unknown error');
                 console.error(`[ComicRenderer] HTTP error: ${response.status} - ${errorText}`);
-                throw new Error(`HTTP ${response.status}: ${errorText}`);
+                
+                // Provide more specific error messages
+                let errorMessage;
+                if (response.status === 404) {
+                    errorMessage = `Page ${page} not found in comic archive`;
+                } else if (response.status === 500) {
+                    errorMessage = `Server error extracting page ${page} - file may be corrupted`;
+                } else if (response.status === 403) {
+                    errorMessage = `Access denied - file may be password protected`;
+                } else {
+                    errorMessage = `HTTP ${response.status}: ${errorText}`;
+                }
+                
+                throw new Error(errorMessage);
             }
             
             const blob = await response.blob();
             console.log(`[ComicRenderer] Received blob: size=${blob.size}, type=${blob.type}`);
             
             if (blob.size === 0) {
-                throw new Error(`Empty response received for page ${page}`);
+                throw new Error(`Empty response received for page ${page} - may be corrupted or missing`);
+            }
+            
+            // Validate that we received an image blob
+            if (!blob.type.startsWith('image/')) {
+                console.warn(`[ComicRenderer] Unexpected content type for page ${page}: ${blob.type}`);
+                // Still try to create URL in case the server didn't set the correct content type
             }
             
             const url = URL.createObjectURL(blob);
@@ -316,9 +417,20 @@ class ComicRenderer {
             return url;
             
         } catch (error) {
-            if (error.name === 'AbortError') return null;
-            console.error(`[ComicRenderer] Error fetching page ${page}:`, error);
-            throw error;
+            if (error.name === 'AbortError') {
+                console.log(`[ComicRenderer] Page ${page} fetch aborted`);
+                return null;
+            }
+            
+            // Enhanced error logging
+            console.error(`[ComicRenderer] Error fetching page ${page} from ${this.fileName || 'unknown file'}:`, {
+                error: error.message,
+                page: page,
+                filePath: this.getCurrentFilePath(),
+                timestamp: new Date().toISOString()
+            });
+            
+            throw new Error(`Failed to load page ${page}: ${error.message}`);
         }
     }
 
