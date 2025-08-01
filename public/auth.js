@@ -130,13 +130,19 @@ class AuthManager {
 
     // Enhanced fetch that handles authentication
     async authenticatedFetch(url, options = {}) {
+        console.log(`[Auth Debug] Fetching URL: ${url}`);
+        console.log(`[Auth Debug] Options:`, options);
+        
         const defaultOptions = {
             credentials: 'include',
             ...options
         };
 
         try {
+            console.log(`[Auth Debug] Making request with options:`, defaultOptions);
             const response = await fetch(url, defaultOptions);
+            console.log(`[Auth Debug] Response status: ${response.status}`);
+            console.log(`[Auth Debug] Response headers:`, Object.fromEntries(response.headers.entries()));
             
             if (response.status === 401) {
                 // Authentication required

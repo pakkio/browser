@@ -16,6 +16,11 @@ const {
     serveVideoTranscode 
 } = require('./lib/file-handlers');
 const { serveComicPreview, getComicInfo } = require('./lib/comic-handlers');
+const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
+const { serveEpubCover, serveEpubPreview, serveCoverImageFallback } = require('./lib/epub-handlers');
+const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } = require('./lib/annotation-handlers');
+const { getCacheStats, clearCache } = require('./lib/cache-handlers');
+const { openFile } = require('./lib/system-handlers');
 
 const app = express();
 
@@ -50,6 +55,7 @@ const cache = new FileCache({
 
 // Setup routes
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.json());
 
 // Authentication routes
 setupAuthRoutes(app, passport);
@@ -65,7 +71,34 @@ app.get('/pdf-preview', requireAuth, servePdfPreview);
 app.get('/video-transcode', requireAuth, serveVideoTranscode);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
-// TODO: Add other remaining routes (archive, epub, etc.)
+// Archive routes
+app.get('/archive-contents', requireAuth, (req, res) => serveArchiveContents(req, res, cache));
+app.get('/archive-file', requireAuth, serveArchiveFile);
+
+// EPUB routes
+app.get('/epub-cover', requireAuth, serveEpubCover);
+app.get('/epub-preview', requireAuth, serveEpubPreview);
+app.get('/cover.jpeg', serveCoverImageFallback);
+app.get('/cover.jpg', serveCoverImageFallback);
+
+// Annotation routes
+app.get('/api/annotations', requireAuth, getAnnotations);
+app.post('/api/annotations', requireAuth, postAnnotations);
+app.delete('/api/annotations', requireAuth, deleteAnnotations);
+app.get('/api/search-annotations', requireAuth, searchAnnotations);
+
+// Cache management routes
+app.get('/api/cache/stats', requireAuth, (req, res) => getCacheStats(req, res, cache));
+app.post('/api/cache/clear', requireAuth, (req, res) => clearCache(req, res, cache));
+
+// System routes
+app.post('/api/open-file', requireAuth, openFile);
+
+// Image serving route for EPUB content
+app.get('/images/:filename', requireAuth, async (req, res) => {
+    // This endpoint needs special handling for EPUB images - keeping as placeholder
+    res.status(404).json({ error: 'Image endpoint not fully implemented yet' });
+});
 
 app.listen(port, () => {
     console.log(`🌐 Server running at http://localhost:${port}`);

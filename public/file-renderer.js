@@ -123,48 +123,127 @@ class FileRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
-        // Stop all media playback before switching files
-        this.stopAllMedia();
-        
-        // Cleanup previous renderer's specific event listeners or states
-        if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
-            this.currentHandler.cleanup();
-        }
-
-        const fileType = this.getFileType(fileName);
-        const handler = this.handlers.get(fileType);
-        this.currentHandler = handler; // Set the new handler
-
-        console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
-
-        // Show progress for file rendering
-        if (window.debugConsole) {
-            window.debugConsole.showProgress(`Rendering ${fileType}: ${fileName}`, 20);
-        }
-
-        contentCode.innerHTML = '';
-        contentOther.innerHTML = '';
-        contentCode.parentElement.style.display = 'none';
-        contentOther.style.display = 'none';
-        
-        if (handler) {
-            if (window.debugConsole) {
-                window.debugConsole.updateProgress(`Processing ${fileType}...`, 60);
+        try {
+            // Stop all media playback before switching files
+            this.stopAllMedia();
+            
+            // Cleanup previous renderer's specific event listeners or states
+            if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
+                try {
+                    this.currentHandler.cleanup();
+                } catch (cleanupError) {
+                    console.warn('Error during renderer cleanup:', cleanupError);
+                }
             }
-            await handler.render(filePath, fileName, contentCode, contentOther, options);
+
+            const fileType = this.getFileType(fileName);
+            const handler = this.handlers.get(fileType);
+            this.currentHandler = handler; // Set the new handler
+
+            console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
+
+            // Show progress for file rendering
             if (window.debugConsole) {
-                window.debugConsole.showProgress('Rendering complete', 100);
-                setTimeout(() => {
+                window.debugConsole.showProgress(`Rendering ${fileType}: ${fileName}`, 20);
+            }
+
+            contentCode.innerHTML = '';
+            contentOther.innerHTML = '';
+            contentCode.parentElement.style.display = 'none';
+            contentOther.style.display = 'none';
+            
+            if (handler) {
+                try {
+                    if (window.debugConsole) {
+                        window.debugConsole.updateProgress(`Processing ${fileType}...`, 60);
+                    }
+                    await handler.render(filePath, fileName, contentCode, contentOther, options);
+                    if (window.debugConsole) {
+                        window.debugConsole.showProgress('Rendering complete', 100);
+                        setTimeout(() => {
+                            window.debugConsole.hideProgress();
+                        }, 300);
+                    }
+                } catch (renderError) {
+                    console.error(`Error rendering ${fileType} file "${fileName}":`, renderError);
+                    this.showErrorMessage(contentOther, fileName, renderError, filePath);
+                    if (window.debugConsole) {
+                        window.debugConsole.hideProgress();
+                    }
+                }
+            } else {
+                contentOther.textContent = 'File type not supported for preview.';
+                contentOther.style.display = 'block';
+                if (window.debugConsole) {
                     window.debugConsole.hideProgress();
-                }, 300);
+                }
             }
-        } else {
-            contentOther.textContent = 'File type not supported for preview.';
-            contentOther.style.display = 'block';
+        } catch (fatalError) {
+            console.error(`Fatal error in FileRenderer for "${fileName}":`, fatalError);
+            this.showErrorMessage(contentOther, fileName, fatalError, filePath);
             if (window.debugConsole) {
                 window.debugConsole.hideProgress();
             }
         }
+    }
+
+    showErrorMessage(contentContainer, fileName, error, filePath) {
+        const errorDiv = document.createElement('div');
+        errorDiv.style.cssText = `
+            padding: 20px;
+            margin: 20px;
+            background: rgba(255, 0, 0, 0.1);
+            border: 1px solid rgba(255, 0, 0, 0.3);
+            border-radius: 8px;
+            color: #ff6b6b;
+            font-family: monospace;
+            text-align: center;
+        `;
+        
+        const isCorruptedFile = this.isCorruptionError(error);
+        const errorType = isCorruptedFile ? 'File appears to be corrupted' : 'File rendering error';
+        
+        errorDiv.innerHTML = `
+            <h3 style="color: #ff6b6b; margin: 0 0 15px 0;">⚠️ ${errorType}</h3>
+            <p style="margin: 10px 0; font-size: 14px;">
+                <strong>File:</strong> ${fileName}
+            </p>
+            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8;">
+                ${isCorruptedFile 
+                    ? 'The file may be damaged, incomplete, or in an unsupported format variant.' 
+                    : 'An unexpected error occurred while trying to render this file.'}
+            </p>
+            <details style="margin: 15px 0; text-align: left;">
+                <summary style="cursor: pointer; color: #ff9999;">Show error details</summary>
+                <pre style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px; overflow-x: auto;">${error.message || error.toString()}</pre>
+            </details>
+            <div style="margin-top: 15px;">
+                <a href="/files?path=${encodeURIComponent(filePath)}" 
+                   download="${fileName}" 
+                   style="display: inline-block; padding: 8px 16px; background: #4ecdc4; color: white; text-decoration: none; border-radius: 4px; font-size: 14px;">
+                    📥 Download File
+                </a>
+                <button onclick="location.reload()" 
+                        style="margin-left: 10px; padding: 8px 16px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px;">
+                    🔄 Retry
+                </button>
+            </div>
+        `;
+        
+        contentContainer.innerHTML = '';
+        contentContainer.appendChild(errorDiv);
+        contentContainer.style.display = 'block';
+    }
+
+    isCorruptionError(error) {
+        const errorMessage = (error.message || error.toString()).toLowerCase();
+        const corruptionIndicators = [
+            'corrupt', 'corrupted', 'damaged', 'invalid', 'malformed', 
+            'unexpected end', 'truncated', 'bad format', 'parse error',
+            'failed to load', 'network error', 'decode error', 'format error',
+            'unsupported', 'cannot read', 'invalid signature', 'header error'
+        ];
+        return corruptionIndicators.some(indicator => errorMessage.includes(indicator));
     }
 
     async testRender(fileType, testFilePath, testFileName) {
