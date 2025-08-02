@@ -412,7 +412,26 @@ function initializeFileExplorer() {
     
     function updateCurrentPathDisplay(fullPath, fileCount) {
         const pathDisplay = document.getElementById('current-path-display');
-        pathDisplay.textContent = `${fullPath} (${fileCount} items)`;
+        
+        // Create breadcrumb navigation
+        const pathParts = fullPath ? fullPath.split('/') : [];
+        let breadcrumbs = `<button class="path-home" onclick="window.fileExplorer.loadFiles('')" title="Home">🏠</button>`;
+        
+        if (pathParts.length > 0) {
+            breadcrumbs += ' / ';
+            pathParts.forEach((part, index) => {
+                if (part) {
+                    const pathToHere = pathParts.slice(0, index + 1).join('/');
+                    breadcrumbs += `<button class="path-segment" onclick="window.fileExplorer.loadFiles('${pathToHere}')" title="Navigate to ${pathToHere}">${part}</button>`;
+                    if (index < pathParts.length - 1) {
+                        breadcrumbs += ' / ';
+                    }
+                }
+            });
+        }
+        
+        breadcrumbs += ` <span class="item-count">(${fileCount} items)</span>`;
+        pathDisplay.innerHTML = breadcrumbs;
     }
     
     function selectFile(index, filePath, fileName, options = {}) {

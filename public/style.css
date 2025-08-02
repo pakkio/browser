@@ -173,6 +173,40 @@ body {
 .current-path {
     padding: 8px;
     border-bottom: 1px solid #333;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 2px;
+}
+
+.path-home,
+.path-segment {
+    background: transparent;
+    border: 1px solid #555;
+    color: #d4d4d4;
+    padding: 4px 8px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s ease;
+}
+
+.path-home:hover,
+.path-segment:hover {
+    background: #3c3c3c;
+    border-color: #00aacc;
+    color: #00aacc;
+}
+
+.path-home {
+    font-size: 14px;
+    padding: 4px 6px;
+}
+
+.item-count {
+    color: #888;
+    font-size: 11px;
+    margin-left: 8px;
 }
 
 /* Adjust container when user bar is shown */
@@ -1100,6 +1134,30 @@ audio, video {
 
 .debug-content {
     color: #d4d4d4;
+}
+
+.debug-log {
+    border-left-color: #666;
+    background: rgba(102, 102, 102, 0.1);
+}
+
+.debug-error {
+    border-left-color: #ff6b6b;
+    background: rgba(255, 107, 107, 0.1);
+}
+
+.debug-warn {
+    border-left-color: #ffa726;
+    background: rgba(255, 167, 38, 0.1);
+}
+
+.debug-info {
+    border-left-color: #42a5f5;
+    background: rgba(66, 165, 245, 0.1);
+}
+
+.debug-icon {
+    margin-right: 8px;
 }
 
 /* Hover Debug Console */

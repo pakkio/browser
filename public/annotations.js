@@ -902,8 +902,8 @@ class AnnotationManager {
         
         // Use the existing file explorer to navigate
         if (window.fileExplorer && window.fileExplorer.loadFiles) {
-            // If directory is empty, the file is in the root - use current path
-            const targetDirectory = directory || window.fileExplorer.currentPath();
+            // Use the directory from the file path, not the current path
+            const targetDirectory = directory || '';
             console.log('Loading directory:', targetDirectory);
             
             // Load the directory first
