@@ -195,16 +195,36 @@ class PDFRenderer {
         this.uiManager.setStatus('Loading PDF...');
         
         try {
-            const response = await window.authManager.authenticatedFetch(`/api/pdf-info?path=${encodeURIComponent(filePath)}`);
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            // Load the PDF document using authenticated fetch
+            const response = await window.authManager.authenticatedFetch(
+                `/files?path=${encodeURIComponent(filePath)}`,
+                { timeout: 30000 } // 30 second timeout
+            );
             
-            const info = await response.json();
-            this.uiManager.setTotalPages(info.pages);
+            if (!response.ok) {
+                const errorText = await response.text().catch(() => 'Unknown error');
+                let errorMessage;
+                if (response.status === 404) {
+                    errorMessage = `PDF file not found`;
+                } else if (response.status === 500) {
+                    errorMessage = `Server error loading PDF - file may be corrupted`;
+                } else if (response.status === 403) {
+                    errorMessage = `Access denied - PDF may be password protected`;
+                } else {
+                    errorMessage = `HTTP ${response.status}: ${errorText}`;
+                }
+                throw new Error(errorMessage);
+            }
+            
+            const arrayBuffer = await response.arrayBuffer();
+            this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            this.uiManager.setTotalPages(this.pdfDoc.numPages);
             this.uiManager.setStatus('');
             
             await this.loadPage(1);
         } catch (error) {
-            console.error('Failed to load PDF info:', error);
+            console.error('Failed to load PDF:', error);
             throw error;
         }
     }
@@ -278,82 +298,61 @@ class PDFRenderer {
 
     async renderPage(pageNum, canvas) {
         try {
-            const response = await window.authManager.authenticatedFetch(
-                `/pdf-preview?path=${encodeURIComponent(this.filePath)}&page=${pageNum}`,
-                { timeout: 30000 } // 30 second timeout
-            );
-            
-            if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
-                let errorMessage;
-                if (response.status === 404) {
-                    errorMessage = `Page ${pageNum} not found in PDF`;
-                } else if (response.status === 500) {
-                    errorMessage = `Server error rendering page ${pageNum} - PDF may be corrupted`;
-                } else if (response.status === 403) {
-                    errorMessage = `Access denied - PDF may be password protected`;
-                } else {
-                    errorMessage = `HTTP ${response.status}: ${errorText}`;
-                }
-                throw new Error(errorMessage);
-            }
-            
-            const blob = await response.blob();
-            
-            if (blob.size === 0) {
-                throw new Error(`Empty response received for page ${pageNum}`);
-            }
-            
-            // Validate that we received an image blob
-            if (!blob.type.startsWith('image/')) {
-                console.warn(`Unexpected content type for PDF page ${pageNum}: ${blob.type}`);
-            }
-            
-            const img = new Image();
-            
-            return new Promise((resolve, reject) => {
-                const timeoutId = setTimeout(() => {
-                    reject(new Error(`Timeout loading image for page ${pageNum}`));
-                }, 15000); // 15 second timeout for image loading
+            if (!this.pdfDoc) {
+                // Load the PDF document using authenticated fetch
+                const response = await window.authManager.authenticatedFetch(
+                    `/files?path=${encodeURIComponent(this.filePath)}`,
+                    { timeout: 30000 } // 30 second timeout
+                );
                 
-                img.onload = () => {
-                    clearTimeout(timeoutId);
-                    try {
-                        const ctx = canvas.getContext('2d');
-                        const containerRect = canvas.parentElement.getBoundingClientRect();
-                        const maxWidth = containerRect.width - 20;
-                        const maxHeight = containerRect.height - 20;
-                        
-                        const scale = Math.min(maxWidth / img.width, maxHeight / img.height);
-                        const width = img.width * scale;
-                        const height = img.height * scale;
-                        
-                        canvas.width = width;
-                        canvas.height = height;
-                        canvas.style.display = 'block';
-                        
-                        ctx.clearRect(0, 0, width, height);
-                        ctx.drawImage(img, 0, 0, width, height);
-                        
-                        resolve();
-                    } catch (renderError) {
-                        reject(new Error(`Canvas rendering failed for page ${pageNum}: ${renderError.message}`));
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => 'Unknown error');
+                    let errorMessage;
+                    if (response.status === 404) {
+                        errorMessage = `PDF file not found`;
+                    } else if (response.status === 500) {
+                        errorMessage = `Server error loading PDF - file may be corrupted`;
+                    } else if (response.status === 403) {
+                        errorMessage = `Access denied - PDF may be password protected`;
+                    } else {
+                        errorMessage = `HTTP ${response.status}: ${errorText}`;
                     }
-                };
-                
-                img.onerror = (event) => {
-                    clearTimeout(timeoutId);
-                    console.error(`Image load error for page ${pageNum}:`, event);
-                    reject(new Error(`Failed to load page ${pageNum} image - may be corrupted`));
-                };
-                
-                try {
-                    img.src = URL.createObjectURL(blob);
-                } catch (urlError) {
-                    clearTimeout(timeoutId);
-                    reject(new Error(`Failed to create object URL for page ${pageNum}: ${urlError.message}`));
+                    throw new Error(errorMessage);
                 }
-            });
+                
+                const arrayBuffer = await response.arrayBuffer();
+                this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            }
+            
+            // Get the page
+            const page = await this.pdfDoc.getPage(pageNum);
+            
+            // Get viewport and calculate scale
+            const containerRect = canvas.parentElement.getBoundingClientRect();
+            const maxWidth = containerRect.width - 20;
+            const maxHeight = containerRect.height - 20;
+            
+            const viewport = page.getViewport({ scale: 1.0 });
+            const scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height);
+            const scaledViewport = page.getViewport({ scale: scale });
+            
+            // Set canvas dimensions
+            canvas.width = scaledViewport.width;
+            canvas.height = scaledViewport.height;
+            canvas.style.display = 'block';
+            
+            // Render the page
+            const renderContext = {
+                canvasContext: canvas.getContext('2d'),
+                viewport: scaledViewport
+            };
+            
+            const renderTask = page.render(renderContext);
+            
+            // Render the text layer
+            await this.renderTextLayer(page, scaledViewport, pageNum);
+            
+            return renderTask.promise;
         } catch (error) {
             console.error(`Error rendering PDF page ${pageNum} from ${this.fileName || 'unknown file'}:`, {
                 error: error.message,
@@ -362,6 +361,36 @@ class PDFRenderer {
                 timestamp: new Date().toISOString()
             });
             throw error;
+        }
+    }
+    
+    async renderTextLayer(page, viewport, pageNum) {
+        try {
+            // Get text content
+            const textContent = await page.getTextContent();
+            
+            // Get the text layer div
+            const textLayerId = pageNum === this.uiManager.currentPage ? 'pdf-text-layer-left' : 'pdf-text-layer-right';
+            const textLayerDiv = document.getElementById(textLayerId);
+            
+            if (!textLayerDiv) return;
+            
+            // Clear previous content
+            textLayerDiv.innerHTML = '';
+            
+            // Set text layer dimensions
+            textLayerDiv.style.width = `${viewport.width}px`;
+            textLayerDiv.style.height = `${viewport.height}px`;
+            
+            // Render text layer
+            pdfjsLib.renderTextLayer({
+                textContent: textContent,
+                container: textLayerDiv,
+                viewport: viewport,
+                textDivs: []
+            });
+        } catch (error) {
+            console.warn(`Failed to render text layer for page ${pageNum}:`, error);
         }
     }
 

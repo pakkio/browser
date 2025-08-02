@@ -112,9 +112,8 @@ class PDFUIManager {
         textLayer.className = 'textLayer';
         textLayer.style.cssText = `
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
+            left: 0;
+            top: 0;
             overflow: hidden;
             opacity: 0;
             line-height: 1.0;
@@ -163,6 +162,7 @@ class PDFUIManager {
                 -webkit-user-select: text !important;
                 -moz-user-select: text !important;
                 -ms-user-select: text !important;
+                pointer-events: auto !important;
             }
             
             #pdf-text-layer-left:hover, #pdf-text-layer-right:hover {
@@ -326,12 +326,12 @@ class PDFUIManager {
 
         if (this.textLayerVisible) {
             if (textLayer1) {
-                textLayer1.style.opacity = '0.01';
+                textLayer1.style.opacity = '1';
                 textLayer1.style.pointerEvents = 'auto';
                 textLayer1.style.display = 'block';
             }
             if (textLayer2) {
-                textLayer2.style.opacity = '0.01';
+                textLayer2.style.opacity = '1';
                 textLayer2.style.pointerEvents = 'auto';
                 textLayer2.style.display = 'block';
             }
