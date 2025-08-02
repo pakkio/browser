@@ -123,9 +123,8 @@ class PDFRenderer {
         textLayer1.className = 'textLayer';
         textLayer1.style.cssText = `
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
+            left: 0;
+            top: 0;
             overflow: hidden;
             opacity: 0;
             line-height: 1.0;
@@ -163,9 +162,8 @@ class PDFRenderer {
         textLayer2.className = 'textLayer';
         textLayer2.style.cssText = `
             position: absolute;
-            left: 50%;
-            top: 50%;
-            transform: translate(-50%, -50%);
+            left: 0;
+            top: 0;
             overflow: hidden;
             opacity: 0;
             line-height: 1.0;
@@ -219,6 +217,7 @@ class PDFRenderer {
                 -webkit-user-select: text !important;
                 -moz-user-select: text !important;
                 -ms-user-select: text !important;
+                pointer-events: auto !important;
             }
             
             #pdf-text-layer-left:hover, #pdf-text-layer-right:hover {
@@ -291,17 +290,19 @@ class PDFRenderer {
             const textLayer2 = document.getElementById('pdf-text-layer-right');
             
             if (textLayerVisible) {
-                textLayer1.style.opacity = '0.01';
+                textLayer1.style.opacity = '1';
                 textLayer1.style.pointerEvents = 'auto';
                 textLayer1.style.display = 'block';
-                textLayer2.style.opacity = '0.01';
+                textLayer2.style.opacity = '1';
                 textLayer2.style.pointerEvents = 'auto';
                 textLayer2.style.display = 'block';
             } else {
                 textLayer1.style.opacity = '0';
                 textLayer1.style.pointerEvents = 'none';
+                textLayer1.style.display = 'none';
                 textLayer2.style.opacity = '0';
                 textLayer2.style.pointerEvents = 'none';
+                textLayer2.style.display = 'none';
             }
         };
 
@@ -388,9 +389,6 @@ class PDFRenderer {
                     textLayerDiv.innerHTML = '';
                     
                     // Match the canvas dimensions exactly
-                    const canvasRect = canvas.getBoundingClientRect();
-                    const canvasStyle = window.getComputedStyle(canvas);
-                    
                     textLayerDiv.style.width = canvas.width + 'px';
                     textLayerDiv.style.height = canvas.height + 'px';
                     textLayerDiv.style.left = '0px';
