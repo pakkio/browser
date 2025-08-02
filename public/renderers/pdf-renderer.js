@@ -1,6 +1,7 @@
 class PDFRenderer {
     constructor() {
         this.handleKeyDown = null;
+        this.handleWheel = null;
         this.pdfDoc = null;
         this.renderTask1 = null;
         this.renderTask2 = null;
@@ -13,6 +14,10 @@ class PDFRenderer {
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
+        }
+        if (this.handleWheel) {
+            document.removeEventListener('wheel', this.handleWheel);
+            this.handleWheel = null;
         }
         
         if (this.renderTask1) {
@@ -104,7 +109,20 @@ class PDFRenderer {
             }
         };
 
+        this.handleWheel = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            
+            e.preventDefault();
+            
+            if (e.deltaY > 0) {
+                this.nextPage();
+            } else if (e.deltaY < 0) {
+                this.previousPage();
+            }
+        };
+
         document.addEventListener('keydown', this.handleKeyDown);
+        document.addEventListener('wheel', this.handleWheel, { passive: false });
     }
 
     showPDFError(pagesContainer, error, fileName, filePath) {
