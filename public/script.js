@@ -319,7 +319,7 @@ function initializeFileExplorer() {
     }
 
     function showContent(path, fileName, options = {}) {
-        const filePath = path ? `/${path}/${fileName}` : `/${fileName}`;
+        const filePath = path ? `${path}/${fileName}` : fileName;
         
         fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
     }
