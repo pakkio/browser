@@ -15,4 +15,4 @@ fi
 
 # Run the server
 echo "Starting server..."
-node server-refactored.js /mnt/z
+node server.js /mnt/z
