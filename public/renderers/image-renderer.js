@@ -1,8 +1,30 @@
 class ImageRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.isFullscreen = false;
+        this.originalParent = null;
+        this.fullscreenContainer = null;
+        this.currentImageContainer = null;
+    }
+
+    cleanup() {
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+        
+        // Exit fullscreen if active
+        if (this.isFullscreen) {
+            this.exitFullscreen();
+        }
+    }
+
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
+        this.cleanup();
         try {
             const img = document.createElement('img');
             const imageContainer = document.createElement('div');
+            imageContainer.className = 'image-container';
             imageContainer.style.cssText = `
                 display: flex;
                 flex-direction: column;
@@ -10,7 +32,53 @@ class ImageRenderer {
                 justify-content: center;
                 min-height: 200px;
                 text-align: center;
+                position: relative;
+                height: 100%;
             `;
+            
+            // Store reference for fullscreen
+            this.currentImageContainer = imageContainer;
+            
+            // Create controls
+            const controls = document.createElement('div');
+            controls.className = 'image-controls';
+            controls.style.cssText = `
+                position: absolute;
+                top: 10px;
+                right: 10px;
+                z-index: 10;
+                opacity: 0;
+                transition: opacity 0.3s ease-in-out;
+            `;
+            
+            const fullscreenBtn = document.createElement('button');
+            fullscreenBtn.id = 'image-fullscreen';
+            fullscreenBtn.innerHTML = '📺 Fullscreen';
+            fullscreenBtn.title = 'Toggle Fullscreen (F key)';
+            fullscreenBtn.style.cssText = `
+                background: #4CAF50;
+                color: white;
+                border: none;
+                padding: 8px 12px;
+                border-radius: 6px;
+                cursor: pointer;
+                font-size: 12px;
+                box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            `;
+            
+            controls.appendChild(fullscreenBtn);
+            imageContainer.appendChild(controls);
+            
+            // Show controls on hover
+            imageContainer.addEventListener('mouseenter', () => {
+                controls.style.opacity = '1';
+            });
+            imageContainer.addEventListener('mouseleave', () => {
+                controls.style.opacity = '0';
+            });
+            
+            // Fullscreen button event listener
+            fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
 
             // Add loading indicator
             const loadingDiv = document.createElement('div');
@@ -116,10 +184,197 @@ class ImageRenderer {
             
             contentOther.appendChild(imageContainer);
             contentOther.style.display = 'block';
+            
+            // Setup keyboard navigation
+            this.setupKeyboardNavigation();
 
         } catch (error) {
             console.error(`Error in ImageRenderer for ${fileName}:`, error);
             throw new Error(`Image rendering failed: ${error.message}`);
         }
+    }
+
+    setupKeyboardNavigation() {
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT') return;
+            
+            switch (e.key) {
+                case 'f':
+                case 'F':
+                    e.preventDefault();
+                    this.toggleFullscreen();
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.exitFullscreen();
+                    }
+                    break;
+            }
+        };
+        
+        document.addEventListener('keydown', this.handleKeyDown);
+    }
+
+    toggleFullscreen() {
+        if (this.isFullscreen) {
+            this.exitFullscreen();
+        } else {
+            this.enterFullscreen();
+        }
+    }
+
+    enterFullscreen() {
+        if (this.isFullscreen || !this.currentImageContainer) return;
+
+        const imageContainer = this.currentImageContainer;
+
+        // Store original parent and position
+        this.originalParent = imageContainer.parentNode;
+
+        // Create fullscreen container
+        this.fullscreenContainer = document.createElement('div');
+        this.fullscreenContainer.className = 'image-fullscreen-overlay';
+        this.fullscreenContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 10000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        `;
+
+        // Move image container to fullscreen
+        this.fullscreenContainer.appendChild(imageContainer);
+        document.body.appendChild(this.fullscreenContainer);
+
+        // Update styles for fullscreen
+        imageContainer.style.cssText = `
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            width: 100%;
+            height: 100%;
+            text-align: center;
+            position: relative;
+            background: #000;
+        `;
+
+        // Update image for fullscreen
+        const img = imageContainer.querySelector('img');
+        if (img) {
+            img.style.cssText = `
+                max-width: 100vw;
+                max-height: 100vh;
+                object-fit: contain;
+                border-radius: 0;
+                box-shadow: none;
+                display: block;
+            `;
+        }
+
+        // Update controls for fullscreen
+        const controls = imageContainer.querySelector('.image-controls');
+        if (controls) {
+            controls.style.cssText = `
+                position: absolute;
+                top: 20px;
+                right: 20px;
+                z-index: 10;
+                opacity: 1;
+                transition: opacity 0.3s ease-in-out;
+            `;
+        }
+
+        // Update fullscreen button
+        const fullscreenBtn = controls?.querySelector('#image-fullscreen');
+        if (fullscreenBtn) {
+            fullscreenBtn.textContent = '🪟 Exit Fullscreen';
+            fullscreenBtn.title = 'Exit Fullscreen (ESC key)';
+        }
+
+        // Hide info div in fullscreen
+        const infoDiv = imageContainer.querySelector('div:last-child');
+        if (infoDiv && infoDiv.textContent && infoDiv.textContent.includes('×')) {
+            infoDiv.style.display = 'none';
+        }
+
+        this.isFullscreen = true;
+        console.log('Image entered fullscreen mode');
+    }
+
+    exitFullscreen() {
+        if (!this.isFullscreen || !this.fullscreenContainer || !this.originalParent) return;
+
+        const imageContainer = this.fullscreenContainer.querySelector('.image-container');
+        if (imageContainer) {
+            // Restore original styles
+            imageContainer.style.cssText = `
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: center;
+                min-height: 200px;
+                text-align: center;
+                position: relative;
+                height: 100%;
+            `;
+
+            // Restore image styles
+            const img = imageContainer.querySelector('img');
+            if (img) {
+                img.style.cssText = `
+                    max-width: 100%;
+                    max-height: 80vh;
+                    object-fit: contain;
+                    border-radius: 8px;
+                    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+                    display: block;
+                `;
+            }
+
+            // Restore controls
+            const controls = imageContainer.querySelector('.image-controls');
+            if (controls) {
+                controls.style.cssText = `
+                    position: absolute;
+                    top: 10px;
+                    right: 10px;
+                    z-index: 10;
+                    opacity: 0;
+                    transition: opacity 0.3s ease-in-out;
+                `;
+            }
+
+            // Update fullscreen button
+            const fullscreenBtn = controls?.querySelector('#image-fullscreen');
+            if (fullscreenBtn) {
+                fullscreenBtn.textContent = '📺 Fullscreen';
+                fullscreenBtn.title = 'Toggle Fullscreen (F key)';
+            }
+
+            // Show info div again
+            const infoDiv = imageContainer.querySelector('div:last-child');
+            if (infoDiv && infoDiv.textContent && infoDiv.textContent.includes('×')) {
+                infoDiv.style.display = 'block';
+            }
+
+            // Move back to original parent
+            this.originalParent.appendChild(imageContainer);
+        }
+
+        // Remove fullscreen container
+        document.body.removeChild(this.fullscreenContainer);
+
+        // Reset state
+        this.fullscreenContainer = null;
+        this.originalParent = null;
+        this.isFullscreen = false;
+        console.log('Image exited fullscreen mode');
     }
 }

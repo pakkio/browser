@@ -10,6 +10,9 @@ class PDFRenderer {
         this.filePath = null;
         this.zoomLevel = 1.0; // Default zoom level
         this.fitToWidth = true; // Default to fit-to-width mode
+        this.isFullscreen = false;
+        this.originalParent = null;
+        this.fullscreenContainer = null;
     }
 
     cleanup() {
@@ -31,6 +34,11 @@ class PDFRenderer {
             }
             
             this.handleWheel = null;
+        }
+        
+        // Exit fullscreen if active
+        if (this.isFullscreen) {
+            this.exitFullscreen();
         }
         
         if (this.renderTask1) {
@@ -99,7 +107,8 @@ class PDFRenderer {
         this.uiManager.setupEventHandlers(
             controls,
             (page) => this.loadPage(page),
-            (mode) => this.handleModeChange(mode)
+            (mode) => this.handleModeChange(mode),
+            () => this.toggleFullscreen()
         );
         
         // Add wheel listeners to PDF containers after they're created
@@ -143,6 +152,17 @@ class PDFRenderer {
                 case 'End':
                     e.preventDefault();
                     if (this.uiManager.totalPages) this.loadPage(this.uiManager.totalPages);
+                    break;
+                case 'f':
+                case 'F':
+                    e.preventDefault();
+                    this.toggleFullscreen();
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.exitFullscreen();
+                    }
                     break;
                 case 'r': case 'g': case 'y': case 'b': case 'c':
                 case '1': case '2': case '3': case '4': case '5':
@@ -555,6 +575,181 @@ class PDFRenderer {
         this.uiManager.updateZoomDisplay(this.zoomLevel, this.fitToWidth);
         
         // Refresh the current page with new zoom
+        this.refreshCurrentPage();
+    }
+
+    toggleFullscreen() {
+        if (this.isFullscreen) {
+            this.exitFullscreen();
+        } else {
+            this.enterFullscreen();
+        }
+    }
+
+    enterFullscreen() {
+        if (this.isFullscreen) return;
+
+        const pdfContainer = document.querySelector('.pdf-container');
+        if (!pdfContainer) return;
+
+        // Store original parent and position
+        this.originalParent = pdfContainer.parentNode;
+
+        // Create fullscreen container
+        this.fullscreenContainer = document.createElement('div');
+        this.fullscreenContainer.className = 'pdf-fullscreen-overlay';
+        this.fullscreenContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #222;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+        `;
+
+        // Move PDF container to fullscreen
+        this.fullscreenContainer.appendChild(pdfContainer);
+        document.body.appendChild(this.fullscreenContainer);
+
+        // Update styles for fullscreen
+        pdfContainer.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #222;
+        `;
+
+        // Update pages container for fullscreen
+        const pagesContainer = pdfContainer.querySelector('.pdf-pages-container');
+        if (pagesContainer) {
+            pagesContainer.style.cssText = `
+                display: flex;
+                gap: 20px;
+                flex: 1;
+                align-items: center;
+                justify-content: center;
+                min-height: 0;
+                padding: 20px;
+                overflow: auto;
+                height: 100%;
+                background: #222;
+            `;
+        }
+
+        // Update controls for fullscreen
+        const controls = pdfContainer.querySelector('.pdf-controls');
+        if (controls) {
+            controls.style.cssText = `
+                position: static;
+                bottom: auto;
+                left: auto;
+                right: auto;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 15px 20px;
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                flex-shrink: 0;
+                opacity: 1;
+                transition: opacity 0.3s ease-in-out;
+                order: -1;
+                margin-bottom: 10px;
+                border-radius: 10px;
+                flex-wrap: wrap;
+                gap: 10px;
+                color: white;
+            `;
+        }
+
+        // Update fullscreen button
+        const fullscreenBtn = controls?.querySelector('#pdf-fullscreen');
+        if (fullscreenBtn) {
+            fullscreenBtn.textContent = '🪟 Exit Fullscreen';
+            fullscreenBtn.title = 'Exit Fullscreen (ESC key)';
+        }
+
+        this.isFullscreen = true;
+        console.log('PDF entered fullscreen mode');
+        
+        // Refresh current page to fit new container
+        this.refreshCurrentPage();
+    }
+
+    exitFullscreen() {
+        if (!this.isFullscreen || !this.fullscreenContainer || !this.originalParent) return;
+
+        const pdfContainer = this.fullscreenContainer.querySelector('.pdf-container');
+        if (pdfContainer) {
+            // Restore original styles
+            pdfContainer.style.cssText = 'height: 100%; display: flex; flex-direction: column; position: relative;';
+
+            // Restore pages container
+            const pagesContainer = pdfContainer.querySelector('.pdf-pages-container');
+            if (pagesContainer) {
+                pagesContainer.style.cssText = `
+                    display: flex;
+                    gap: 20px;
+                    flex: 1;
+                    align-items: flex-start;
+                    justify-content: center;
+                    min-height: 0;
+                    padding: 20px;
+                    overflow: auto;
+                    height: 100%;
+                `;
+            }
+
+            // Restore controls
+            const controls = pdfContainer.querySelector('.pdf-controls');
+            if (controls) {
+                controls.style.cssText = `
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 10px;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(10px);
+                    border-top: 1px solid rgba(255, 255, 255, 0.2);
+                    flex-wrap: wrap;
+                    gap: 10px;
+                    z-index: 10;
+                    flex-shrink: 0;
+                    opacity: 0;
+                    transition: opacity 0.3s ease-in-out;
+                `;
+            }
+
+            // Update fullscreen button
+            const fullscreenBtn = controls?.querySelector('#pdf-fullscreen');
+            if (fullscreenBtn) {
+                fullscreenBtn.textContent = '📺 Fullscreen';
+                fullscreenBtn.title = 'Toggle Fullscreen (F key)';
+            }
+
+            // Move back to original parent
+            this.originalParent.appendChild(pdfContainer);
+        }
+
+        // Remove fullscreen container
+        document.body.removeChild(this.fullscreenContainer);
+
+        // Reset state
+        this.fullscreenContainer = null;
+        this.originalParent = null;
+        this.isFullscreen = false;
+        console.log('PDF exited fullscreen mode');
+        
+        // Refresh current page to fit new container
         this.refreshCurrentPage();
     }
 }

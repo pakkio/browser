@@ -8,6 +8,9 @@ class ComicRenderer {
         this.abortController = null;
         this.pageCache = new Map();
         this.preloadQueue = [];
+        this.isFullscreen = false;
+        this.originalParent = null;
+        this.fullscreenContainer = null;
     }
 
     cleanup() {
@@ -18,6 +21,11 @@ class ComicRenderer {
         if (this.handleWheel) {
             document.removeEventListener('wheel', this.handleWheel);
             this.handleWheel = null;
+        }
+        
+        // Exit fullscreen if active
+        if (this.isFullscreen) {
+            this.exitFullscreen();
         }
         
         if (this.abortController) {
@@ -92,6 +100,7 @@ class ComicRenderer {
             <button id="comic-next">Next</button>
             <input type="number" id="comic-page-jump" placeholder="Page" style="width: 60px; margin-left: 20px;">
             <button id="comic-jump-btn" style="margin-left: 5px;">Go</button>
+            <button id="comic-fullscreen" style="margin-left: 20px; background: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;" title="Toggle Fullscreen (F key)">📺 Fullscreen</button>
             <span id="comic-status" style="margin-left: 10px; font-style: italic;">Loading comic info...</span>
         `;
         return controls;
@@ -207,6 +216,7 @@ class ComicRenderer {
         const nextBtn = controls.querySelector('#comic-next');
         const jumpInput = controls.querySelector('#comic-page-jump');
         const jumpBtn = controls.querySelector('#comic-jump-btn');
+        const fullscreenBtn = controls.querySelector('#comic-fullscreen');
 
         prevBtn.addEventListener('click', () => this.previousPage());
         nextBtn.addEventListener('click', () => this.nextPage());
@@ -223,6 +233,8 @@ class ComicRenderer {
                 jumpBtn.click();
             }
         });
+        
+        fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
     }
 
     setupKeyboardNavigation() {
@@ -247,6 +259,17 @@ class ComicRenderer {
                 case 'End':
                     e.preventDefault();
                     if (this.totalPages) this.loadPage(this.totalPages);
+                    break;
+                case 'f':
+                case 'F':
+                    e.preventDefault();
+                    this.toggleFullscreen();
+                    break;
+                case 'Escape':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.exitFullscreen();
+                    }
                     break;
                 case 'r': case 'g': case 'y': case 'b': case 'c':
                 case '1': case '2': case '3': case '4': case '5':
@@ -497,5 +520,161 @@ class ComicRenderer {
         
         if (prevBtn) prevBtn.disabled = this.currentPage === 1;
         if (nextBtn) nextBtn.disabled = this.totalPages !== null && this.currentPage >= this.totalPages;
+    }
+
+    toggleFullscreen() {
+        if (this.isFullscreen) {
+            this.exitFullscreen();
+        } else {
+            this.enterFullscreen();
+        }
+    }
+
+    enterFullscreen() {
+        if (this.isFullscreen) return;
+
+        const comicContainer = document.querySelector('.comic-container');
+        if (!comicContainer) return;
+
+        // Store original parent and position
+        this.originalParent = comicContainer.parentNode;
+
+        // Create fullscreen container
+        this.fullscreenContainer = document.createElement('div');
+        this.fullscreenContainer.className = 'comic-fullscreen-overlay';
+        this.fullscreenContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+        `;
+
+        // Move comic container to fullscreen
+        this.fullscreenContainer.appendChild(comicContainer);
+        document.body.appendChild(this.fullscreenContainer);
+
+        // Update styles for fullscreen
+        comicContainer.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+        `;
+
+        // Update pages container for fullscreen
+        const pagesContainer = comicContainer.querySelector('.pages-container');
+        if (pagesContainer) {
+            pagesContainer.style.cssText = `
+                flex: 1;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 10px;
+                padding: 10px;
+                background: #000;
+            `;
+        }
+
+        // Update page images for fullscreen
+        const pageImages = comicContainer.querySelectorAll('img');
+        pageImages.forEach(img => {
+            img.style.cssText = `
+                max-width: 49%;
+                max-height: 100%;
+                object-fit: contain;
+                border: 1px solid #333;
+            `;
+        });
+
+        // Update controls for fullscreen
+        const controls = comicContainer.querySelector('.comic-controls');
+        if (controls) {
+            controls.style.cssText = `
+                display: flex;
+                align-items: center;
+                padding: 15px 20px;
+                background: rgba(0, 0, 0, 0.8);
+                color: white;
+                flex-shrink: 0;
+                justify-content: center;
+                gap: 15px;
+            `;
+        }
+
+        // Update fullscreen button
+        const fullscreenBtn = controls?.querySelector('#comic-fullscreen');
+        if (fullscreenBtn) {
+            fullscreenBtn.textContent = '🪟 Exit Fullscreen';
+            fullscreenBtn.title = 'Exit Fullscreen (ESC key)';
+        }
+
+        this.isFullscreen = true;
+        console.log('Comic entered fullscreen mode');
+    }
+
+    exitFullscreen() {
+        if (!this.isFullscreen || !this.fullscreenContainer || !this.originalParent) return;
+
+        const comicContainer = this.fullscreenContainer.querySelector('.comic-container');
+        if (comicContainer) {
+            // Restore original styles
+            comicContainer.style.cssText = 'height: 100%; display: flex; flex-direction: column;';
+
+            // Restore pages container
+            const pagesContainer = comicContainer.querySelector('.pages-container');
+            if (pagesContainer) {
+                pagesContainer.style.cssText = `
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 20px;
+                `;
+            }
+
+            // Restore page images
+            const pageImages = comicContainer.querySelectorAll('img');
+            pageImages.forEach(img => {
+                img.style.cssText = `
+                    max-width: 48%;
+                    max-height: calc(100% - 60px);
+                    border: 1px solid #ccc;
+                    object-fit: contain;
+                    flex: 1;
+                `;
+            });
+
+            // Restore controls
+            const controls = comicContainer.querySelector('.comic-controls');
+            if (controls) {
+                controls.style.cssText = 'display: flex; align-items: center; margin-bottom: 10px; flex-shrink: 0;';
+            }
+
+            // Update fullscreen button
+            const fullscreenBtn = controls?.querySelector('#comic-fullscreen');
+            if (fullscreenBtn) {
+                fullscreenBtn.textContent = '📺 Fullscreen';
+                fullscreenBtn.title = 'Toggle Fullscreen (F key)';
+            }
+
+            // Move back to original parent
+            this.originalParent.appendChild(comicContainer);
+        }
+
+        // Remove fullscreen container
+        document.body.removeChild(this.fullscreenContainer);
+
+        // Reset state
+        this.fullscreenContainer = null;
+        this.originalParent = null;
+        this.isFullscreen = false;
+        console.log('Comic exited fullscreen mode');
     }
 }
