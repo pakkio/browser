@@ -132,9 +132,9 @@ class VideoRenderer {
             if (e.code === 'Space') {
                 e.preventDefault();
                 this.togglePlayAndFullscreen(video);
-            } else if (e.code === 'PageUp' || e.code === 'PageDown') {
+            } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'PageUp' || e.code === 'PageDown') {
                 e.preventDefault();
-                this.seekVideo(video, e.code === 'PageUp' ? -10 : 10);
+                this.navigateToAdjacentFile(e.code);
             } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'b' || e.key === 'c' || 
                        (e.key >= '1' && e.key <= '5')) {
                 e.preventDefault();
@@ -232,6 +232,171 @@ class VideoRenderer {
                 setTimeout(() => message.remove(), 1000);
             }
         }
+    }
+    
+    navigateToAdjacentFile(keyCode) {
+        // Check if file explorer is available
+        if (!window.fileExplorer || !window.fileExplorer.filteredFiles || !window.fileExplorer.selectFile) {
+            console.log('File explorer not available for navigation');
+            return;
+        }
+        
+        const filteredFiles = window.fileExplorer.filteredFiles();
+        const currentIndex = this.getCurrentFileIndex(filteredFiles);
+        
+        if (currentIndex === -1) {
+            console.log('Current file not found in directory listing');
+            return;
+        }
+        
+        let newIndex = currentIndex;
+        let direction = '';
+        
+        switch (keyCode) {
+            case 'ArrowUp':
+                newIndex = this.findPreviousVideoFile(filteredFiles, currentIndex);
+                direction = 'previous';
+                break;
+            case 'ArrowDown':
+                newIndex = this.findNextVideoFile(filteredFiles, currentIndex);
+                direction = 'next';
+                break;
+            case 'PageUp':
+                newIndex = this.findPreviousVideoFile(filteredFiles, currentIndex);
+                direction = 'previous';
+                break;
+            case 'PageDown':
+                newIndex = this.findNextVideoFile(filteredFiles, currentIndex);
+                direction = 'next';
+                break;
+        }
+        
+        if (newIndex !== -1 && newIndex !== currentIndex) {
+            const newFile = filteredFiles[newIndex];
+            const currentPath = window.fileExplorer.currentPath();
+            const filePath = currentPath ? `${currentPath}/${newFile.name}` : newFile.name;
+            
+            // Show navigation feedback
+            this.showNavigationFeedback(direction, newFile.name);
+            
+            // Navigate to the new file with autoplay
+            window.fileExplorer.selectFile(newIndex, filePath, newFile.name, { 
+                autoPlay: true, 
+                keyboardNavigation: true 
+            });
+            
+            // Also trigger content loading
+            window.fileExplorer.showContent(currentPath, newFile.name, { 
+                autoPlay: true, 
+                keyboardNavigation: true 
+            });
+            
+            // Update details panel
+            window.fileExplorer.updateDetails(newFile);
+        } else {
+            // Show feedback when at boundaries
+            const message = direction === 'next' ? 'No more videos ahead' : 'No more videos behind';
+            this.showNavigationFeedback('boundary', message);
+        }
+    }
+    
+    getCurrentFileIndex(filteredFiles) {
+        if (!this.currentFileName) return -1;
+        
+        return filteredFiles.findIndex(file => file.name === this.currentFileName);
+    }
+    
+    findNextVideoFile(filteredFiles, startIndex) {
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+        
+        // Search forward from current position
+        for (let i = startIndex + 1; i < filteredFiles.length; i++) {
+            const file = filteredFiles[i];
+            if (!file.isDirectory && this.isVideoFile(file.name, videoExtensions)) {
+                return i;
+            }
+        }
+        
+        // Wrap around to beginning
+        for (let i = 0; i < startIndex; i++) {
+            const file = filteredFiles[i];
+            if (!file.isDirectory && this.isVideoFile(file.name, videoExtensions)) {
+                return i;
+            }
+        }
+        
+        return -1; // No video files found
+    }
+    
+    findPreviousVideoFile(filteredFiles, startIndex) {
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+        
+        // Search backward from current position
+        for (let i = startIndex - 1; i >= 0; i--) {
+            const file = filteredFiles[i];
+            if (!file.isDirectory && this.isVideoFile(file.name, videoExtensions)) {
+                return i;
+            }
+        }
+        
+        // Wrap around to end
+        for (let i = filteredFiles.length - 1; i > startIndex; i--) {
+            const file = filteredFiles[i];
+            if (!file.isDirectory && this.isVideoFile(file.name, videoExtensions)) {
+                return i;
+            }
+        }
+        
+        return -1; // No video files found
+    }
+    
+    isVideoFile(filename, videoExtensions) {
+        const extension = filename.split('.').pop().toLowerCase();
+        return videoExtensions.includes(extension);
+    }
+    
+    showNavigationFeedback(direction, message) {
+        const feedback = document.createElement('div');
+        
+        let displayText = '';
+        let backgroundColor = 'rgba(0,0,0,0.8)';
+        
+        if (direction === 'next') {
+            displayText = `⏭️ Next: ${message}`;
+            backgroundColor = 'rgba(76, 175, 80, 0.9)';
+        } else if (direction === 'previous') {
+            displayText = `⏮️ Previous: ${message}`;
+            backgroundColor = 'rgba(33, 150, 243, 0.9)';
+        } else if (direction === 'boundary') {
+            displayText = `⚠️ ${message}`;
+            backgroundColor = 'rgba(255, 152, 0, 0.9)';
+        }
+        
+        feedback.textContent = displayText;
+        feedback.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: ${backgroundColor};
+            color: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            z-index: 10000;
+            font-size: 16px;
+            font-weight: bold;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+        `;
+        
+        document.body.appendChild(feedback);
+        
+        // Remove after 2 seconds
+        setTimeout(() => {
+            if (feedback.parentNode) {
+                feedback.remove();
+            }
+        }, 2000);
     }
     
     handleAnnotationShortcut(key) {
