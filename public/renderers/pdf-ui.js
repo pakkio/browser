@@ -59,6 +59,7 @@ class PDFUIManager {
                     <button id="pdf-double-page-toggle" title="Toggle Double Page View">📖</button>
                     <button id="pdf-cover-mode-toggle" title="Treat first page as cover">📚</button>
                     <button id="pdf-text-toggle" title="Toggle Text Selection">🔤</button>
+                    <button id="pdf-fullscreen" style="background: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;" title="Toggle Fullscreen (F key)">📺 Fullscreen</button>
                 </div>
                 <span id="pdf-status" style="font-style: italic; color: #ccc;"></span>
             </div>
@@ -184,7 +185,7 @@ class PDFUIManager {
         document.head.appendChild(style);
     }
 
-    setupEventHandlers(controls, onPageChange, onModeChange) {
+    setupEventHandlers(controls, onPageChange, onModeChange, onFullscreenToggle) {
         const prevBtn = controls.querySelector('#pdf-prev');
         const nextBtn = controls.querySelector('#pdf-next');
         const jumpInput = controls.querySelector('#pdf-page-jump');
@@ -192,6 +193,7 @@ class PDFUIManager {
         const doublePageToggle = controls.querySelector('#pdf-double-page-toggle');
         const coverModeToggle = controls.querySelector('#pdf-cover-mode-toggle');
         const textToggle = controls.querySelector('#pdf-text-toggle');
+        const fullscreenBtn = controls.querySelector('#pdf-fullscreen');
         
         // Zoom controls
         const zoomOutBtn = controls.querySelector('#pdf-zoom-out');
@@ -249,6 +251,13 @@ class PDFUIManager {
         textToggle.addEventListener('click', () => {
             this.toggleTextLayer();
         });
+
+        // Fullscreen event listener
+        if (fullscreenBtn && onFullscreenToggle) {
+            fullscreenBtn.addEventListener('click', () => {
+                onFullscreenToggle();
+            });
+        }
 
         // Zoom controls event listeners
         zoomOutBtn.addEventListener('click', () => {

@@ -7,6 +7,9 @@ class EpubRenderer {
         this.currentChapter = 0;
         this.totalChapters = 0;
         this.instanceId = Math.random().toString(36).substr(2, 9);
+        this.isFullscreen = false;
+        this.originalParent = null;
+        this.fullscreenContainer = null;
         console.log(`[EPUB Debug] Creating EpubRenderer instance: ${this.instanceId}`);
     }
 
@@ -130,6 +133,7 @@ class EpubRenderer {
                 <button id="epub-next">Next ›</button>
                 <button id="epub-double-page-toggle" style="margin-left: 10px;" title="Toggle Double Chapter View">📖</button>
                 <button id="epub-cover-mode-toggle" style="margin-left: 10px;" title="Treat first chapter as cover for proper book layout">📚</button>
+                <button id="epub-fullscreen" style="margin-left: 10px; background: #4CAF50; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;" title="Toggle Fullscreen (F key)">📺 Fullscreen</button>
                 <span id="epub-page-info" style="margin: 0 10px; color: white;"></span>
                 <input type="number" id="epub-page-jump" placeholder="Chapter" style="width: 80px;">
                 <button id="epub-jump-btn">Go</button>
@@ -226,6 +230,7 @@ class EpubRenderer {
             const jumpBtn = controls.querySelector('#epub-jump-btn');
             const doublePageToggle = controls.querySelector('#epub-double-page-toggle');
             const coverModeToggle = controls.querySelector('#epub-cover-mode-toggle');
+            const fullscreenBtn = controls.querySelector('#epub-fullscreen');
 
             // Set initial button states to reflect default enabled modes
             doublePageToggle.textContent = this.doublePageMode ? '📖 Double Page ON' : '📄 Single Page';
@@ -483,6 +488,7 @@ class EpubRenderer {
             nextBtn.addEventListener('click', navigateNext);
             doublePageToggle.addEventListener('click', toggleDoublePageMode);
             coverModeToggle.addEventListener('click', toggleCoverMode);
+            fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
             chapterSelect.addEventListener('change', (e) => showChapter(parseInt(e.target.value)));
             jumpBtn.addEventListener('click', () => {
                 const chapterNum = parseInt(jumpInput.value, 10);
@@ -505,6 +511,14 @@ class EpubRenderer {
                 } else if (e.key === 'c' || e.key === 'C') {
                     e.preventDefault();
                     toggleCoverMode();
+                } else if (e.key === 'f' || e.key === 'F') {
+                    e.preventDefault();
+                    this.toggleFullscreen();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.exitFullscreen();
+                    }
                 }
             };
             document.addEventListener('keydown', this.handleKeyDown);
@@ -531,5 +545,216 @@ class EpubRenderer {
             `;
             contentOther.style.display = 'block';
         }
+    }
+
+    toggleFullscreen() {
+        if (this.isFullscreen) {
+            this.exitFullscreen();
+        } else {
+            this.enterFullscreen();
+        }
+    }
+
+    enterFullscreen() {
+        if (this.isFullscreen) return;
+
+        const epubContainer = document.querySelector('.epub-container');
+        if (!epubContainer) return;
+
+        // Store original parent and position
+        this.originalParent = epubContainer.parentNode;
+
+        // Create fullscreen container
+        this.fullscreenContainer = document.createElement('div');
+        this.fullscreenContainer.className = 'epub-fullscreen-overlay';
+        this.fullscreenContainer.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: #1a1a1a;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+        `;
+
+        // Move epub container to fullscreen
+        this.fullscreenContainer.appendChild(epubContainer);
+        document.body.appendChild(this.fullscreenContainer);
+
+        // Update styles for fullscreen
+        epubContainer.style.cssText = `
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            background: #1a1a1a;
+            padding: 20px;
+            box-sizing: border-box;
+        `;
+
+        // Update content container for fullscreen
+        const contentContainer = epubContainer.querySelector('.epub-content-container');
+        if (contentContainer) {
+            contentContainer.style.cssText = `
+                flex: 1;
+                display: flex;
+                gap: 20px;
+                min-height: 0;
+                max-height: none;
+            `;
+        }
+
+        // Update content areas for fullscreen
+        const contentAreas = epubContainer.querySelectorAll('#epub-content, #epub-content-2');
+        contentAreas.forEach(area => {
+            area.style.cssText = `
+                flex: 1;
+                overflow-y: auto;
+                background: rgba(255, 255, 255, 0.05);
+                border-radius: 10px;
+                padding: 30px;
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                font-family: 'Georgia', 'Times New Roman', serif;
+                font-size: 18px;
+                line-height: 1.8;
+                color: #ffffff;
+                box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+                scrollbar-width: thin;
+                scrollbar-color: #4ecdc4 transparent;
+            `;
+        });
+
+        // Update controls for fullscreen
+        const controls = epubContainer.querySelector('.epub-controls');
+        if (controls) {
+            controls.style.cssText = `
+                position: static;
+                bottom: auto;
+                left: auto;
+                right: auto;
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                padding: 15px 20px;
+                background: rgba(0, 0, 0, 0.8);
+                backdrop-filter: blur(10px);
+                border-top: 1px solid rgba(255, 255, 255, 0.2);
+                flex-wrap: wrap;
+                gap: 10px;
+                z-index: 10;
+                opacity: 1;
+                transition: opacity 0.3s ease-in-out;
+                order: -1;
+                margin-bottom: 20px;
+                border-radius: 10px;
+            `;
+        }
+
+        // Update fullscreen button
+        const fullscreenBtn = controls?.querySelector('#epub-fullscreen');
+        if (fullscreenBtn) {
+            fullscreenBtn.textContent = '🪟 Exit Fullscreen';
+            fullscreenBtn.title = 'Exit Fullscreen (ESC key)';
+        }
+
+        this.isFullscreen = true;
+        console.log('EPUB entered fullscreen mode');
+    }
+
+    exitFullscreen() {
+        if (!this.isFullscreen || !this.fullscreenContainer || !this.originalParent) return;
+
+        const epubContainer = this.fullscreenContainer.querySelector('.epub-container');
+        if (epubContainer) {
+            // Restore original styles
+            epubContainer.style.cssText = `
+                background: rgba(255, 255, 255, 0.1);
+                padding: 20px;
+                border-radius: 15px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                height: 100%;
+                overflow: visible;
+                display: flex;
+                flex-direction: column;
+                position: relative;
+            `;
+
+            // Restore content container
+            const contentContainer = epubContainer.querySelector('.epub-content-container');
+            if (contentContainer) {
+                contentContainer.style.cssText = `
+                    flex: 1;
+                    display: flex;
+                    gap: 20px;
+                    min-height: 400px;
+                    max-height: 60vh;
+                `;
+            }
+
+            // Restore content areas
+            const contentAreas = epubContainer.querySelectorAll('#epub-content, #epub-content-2');
+            contentAreas.forEach(area => {
+                area.style.cssText = `
+                    flex: 1;
+                    overflow-y: auto;
+                    background: rgba(255, 255, 255, 0.05);
+                    border-radius: 10px;
+                    padding: 30px;
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    font-family: 'Georgia', 'Times New Roman', serif;
+                    font-size: 16px;
+                    line-height: 1.8;
+                    color: #ffffff;
+                    box-shadow: inset 0 2px 8px rgba(0,0,0,0.2);
+                    scrollbar-width: thin;
+                    scrollbar-color: #4ecdc4 transparent;
+                    display: block;
+                `;
+            });
+
+            // Restore controls
+            const controls = epubContainer.querySelector('.epub-controls');
+            if (controls) {
+                controls.style.cssText = `
+                    position: absolute;
+                    bottom: 0;
+                    left: 0;
+                    right: 0;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 10px;
+                    background: rgba(0, 0, 0, 0.6);
+                    backdrop-filter: blur(10px);
+                    border-top: 1px solid rgba(255, 255, 255, 0.2);
+                    flex-wrap: wrap;
+                    gap: 10px;
+                    z-index: 10;
+                    opacity: 0;
+                    transition: opacity 0.3s ease-in-out;
+                `;
+            }
+
+            // Update fullscreen button
+            const fullscreenBtn = controls?.querySelector('#epub-fullscreen');
+            if (fullscreenBtn) {
+                fullscreenBtn.textContent = '📺 Fullscreen';
+                fullscreenBtn.title = 'Toggle Fullscreen (F key)';
+            }
+
+            // Move back to original parent
+            this.originalParent.appendChild(epubContainer);
+        }
+
+        // Remove fullscreen container
+        document.body.removeChild(this.fullscreenContainer);
+
+        // Reset state
+        this.fullscreenContainer = null;
+        this.originalParent = null;
+        this.isFullscreen = false;
+        console.log('EPUB exited fullscreen mode');
     }
 }
