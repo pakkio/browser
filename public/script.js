@@ -48,12 +48,7 @@ function initializeFileExplorer() {
             body: JSON.stringify({ path: path })
         }).catch(err => console.warn('Failed to save current path:', err));
         
-        // Show loading indicator and progress
-        const loadingIndicator = document.getElementById('loading-indicator');
-        loadingIndicator.style.display = 'block';
-        loadingIndicator.textContent = 'Loading directory...';
-        
-        // Show progress overlay
+        // Show prominent loading popup
         if (window.debugConsole) {
             window.debugConsole.showProgress('Loading directory...', 10);
         }
@@ -95,12 +90,9 @@ function initializeFileExplorer() {
                 fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
             })
             .finally(() => {
-                // Hide loading indicator and progress
-                loadingIndicator.style.display = 'none';
+                // Hide progress overlay
                 if (window.debugConsole) {
-                    setTimeout(() => {
-                        window.debugConsole.hideProgress();
-                    }, 500); // Small delay to show completion
+                    window.debugConsole.hideProgress();
                 }
             });
     }
@@ -611,13 +603,15 @@ function initializeFileExplorer() {
     fileTypeFilter.addEventListener('change', () => {
         // Show brief loading for filtering large directories
         if (currentFiles.length > 100) {
-            const loadingIndicator = document.getElementById('loading-indicator');
-            loadingIndicator.style.display = 'block';
-            loadingIndicator.textContent = 'Filtering files...';
+            if (window.debugConsole) {
+                window.debugConsole.showProgress('Filtering files...', 50);
+            }
             
             setTimeout(() => {
                 displayFiles(currentFiles, currentPath);
-                loadingIndicator.style.display = 'none';
+                if (window.debugConsole) {
+                    window.debugConsole.hideProgress();
+                }
             }, 50);
         } else {
             displayFiles(currentFiles, currentPath);
@@ -627,13 +621,15 @@ function initializeFileExplorer() {
     searchInput.addEventListener('input', () => {
         // Show brief loading for searching in large directories
         if (currentFiles.length > 100) {
-            const loadingIndicator = document.getElementById('loading-indicator');
-            loadingIndicator.style.display = 'block';
-            loadingIndicator.textContent = 'Searching files...';
+            if (window.debugConsole) {
+                window.debugConsole.showProgress('Searching files...', 30);
+            }
             
             setTimeout(() => {
                 displayFiles(currentFiles, currentPath);
-                loadingIndicator.style.display = 'none';
+                if (window.debugConsole) {
+                    window.debugConsole.hideProgress();
+                }
             }, 50);
         } else {
             displayFiles(currentFiles, currentPath);

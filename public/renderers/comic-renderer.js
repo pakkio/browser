@@ -61,12 +61,30 @@ class ComicRenderer {
             this.setupEventHandlers(controls, filePath);
             this.setupKeyboardNavigation();
             
+            // Show prominent loading popup
+            if (window.debugConsole) {
+                window.debugConsole.showProgress('Loading comic...', 10);
+            }
+            
             try {
                 await this.loadComicInfo(filePath);
                 await this.loadPage(1);
+                
+                // Hide loading popup on success
+                if (window.debugConsole) {
+                    window.debugConsole.updateProgress('Comic ready', 100);
+                    setTimeout(() => {
+                        window.debugConsole.hideProgress();
+                    }, 500);
+                }
             } catch (error) {
                 console.error('Error loading comic:', error);
                 this.showComicError(controls, pagesContainer, error, fileName, filePath);
+                
+                // Hide loading popup on error
+                if (window.debugConsole) {
+                    window.debugConsole.hideProgress();
+                }
             }
         } catch (error) {
             console.error(`Fatal error in ComicRenderer for ${fileName}:`, error);
@@ -303,6 +321,11 @@ class ComicRenderer {
     async loadComicInfo(filePath) {
         try {
             console.log(`[ComicRenderer] Loading comic info for: ${filePath}`);
+            
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('Reading comic archive...', 30);
+            }
+            
             const response = await fetch(`/api/comic-info?path=${encodeURIComponent(filePath)}`);
             
             if (!response.ok) {
@@ -313,6 +336,11 @@ class ComicRenderer {
             
             const info = await response.json();
             console.log(`[ComicRenderer] Comic info received:`, info);
+            
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress(`Comic loaded - ${info.pages} pages`, 60);
+            }
+            
             this.totalPages = info.pages;
             this.updatePageInfo();
             
@@ -344,6 +372,11 @@ class ComicRenderer {
             if (statusElement) statusElement.innerHTML = `⏳ Loading page ${leftPage}...`;
             pageImg1.style.opacity = '0.5';
             pageImg2.style.opacity = '0.5';
+            
+            // Show brief loading popup for page navigation (only if not initial load)
+            if (window.debugConsole && page > 1) {
+                window.debugConsole.showProgress(`Loading page ${leftPage}...`, 40);
+            }
             
             const leftUrl = this.pageCache.has(leftPage) ? 
                 this.pageCache.get(leftPage) : 
@@ -392,9 +425,21 @@ class ComicRenderer {
             this.updatePageInfo();
             this.preloadAdjacentPages(leftPage);
             
+            // Hide loading popup for page navigation
+            if (window.debugConsole && page > 1) {
+                setTimeout(() => {
+                    window.debugConsole.hideProgress();
+                }, 300);
+            }
+            
         } catch (error) {
             console.error('Error loading page:', error);
             if (statusElement) statusElement.textContent = `Error loading page: ${error.message}`;
+            
+            // Hide loading popup on error
+            if (window.debugConsole && page > 1) {
+                window.debugConsole.hideProgress();
+            }
         }
     }
 

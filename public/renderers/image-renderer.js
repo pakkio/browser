@@ -90,6 +90,11 @@ class ImageRenderer {
             `;
             loadingDiv.textContent = 'Loading image...';
             imageContainer.appendChild(loadingDiv);
+            
+            // Show prominent loading popup
+            if (window.debugConsole) {
+                window.debugConsole.showProgress('Loading image...', 20);
+            }
 
             img.style.cssText = `
                 max-width: 100%;
@@ -114,6 +119,14 @@ class ImageRenderer {
                 loadingDiv.style.display = 'none';
                 img.style.display = 'block';
                 
+                // Hide loading popup on success
+                if (window.debugConsole) {
+                    window.debugConsole.updateProgress('Image loaded', 100);
+                    setTimeout(() => {
+                        window.debugConsole.hideProgress();
+                    }, 300);
+                }
+                
                 // Add image info
                 const infoDiv = document.createElement('div');
                 infoDiv.style.cssText = `
@@ -131,6 +144,11 @@ class ImageRenderer {
             img.onerror = (errorEvent) => {
                 cleanup();
                 console.error(`Failed to load image: ${fileName}`, errorEvent);
+                
+                // Hide loading popup on error
+                if (window.debugConsole) {
+                    window.debugConsole.hideProgress();
+                }
                 
                 imageContainer.innerHTML = '';
                 const errorDiv = document.createElement('div');

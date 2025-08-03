@@ -280,6 +280,11 @@ class PDFRenderer {
     async loadPDF(filePath) {
         this.uiManager.setStatus('Loading PDF...');
         
+        // Show prominent loading popup
+        if (window.debugConsole) {
+            window.debugConsole.showProgress('Loading PDF document...', 10);
+        }
+        
         try {
             // Load the PDF document using authenticated fetch
             const response = await window.authManager.authenticatedFetch(
@@ -303,7 +308,16 @@ class PDFRenderer {
             }
             
             const arrayBuffer = await response.arrayBuffer();
+            
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('Processing PDF document...', 50);
+            }
+            
             this.pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('PDF loaded successfully', 70);
+            }
             
             this.uiManager.setTotalPages(this.pdfDoc.numPages);
             this.uiManager.setStatus('');
@@ -312,8 +326,22 @@ class PDFRenderer {
             this.uiManager.updateZoomDisplay(this.zoomLevel, this.fitToWidth);
             
             await this.loadPage(1);
+            
+            // Hide loading popup on success
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('PDF ready', 100);
+                setTimeout(() => {
+                    window.debugConsole.hideProgress();
+                }, 500);
+            }
         } catch (error) {
             console.error('Failed to load PDF:', error);
+            
+            // Hide loading popup on error
+            if (window.debugConsole) {
+                window.debugConsole.hideProgress();
+            }
+            
             throw error;
         }
     }
@@ -339,6 +367,11 @@ class PDFRenderer {
         try {
             this.uiManager.setStatus(`Loading page ${page}...`);
             
+            // Show brief loading popup for page changes (only if not initial load)
+            if (window.debugConsole && page > 1) {
+                window.debugConsole.showProgress(`Loading page ${page}...`, 50);
+            }
+            
             if (this.uiManager.doublePageMode) {
                 await this.loadDoublePage(page, canvas1, canvas2);
             } else {
@@ -347,9 +380,21 @@ class PDFRenderer {
             }
             
             this.uiManager.setStatus('');
+            
+            // Hide loading popup for page changes
+            if (window.debugConsole && page > 1) {
+                setTimeout(() => {
+                    window.debugConsole.hideProgress();
+                }, 300);
+            }
         } catch (error) {
             console.error('Error loading page:', error);
             this.uiManager.setStatus(`Error loading page: ${error.message}`);
+            
+            // Hide loading popup on error
+            if (window.debugConsole && page > 1) {
+                window.debugConsole.hideProgress();
+            }
         }
     }
 

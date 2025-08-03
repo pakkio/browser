@@ -137,14 +137,53 @@ class DebugConsole {
 
     showProgress(message, percentage) {
         this.addMessage('info', [`${message} ${percentage ? `(${percentage}%)` : ''}`]);
+        this.showProgressOverlay(message, percentage);
     }
 
     updateProgress(message, percentage) {
         this.addMessage('info', [`${message} ${percentage ? `(${percentage}%)` : ''}`]);
+        this.updateProgressOverlay(message, percentage);
     }
 
     hideProgress() {
         this.addMessage('info', ['Loading completed']);
+        this.hideProgressOverlay();
+    }
+
+    showProgressOverlay(message, percentage = 0) {
+        const progressContainer = document.getElementById('progress-container');
+        const progressText = document.getElementById('progress-text');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const progressFill = document.getElementById('progress-fill');
+
+        if (progressContainer && progressText && progressPercentage && progressFill) {
+            progressText.textContent = message;
+            progressPercentage.textContent = `${percentage}%`;
+            progressFill.style.width = `${percentage}%`;
+            progressContainer.style.display = 'flex';
+        }
+    }
+
+    updateProgressOverlay(message, percentage = 0) {
+        const progressText = document.getElementById('progress-text');
+        const progressPercentage = document.getElementById('progress-percentage');
+        const progressFill = document.getElementById('progress-fill');
+
+        if (progressText && progressPercentage && progressFill) {
+            progressText.textContent = message;
+            progressPercentage.textContent = `${percentage}%`;
+            progressFill.style.width = `${percentage}%`;
+        }
+    }
+
+    hideProgressOverlay() {
+        const progressContainer = document.getElementById('progress-container');
+        if (progressContainer) {
+            // Small delay to show completion before hiding
+            setTimeout(() => {
+                progressContainer.style.display = 'none';
+            }, 500);
+        }
     }
 
     downloadLogs() {
