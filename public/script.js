@@ -464,10 +464,7 @@ function initializeFileExplorer() {
         if (index >= 0 && index < filteredFiles.length) {
             selectedIndex = index;
             items[index].classList.add('selected');
-            // Update details instantly upon navigation
-            // Render file instantly upon navigation
-            fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
-
+            
             // Scroll into view if needed
             items[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }

@@ -6,6 +6,8 @@ class EpubRenderer {
         this.coverMode = true;
         this.currentChapter = 0;
         this.totalChapters = 0;
+        this.instanceId = Math.random().toString(36).substr(2, 9);
+        console.log(`[EPUB Debug] Creating EpubRenderer instance: ${this.instanceId}`);
     }
 
     cleanup() {
@@ -16,7 +18,13 @@ class EpubRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
+        console.log(`[EPUB Debug] Render called on instance ${this.instanceId} for file: ${fileName}`);
         this.cleanup();
+        
+        // Clear the content area completely first
+        contentOther.innerHTML = '';
+        contentOther.style.display = 'none';
+        
         try {
             console.log(`[EPUB Debug] Fetching: /epub-preview?path=${encodeURIComponent(filePath)}`);
             const response = await window.authManager.authenticatedFetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
@@ -220,7 +228,8 @@ class EpubRenderer {
             const coverModeToggle = controls.querySelector('#epub-cover-mode-toggle');
 
             // Set initial button states to reflect default enabled modes
-            doublePageToggle.textContent = 'Single Chapter';
+            doublePageToggle.textContent = this.doublePageMode ? '📖 Double Page ON' : '📄 Single Page';
+            doublePageToggle.style.background = this.doublePageMode ? '#4CAF50' : '#FF9800';
             coverModeToggle.innerHTML = '📚 Cover Mode ON';
             coverModeToggle.style.background = '#4CAF50';
 
@@ -238,7 +247,8 @@ class EpubRenderer {
 
             const toggleDoublePageMode = () => {
                 this.doublePageMode = !this.doublePageMode;
-                doublePageToggle.textContent = this.doublePageMode ? 'Single Chapter' : 'Double Chapter';
+                doublePageToggle.textContent = this.doublePageMode ? '📖 Double Page ON' : '📄 Single Page';
+                doublePageToggle.style.background = this.doublePageMode ? '#4CAF50' : '#FF9800';
                 
                 if (this.doublePageMode) {
                     contentArea2.style.display = 'block';
@@ -318,6 +328,12 @@ class EpubRenderer {
                     this.currentChapter = chapterIndex;
                     chapterSelect.value = chapterIndex;
                     
+                    console.log(`[EPUB Debug] Instance ${this.instanceId}: Showing chapter ${chapterIndex + 1} of ${this.totalChapters}, double-page: ${this.doublePageMode}`);
+                    
+                    // Clear both content areas first
+                    contentArea.innerHTML = '<div style="color: yellow; text-align: center; padding: 20px;">🔄 Loading left page...</div>';
+                    contentArea2.innerHTML = '<div style="color: yellow; text-align: center; padding: 20px;">🔄 Loading right page...</div>';
+                    
                     const processContent = (content) => {
                         console.log('[EPUB] Original content sample:', content.substring(0, 200));
                         
@@ -378,7 +394,15 @@ class EpubRenderer {
 
                     // Load content for left/first area
                     let content1 = processContent(epubData.chapters[chapterIndex].content);
-                    contentArea.innerHTML = content1;
+                    
+                    contentArea.innerHTML = `
+                        <div style="border-bottom: 2px solid #4ecdc4; margin-bottom: 20px; padding-bottom: 10px;">
+                            <h3 style="color: #4ecdc4; margin: 0; font-size: 1.2rem;">
+                                Chapter ${chapterIndex + 1}: ${epubData.chapters[chapterIndex].title || 'Untitled'}
+                            </h3>
+                        </div>
+                        ${content1}
+                    `;
                     cleanContent(contentArea);
                     styleContent(contentArea);
                     
@@ -387,10 +411,20 @@ class EpubRenderer {
                         // Simple double-page logic: always show next chapter if available
                         const nextChapterIndex = chapterIndex + 1;
                         
+                        console.log(`[EPUB Debug] Double-page mode: Left=Chapter ${chapterIndex + 1}, Right=Chapter ${nextChapterIndex + 1}`);
+                        
                         if (nextChapterIndex < this.totalChapters) {
                             // Show next chapter on right page
                             let content2 = processContent(epubData.chapters[nextChapterIndex].content);
-                            contentArea2.innerHTML = content2;
+                            
+                            contentArea2.innerHTML = `
+                                <div style="border-bottom: 2px solid #4ecdc4; margin-bottom: 20px; padding-bottom: 10px;">
+                                    <h3 style="color: #4ecdc4; margin: 0; font-size: 1.2rem;">
+                                        Chapter ${nextChapterIndex + 1}: ${epubData.chapters[nextChapterIndex].title || 'Untitled'}
+                                    </h3>
+                                </div>
+                                ${content2}
+                            `;
                             cleanContent(contentArea2);
                             styleContent(contentArea2);
                         } else {
@@ -424,6 +458,7 @@ class EpubRenderer {
             };
             
             const navigatePrev = () => {
+                console.log(`[EPUB Debug] Navigate PREV from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
                 if (!this.doublePageMode) {
                     showChapter(this.currentChapter - 1);
                     return;
@@ -434,6 +469,7 @@ class EpubRenderer {
             };
 
             const navigateNext = () => {
+                console.log(`[EPUB Debug] Navigate NEXT from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
                 if (!this.doublePageMode) {
                     showChapter(this.currentChapter + 1);
                     return;
