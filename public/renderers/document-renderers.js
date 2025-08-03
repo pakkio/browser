@@ -232,15 +232,7 @@ class EpubRenderer {
                 coverModeToggle.innerHTML = this.coverMode ? '📚 Cover Mode ON' : '📚 Cover Mode';
                 coverModeToggle.style.background = this.coverMode ? '#4CAF50' : '#9C27B0';
                 
-                // Adjust current chapter if needed for proper pairing
-                if (this.coverMode && this.doublePageMode && this.currentChapter > 0 && this.currentChapter % 2 === 0) {
-                    // In cover mode, chapters should be 1, 2-3, 4-5, etc.
-                    this.currentChapter = this.currentChapter;
-                } else if (!this.coverMode && this.doublePageMode && this.currentChapter > 0 && this.currentChapter % 2 === 1) {
-                    // In normal mode, chapters should be 0-1, 2-3, 4-5, etc.
-                    this.currentChapter = this.currentChapter - 1;
-                }
-                
+                // Simply refresh the current view - no complex logic needed
                 showChapter(this.currentChapter);
             };
 
@@ -392,52 +384,26 @@ class EpubRenderer {
                     
                     // Load content for right/second area if in double page mode
                     if (this.doublePageMode) {
-                        let shouldShowSecondChapter = false;
-                        let secondChapterIndex = chapterIndex + 1;
+                        // Simple double-page logic: always show next chapter if available
+                        const nextChapterIndex = chapterIndex + 1;
                         
-                        if (this.coverMode) {
-                            // In cover mode: chapter 0 alone, then 1-2, 3-4, etc., last chapter alone
-                            if (chapterIndex === 0) {
-                                shouldShowSecondChapter = false; // Front cover chapter alone
-                            } else if (chapterIndex === this.totalChapters - 1) {
-                                shouldShowSecondChapter = false; // Rear cover chapter alone
-                            } else if (chapterIndex % 2 === 1 && chapterIndex + 1 < this.totalChapters - 1) {
-                                shouldShowSecondChapter = true; // Odd chapters (1,3,5) pair with next (but not if next is last)
-                                secondChapterIndex = chapterIndex + 1;
-                            } else if (chapterIndex % 2 === 0 && chapterIndex > 0) {
-                                shouldShowSecondChapter = false; // Even chapters > 0 shown alone in cover mode
-                            }
-                        } else {
-                            // Normal mode: 0-1, 2-3, 4-5, etc.
-                            shouldShowSecondChapter = chapterIndex + 1 < this.totalChapters;
-                            secondChapterIndex = chapterIndex + 1;
-                        }
-                        
-                        if (shouldShowSecondChapter) {
-                            let content2 = processContent(epubData.chapters[secondChapterIndex].content);
+                        if (nextChapterIndex < this.totalChapters) {
+                            // Show next chapter on right page
+                            let content2 = processContent(epubData.chapters[nextChapterIndex].content);
                             contentArea2.innerHTML = content2;
                             cleanContent(contentArea2);
                             styleContent(contentArea2);
                         } else {
-                            contentArea2.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 50px;">No more chapters</div>';
+                            // No more chapters - show empty page
+                            contentArea2.innerHTML = '<div style="color: rgba(255,255,255,0.5); text-align: center; padding: 50px; font-style: italic;">End of book</div>';
                         }
                     }
                     
                     // Update page info and navigation
                     if (this.doublePageMode) {
-                        if (this.coverMode && chapterIndex === 0) {
-                            pageInfo.textContent = `Chapter 1 (Front Cover) of ${this.totalChapters}`;
-                        } else if (this.coverMode && chapterIndex === this.totalChapters - 1) {
-                            pageInfo.textContent = `Chapter ${this.totalChapters} (Rear Cover) of ${this.totalChapters}`;
-                        } else if (this.coverMode && chapterIndex > 0) {
-                            const endChapter = Math.min(chapterIndex + 1, this.totalChapters - 1);
-                            if (chapterIndex % 2 === 1 && endChapter > chapterIndex && endChapter < this.totalChapters - 1) {
-                                pageInfo.textContent = `Chapters ${chapterIndex + 1}-${endChapter + 1} of ${this.totalChapters}`;
-                            } else {
-                                pageInfo.textContent = `Chapter ${chapterIndex + 1} of ${this.totalChapters}`;
-                            }
-                        } else if (chapterIndex + 1 < this.totalChapters) {
-                            pageInfo.textContent = `Chapters ${chapterIndex + 1}-${chapterIndex + 2} of ${this.totalChapters}`;
+                        const nextChapterIndex = chapterIndex + 1;
+                        if (nextChapterIndex < this.totalChapters) {
+                            pageInfo.textContent = `Chapters ${chapterIndex + 1}-${nextChapterIndex + 1} of ${this.totalChapters}`;
                         } else {
                             pageInfo.textContent = `Chapter ${chapterIndex + 1} of ${this.totalChapters}`;
                         }
@@ -463,28 +429,8 @@ class EpubRenderer {
                     return;
                 }
                 
-                if (this.coverMode) {
-                    // In cover mode: 0, 1-2, 3-4, 5-6, etc., last chapter alone
-                    if (this.currentChapter === 0) {
-                        return; // Already at front cover
-                    } else if (this.currentChapter === this.totalChapters - 1) {
-                        // From rear cover, go to previous chapter or pair
-                        if ((this.totalChapters - 1) % 2 === 0) {
-                            showChapter(this.totalChapters - 3); // Go to pair before rear cover
-                        } else {
-                            showChapter(this.totalChapters - 2); // Go to chapter before rear cover
-                        }
-                    } else if (this.currentChapter === 1) {
-                        showChapter(0); // Go to front cover
-                    } else if (this.currentChapter % 2 === 1) {
-                        showChapter(this.currentChapter - 2); // From odd chapter, go back 2
-                    } else {
-                        showChapter(this.currentChapter - 1); // From even chapter > 0, go back 1
-                    }
-                } else {
-                    // Normal mode: 0-1, 2-3, 4-5, etc.
-                    showChapter(this.currentChapter - 2);
-                }
+                // Simple double-page navigation: go back by 1 chapter
+                showChapter(this.currentChapter - 1);
             };
 
             const navigateNext = () => {
@@ -493,31 +439,8 @@ class EpubRenderer {
                     return;
                 }
                 
-                if (this.coverMode) {
-                    // In cover mode: 0, 1-2, 3-4, 5-6, etc., last chapter alone
-                    if (this.currentChapter === this.totalChapters - 1) {
-                        return; // Already at rear cover
-                    } else if (this.currentChapter === 0) {
-                        showChapter(1); // From front cover to chapter 1
-                    } else if (this.currentChapter % 2 === 1) {
-                        // From odd chapter, check if next would be the last chapter
-                        if (this.currentChapter + 2 === this.totalChapters - 1) {
-                            showChapter(this.totalChapters - 1); // Jump to rear cover
-                        } else {
-                            showChapter(this.currentChapter + 2); // From odd chapter, advance 2
-                        }
-                    } else {
-                        // From even chapter > 0, advance 1
-                        if (this.currentChapter + 1 === this.totalChapters - 1) {
-                            showChapter(this.totalChapters - 1); // Go to rear cover
-                        } else {
-                            showChapter(this.currentChapter + 1);
-                        }
-                    }
-                } else {
-                    // Normal mode: 0-1, 2-3, 4-5, etc.
-                    showChapter(this.currentChapter + 2);
-                }
+                // Simple double-page navigation: go forward by 1 chapter
+                showChapter(this.currentChapter + 1);
             };
 
             prevBtn.addEventListener('click', navigatePrev);
