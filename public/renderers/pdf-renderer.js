@@ -13,6 +13,7 @@ class PDFRenderer {
         this.isFullscreen = false;
         this.originalParent = null;
         this.fullscreenContainer = null;
+        this.isTruncatedView = false;
     }
 
     cleanup() {
@@ -162,6 +163,13 @@ class PDFRenderer {
                     e.preventDefault();
                     if (this.isFullscreen) {
                         this.exitFullscreen();
+                    }
+                    break;
+                case 'b':
+                case 'B':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.toggleTruncatedView();
                     }
                     break;
                 case 'r': case 'g': case 'y': case 'b': case 'c':
@@ -623,22 +631,8 @@ class PDFRenderer {
             background: #222;
         `;
 
-        // Update pages container for fullscreen
-        const pagesContainer = pdfContainer.querySelector('.pdf-pages-container');
-        if (pagesContainer) {
-            pagesContainer.style.cssText = `
-                display: flex;
-                gap: 20px;
-                flex: 1;
-                align-items: center;
-                justify-content: center;
-                min-height: 0;
-                padding: 20px;
-                overflow: auto;
-                height: 100%;
-                background: #222;
-            `;
-        }
+        // Set initial view mode to 100% (non-truncated)
+        this.isTruncatedView = false;
 
         // Update controls for fullscreen
         const controls = pdfContainer.querySelector('.pdf-controls');
@@ -675,6 +669,10 @@ class PDFRenderer {
         }
 
         this.isFullscreen = true;
+        
+        // Apply initial fullscreen page styles
+        this.updateFullscreenPageStyles();
+        
         console.log('PDF entered fullscreen mode');
         
         // Refresh current page to fit new container
@@ -747,9 +745,59 @@ class PDFRenderer {
         this.fullscreenContainer = null;
         this.originalParent = null;
         this.isFullscreen = false;
+        this.isTruncatedView = false;
         console.log('PDF exited fullscreen mode');
         
         // Refresh current page to fit new container
         this.refreshCurrentPage();
+    }
+
+    toggleTruncatedView() {
+        if (!this.isFullscreen) return;
+
+        this.isTruncatedView = !this.isTruncatedView;
+        this.updateFullscreenPageStyles();
+        console.log(`PDF view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+    }
+
+    updateFullscreenPageStyles() {
+        if (!this.isFullscreen || !this.fullscreenContainer) return;
+
+        const pdfContainer = this.fullscreenContainer.querySelector('.pdf-container');
+        if (!pdfContainer) return;
+
+        // Update pages container based on view mode
+        const pagesContainer = pdfContainer.querySelector('.pdf-pages-container');
+        if (pagesContainer) {
+            if (this.isTruncatedView) {
+                // Truncated view - show page end clearly with more padding
+                pagesContainer.style.cssText = `
+                    display: flex;
+                    gap: 20px;
+                    flex: 1;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 0;
+                    padding: 40px;
+                    overflow: auto;
+                    height: 100%;
+                    background: #222;
+                `;
+            } else {
+                // 100% view - maximize space usage
+                pagesContainer.style.cssText = `
+                    display: flex;
+                    gap: 20px;
+                    flex: 1;
+                    align-items: center;
+                    justify-content: center;
+                    min-height: 0;
+                    padding: 20px;
+                    overflow: auto;
+                    height: 100%;
+                    background: #222;
+                `;
+            }
+        }
     }
 }
