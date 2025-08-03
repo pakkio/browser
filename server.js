@@ -25,6 +25,72 @@ const AIFileAnalyzer = require('./lib/ai-file-analyzer');
 
 const app = express();
 
+// Request size limits to prevent memory exhaustion
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// Memory monitoring and protection
+const memoryMonitor = {
+    checkMemory() {
+        const usage = process.memoryUsage();
+        const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
+        const heapTotalMB = Math.round(usage.heapTotal / 1024 / 1024);
+        const rssMB = Math.round(usage.rss / 1024 / 1024);
+        
+        // Log memory usage every 10 minutes in production
+        if (process.env.NODE_ENV === 'production') {
+            console.log(`📊 Memory: ${heapUsedMB}MB used, ${heapTotalMB}MB total, ${rssMB}MB RSS`);
+        }
+        
+        // Warn if memory usage is high (>500MB heap or >1GB RSS)
+        if (heapUsedMB > 500 || rssMB > 1024) {
+            console.warn(`⚠️ High memory usage: ${heapUsedMB}MB heap, ${rssMB}MB RSS`);
+        }
+        
+        return { heapUsedMB, heapTotalMB, rssMB };
+    },
+    
+    startMonitoring() {
+        // Check memory every 10 minutes
+        setInterval(() => this.checkMemory(), 10 * 60 * 1000);
+        // Initial check
+        this.checkMemory();
+    }
+};
+
+// Start memory monitoring
+memoryMonitor.startMonitoring();
+
+// Global error handling to prevent crashes
+process.on('uncaughtException', (error) => {
+    console.error('🚨 UNCAUGHT EXCEPTION - Server will attempt to continue:', error);
+    console.error('Stack trace:', error.stack);
+    // Don't exit the process - try to continue serving other requests
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('🚨 UNHANDLED PROMISE REJECTION at:', promise, 'reason:', reason);
+    console.error('Stack trace:', reason?.stack || 'No stack trace available');
+    // Don't exit the process - try to continue serving other requests
+});
+
+// Graceful shutdown handling
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed successfully');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 SIGINT received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed successfully');
+        process.exit(0);
+    });
+});
+
 console.log('================================');
 console.log('🚀 File Browser Server Starting...');
 console.log(`📂 Base directory: ${baseDir}`);
@@ -159,10 +225,49 @@ app.get('/api/server-info', (req, res) => {
     });
 });
 
-app.listen(port, () => {
+// Global Express error handler - must be last middleware
+app.use((error, req, res, next) => {
+    console.error('🚨 EXPRESS ERROR HANDLER:', {
+        error: error.message,
+        stack: error.stack,
+        url: req.url,
+        method: req.method,
+        timestamp: new Date().toISOString()
+    });
+    
+    // Prevent sending response if headers already sent
+    if (res.headersSent) {
+        return next(error);
+    }
+    
+    // Send user-friendly error response
+    const statusCode = error.status || error.statusCode || 500;
+    const message = statusCode === 500 ? 'Internal server error' : error.message;
+    
+    res.status(statusCode).json({
+        error: message,
+        timestamp: new Date().toISOString(),
+        ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
+    });
+});
+
+// 404 handler for undefined routes
+app.use((req, res) => {
+    console.warn(`⚠️ 404 - Route not found: ${req.method} ${req.url}`);
+    res.status(404).json({
+        error: 'Route not found',
+        path: req.url,
+        method: req.method
+    });
+});
+
+const server = app.listen(port, () => {
     console.log(`🌐 Server running at http://localhost:${port}`);
     console.log(`📂 Serving files from: ${baseDir}`);
     console.log('✅ Server started successfully!');
 });
+
+// Set server timeout to prevent hanging connections
+server.setTimeout(300000); // 5 minutes
 
 module.exports = app;
