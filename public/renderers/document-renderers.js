@@ -24,6 +24,11 @@ class EpubRenderer {
         console.log(`[EPUB Debug] Render called on instance ${this.instanceId} for file: ${fileName}`);
         this.cleanup();
         
+        // Show prominent loading popup
+        if (window.debugConsole) {
+            window.debugConsole.showProgress('Loading EPUB document...', 10);
+        }
+        
         // Clear the content area completely first
         contentOther.innerHTML = '';
         contentOther.style.display = 'none';
@@ -528,8 +533,22 @@ class EpubRenderer {
             
             showChapter(0);
             
+            // Hide loading popup on success
+            if (window.debugConsole) {
+                window.debugConsole.updateProgress('EPUB loaded successfully', 100);
+                setTimeout(() => {
+                    window.debugConsole.hideProgress();
+                }, 500);
+            }
+            
         } catch (error) {
             console.error('EPUB render error:', error);
+            
+            // Hide loading popup on error
+            if (window.debugConsole) {
+                window.debugConsole.hideProgress();
+            }
+            
             contentOther.innerHTML = `
                 <div style="color: red; padding: 20px; background: rgba(255,255,255,0.1); border-radius: 10px;">
                     <h3>Error loading EPUB file</h3>
