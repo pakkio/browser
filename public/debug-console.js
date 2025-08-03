@@ -135,6 +135,18 @@ class DebugConsole {
         this.addMessage(type, [message]);
     }
 
+    showProgress(message, percentage) {
+        this.addMessage('info', [`${message} ${percentage ? `(${percentage}%)` : ''}`]);
+    }
+
+    updateProgress(message, percentage) {
+        this.addMessage('info', [`${message} ${percentage ? `(${percentage}%)` : ''}`]);
+    }
+
+    hideProgress() {
+        this.addMessage('info', ['Loading completed']);
+    }
+
     downloadLogs() {
         const logs = this.messages.map(msg => 
             `[${msg.timestamp}] ${msg.type.toUpperCase()}: ${msg.content}`

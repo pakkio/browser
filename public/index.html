@@ -5,7 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Browser</title>
     <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/default.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js"></script>
 <script>
 pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
@@ -125,6 +126,9 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     <!-- Renderer modules -->
     <script src="renderers/text-renderer.js"></script>
     <script src="renderers/image-renderer.js"></script>
+    <script src="renderers/pdf-ui.js"></script>
+    <script src="renderers/pdf-renderer.js"></script>
+    <script src="renderers/comic-renderer.js"></script>
     <script src="renderers/document-renderers.js"></script>
     <script src="renderers/media-renderers.js"></script>
     <script src="renderers/other-renderers.js"></script>
@@ -133,6 +137,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     <!-- Main file renderer and application -->
     <script src="file-renderer.js"></script>
     <script src="annotations.js"></script>
+    <script src="ai-suggestions.js"></script>
     <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>

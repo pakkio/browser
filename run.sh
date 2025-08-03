@@ -1,4 +1,16 @@
 #!/bin/bash
+unset OPENROUTER_API_KEY
+
+# Try to run mountz if it's available (ignore errors if not)
+if command -v mountz &> /dev/null; then
+    echo "Running mountz..."
+    mountz
+elif [ -f ~/.bashrc ] && grep -q "alias mountz" ~/.bashrc; then
+    echo "Loading aliases and running mountz..."
+    source ~/.bashrc && mountz
+else
+    echo "mountz command not found, skipping..."
+fi
 
 # Install dependencies
 echo "Installing dependencies..."
