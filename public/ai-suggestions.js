@@ -430,34 +430,12 @@ class AISuggestionsManager {
             <button class="ai-suggestions-close" title="Close">×</button>
         `;
 
-        // Create custom prompt section
-        const promptSection = document.createElement('div');
-        promptSection.className = 'ai-suggestions-prompt-section';
-        promptSection.innerHTML = `
-            <div class="prompt-input-container">
-                <label for="custom-prompt">Custom Prompt:</label>
-                <input type="text" 
-                       id="custom-prompt" 
-                       class="custom-prompt-input" 
-                       placeholder="e.g., 'find me the shortest files here', 'show me music from the 80s', 'find documents about AI'"
-                       value="User is browsing files and looking for interesting content to read">
-                <button class="analyze-button" title="Analyze with custom prompt">🔍 Analyze</button>
-            </div>
-            <div class="prompt-examples">
-                <span class="example-prompt" data-prompt="find me the shortest audio files here">📏 Shortest files</span>
-                <span class="example-prompt" data-prompt="show me music albums from specific artists or bands">🎵 Artist albums</span>
-                <span class="example-prompt" data-prompt="find the most recently modified files">🕒 Recent files</span>
-                <span class="example-prompt" data-prompt="show me files with interesting or unusual names">✨ Unique names</span>
-            </div>
-        `;
-
         // Create content container
         this.content = document.createElement('div');
         this.content.className = 'ai-suggestions-content';
 
         // Assemble popup
         this.popup.appendChild(header);
-        this.popup.appendChild(promptSection);
         this.popup.appendChild(this.content);
         this.backdrop.appendChild(this.popup);
 
@@ -514,9 +492,6 @@ class AISuggestionsManager {
                 this.hide();
             }
         });
-
-        // Custom prompt functionality
-        this.setupPromptEventListeners();
         
         // Prevent popup from closing when clicking inside it
         this.popup.addEventListener('click', (e) => {
@@ -524,32 +499,13 @@ class AISuggestionsManager {
         });
     }
 
-    setupPromptEventListeners() {
-        // Analyze button click
-        this.popup.querySelector('.analyze-button').addEventListener('click', () => {
-            this.analyzeWithCustomPrompt();
-        });
-
-        // Enter key in prompt input
-        this.popup.querySelector('.custom-prompt-input').addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                this.analyzeWithCustomPrompt();
-            }
-        });
-
-        // Example prompt clicks
-        this.popup.querySelectorAll('.example-prompt').forEach(example => {
-            example.addEventListener('click', () => {
-                const promptInput = this.popup.querySelector('.custom-prompt-input');
-                promptInput.value = example.getAttribute('data-prompt');
-                this.analyzeWithCustomPrompt();
-            });
-        });
-    }
-
     async analyzeWithCustomPrompt() {
-        const promptInput = this.popup.querySelector('.custom-prompt-input');
+        const promptInput = this.content.querySelector('#custom-prompt');
+        if (!promptInput) {
+            console.error('Custom prompt input not found');
+            return;
+        }
+        
         const customPrompt = promptInput.value.trim();
         
         if (!customPrompt) {
@@ -565,7 +521,146 @@ class AISuggestionsManager {
         this.isVisible = true;
         this.currentPath = window.fileExplorer?.currentPath() || '';
         this.backdrop.style.display = 'block';
-        this.loadSuggestions();
+        this.showPromptSelection();
+    }
+
+    showPromptSelection() {
+        const displayPath = this.currentPath || '/mnt/z (root)';
+        
+        this.content.innerHTML = `
+            <div class="ai-prompt-selection">
+                <div style="text-align: center; padding: 30px 20px;">
+                    <div style="font-size: 48px; margin-bottom: 20px;">🤖</div>
+                    <h3 style="margin: 0 0 15px 0; color: #4ecdc4;">How would you like to analyze your files?</h3>
+                    <p style="margin: 0 0 30px 0; color: #ccc; font-size: 14px;">
+                        📂 Analyzing: ${displayPath}
+                    </p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 15px; max-width: 400px; margin: 0 auto;">
+                        <button class="prompt-option-btn" data-option="normal">
+                            <div style="font-size: 20px; margin-bottom: 8px;">🎯 Normal Analysis</div>
+                            <div style="font-size: 12px; color: #888;">
+                                Find interesting files to read based on content and file types
+                            </div>
+                        </button>
+                        
+                        <button class="prompt-option-btn" data-option="custom">
+                            <div style="font-size: 20px; margin-bottom: 8px;">✨ Custom Analysis</div>
+                            <div style="font-size: 12px; color: #888;">
+                                Use your own prompt to find specific types of files
+                            </div>
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <style>
+                .prompt-option-btn {
+                    background: #3a3a3a;
+                    border: 2px solid #555;
+                    border-radius: 12px;
+                    padding: 20px;
+                    color: white;
+                    cursor: pointer;
+                    transition: all 0.3s ease;
+                    text-align: left;
+                }
+                
+                .prompt-option-btn:hover {
+                    background: #404040;
+                    border-color: #4ecdc4;
+                    transform: translateY(-2px);
+                    box-shadow: 0 8px 16px rgba(0, 0, 0, 0.3);
+                }
+                
+                .prompt-option-btn:active {
+                    transform: translateY(0);
+                }
+            </style>
+        `;
+
+        // Add click handlers for the prompt options
+        this.content.querySelectorAll('.prompt-option-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const option = btn.dataset.option;
+                if (option === 'normal') {
+                    this.loadSuggestions(); // Use default prompt
+                } else if (option === 'custom') {
+                    this.showCustomPromptInterface();
+                }
+            });
+        });
+    }
+
+    showCustomPromptInterface() {
+        this.content.innerHTML = `
+            <div class="ai-custom-prompt-interface">
+                <div style="text-align: center; padding: 20px;">
+                    <div style="font-size: 32px; margin-bottom: 15px;">✨</div>
+                    <h3 style="margin: 0 0 20px 0; color: #4ecdc4;">Custom AI Analysis</h3>
+                    <p style="margin: 0 0 25px 0; color: #ccc; font-size: 14px;">
+                        Tell the AI what kind of files you're looking for
+                    </p>
+                </div>
+                
+                <div class="prompt-input-container" style="padding: 0 20px;">
+                    <label for="custom-prompt" style="display: block; margin-bottom: 8px; color: #e0e0e0; font-weight: 500;">Your Prompt:</label>
+                    <input type="text" 
+                           id="custom-prompt" 
+                           class="custom-prompt-input" 
+                           placeholder="e.g., 'find me the shortest files here', 'show me music from the 80s', 'find documents about AI'"
+                           value="find interesting files to read">
+                    <div style="margin-top: 10px; text-align: right;">
+                        <button class="back-to-selection-btn" style="margin-right: 10px; padding: 8px 16px; background: #666; color: white; border: none; border-radius: 6px; cursor: pointer;">← Back</button>
+                        <button class="analyze-button" style="padding: 8px 20px;">🔍 Analyze</button>
+                    </div>
+                </div>
+                
+                <div class="prompt-examples" style="padding: 20px;">
+                    <div style="color: #888; font-size: 12px; margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Examples:</div>
+                    <div style="display: flex; flex-wrap: wrap; gap: 8px;">
+                        <span class="example-prompt" data-prompt="find me the shortest audio files here">📏 Shortest files</span>
+                        <span class="example-prompt" data-prompt="show me music albums from specific artists or bands">🎵 Artist albums</span>
+                        <span class="example-prompt" data-prompt="find the most recently modified files">🕒 Recent files</span>
+                        <span class="example-prompt" data-prompt="show me files with interesting or unusual names">✨ Unique names</span>
+                        <span class="example-prompt" data-prompt="find documents about programming or technology">💻 Tech docs</span>
+                        <span class="example-prompt" data-prompt="show me the largest files in this directory">📦 Large files</span>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Add event listeners
+        const customPromptSetup = () => {
+            // Analyze button
+            this.content.querySelector('.analyze-button').addEventListener('click', () => {
+                this.analyzeWithCustomPrompt();
+            });
+
+            // Enter key in prompt input
+            this.content.querySelector('.custom-prompt-input').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.analyzeWithCustomPrompt();
+                }
+            });
+
+            // Back button
+            this.content.querySelector('.back-to-selection-btn').addEventListener('click', () => {
+                this.showPromptSelection();
+            });
+
+            // Example prompt clicks
+            this.content.querySelectorAll('.example-prompt').forEach(example => {
+                example.addEventListener('click', () => {
+                    const promptInput = this.content.querySelector('.custom-prompt-input');
+                    promptInput.value = example.getAttribute('data-prompt');
+                    this.analyzeWithCustomPrompt();
+                });
+            });
+        };
+
+        customPromptSetup();
     }
 
     hide() {
