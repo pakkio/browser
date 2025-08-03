@@ -5,6 +5,7 @@ class ImageRenderer {
         this.originalParent = null;
         this.fullscreenContainer = null;
         this.currentImageContainer = null;
+        this.isTruncatedView = false;
     }
 
     cleanup() {
@@ -210,6 +211,13 @@ class ImageRenderer {
                         this.exitFullscreen();
                     }
                     break;
+                case 'b':
+                case 'B':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.toggleTruncatedView();
+                    }
+                    break;
             }
         };
         
@@ -265,18 +273,8 @@ class ImageRenderer {
             background: #000;
         `;
 
-        // Update image for fullscreen
-        const img = imageContainer.querySelector('img');
-        if (img) {
-            img.style.cssText = `
-                max-width: 100vw;
-                max-height: 100vh;
-                object-fit: contain;
-                border-radius: 0;
-                box-shadow: none;
-                display: block;
-            `;
-        }
+        // Set initial view mode to 100% (non-truncated)
+        this.isTruncatedView = false;
 
         // Update controls for fullscreen
         const controls = imageContainer.querySelector('.image-controls');
@@ -305,6 +303,10 @@ class ImageRenderer {
         }
 
         this.isFullscreen = true;
+        
+        // Apply initial fullscreen image styles
+        this.updateFullscreenImageStyles();
+        
         console.log('Image entered fullscreen mode');
     }
 
@@ -375,6 +377,47 @@ class ImageRenderer {
         this.fullscreenContainer = null;
         this.originalParent = null;
         this.isFullscreen = false;
+        this.isTruncatedView = false;
         console.log('Image exited fullscreen mode');
+    }
+
+    toggleTruncatedView() {
+        if (!this.isFullscreen) return;
+
+        this.isTruncatedView = !this.isTruncatedView;
+        this.updateFullscreenImageStyles();
+        console.log(`Image view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+    }
+
+    updateFullscreenImageStyles() {
+        if (!this.isFullscreen || !this.fullscreenContainer) return;
+
+        const imageContainer = this.fullscreenContainer.querySelector('.image-container');
+        if (!imageContainer) return;
+
+        const img = imageContainer.querySelector('img');
+        if (!img) return;
+
+        if (this.isTruncatedView) {
+            // Truncated view - show image end clearly with some padding
+            img.style.cssText = `
+                max-width: calc(100vw - 40px);
+                max-height: calc(100vh - 40px);
+                object-fit: contain;
+                border-radius: 0;
+                box-shadow: none;
+                display: block;
+            `;
+        } else {
+            // 100% view - maximize space usage
+            img.style.cssText = `
+                max-width: 100vw;
+                max-height: 100vh;
+                object-fit: contain;
+                border-radius: 0;
+                box-shadow: none;
+                display: block;
+            `;
+        }
     }
 }

@@ -11,6 +11,7 @@ class ComicRenderer {
         this.isFullscreen = false;
         this.originalParent = null;
         this.fullscreenContainer = null;
+        this.isTruncatedView = false;
     }
 
     cleanup() {
@@ -269,6 +270,13 @@ class ComicRenderer {
                     e.preventDefault();
                     if (this.isFullscreen) {
                         this.exitFullscreen();
+                    }
+                    break;
+                case 'b':
+                case 'B':
+                    e.preventDefault();
+                    if (this.isFullscreen) {
+                        this.toggleTruncatedView();
                     }
                     break;
                 case 'r': case 'g': case 'y': case 'b': case 'c':
@@ -578,19 +586,13 @@ class ComicRenderer {
                 gap: 10px;
                 padding: 10px;
                 background: #000;
+                min-height: 0;
+                overflow: hidden;
             `;
         }
 
-        // Update page images for fullscreen
-        const pageImages = comicContainer.querySelectorAll('img');
-        pageImages.forEach(img => {
-            img.style.cssText = `
-                max-width: 49%;
-                max-height: 100%;
-                object-fit: contain;
-                border: 1px solid #333;
-            `;
-        });
+        // Set initial view mode to 100% (non-truncated)
+        this.isTruncatedView = false;
 
         // Update controls for fullscreen
         const controls = comicContainer.querySelector('.comic-controls');
@@ -615,6 +617,10 @@ class ComicRenderer {
         }
 
         this.isFullscreen = true;
+        
+        // Apply initial fullscreen page styles
+        this.updateFullscreenPageStyles();
+        
         console.log('Comic entered fullscreen mode');
     }
 
@@ -675,6 +681,74 @@ class ComicRenderer {
         this.fullscreenContainer = null;
         this.originalParent = null;
         this.isFullscreen = false;
+        this.isTruncatedView = false;
         console.log('Comic exited fullscreen mode');
+    }
+
+    toggleTruncatedView() {
+        if (!this.isFullscreen) return;
+
+        this.isTruncatedView = !this.isTruncatedView;
+        this.updateFullscreenPageStyles();
+        console.log(`Comic view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+    }
+
+    updateFullscreenPageStyles() {
+        if (!this.isFullscreen || !this.fullscreenContainer) return;
+
+        const comicContainer = this.fullscreenContainer.querySelector('.comic-container');
+        if (!comicContainer) return;
+
+        // Update page images based on view mode
+        const pageImages = comicContainer.querySelectorAll('img');
+        pageImages.forEach(img => {
+            if (this.isTruncatedView) {
+                // Truncated view - show page end clearly with some padding
+                img.style.cssText = `
+                    max-width: 49%;
+                    max-height: calc(100vh - 120px);
+                    object-fit: contain;
+                    border: 1px solid #333;
+                `;
+            } else {
+                // 100% view - maximize space usage
+                img.style.cssText = `
+                    max-width: 49%;
+                    max-height: calc(100vh - 80px);
+                    object-fit: contain;
+                    border: 1px solid #333;
+                `;
+            }
+        });
+
+        // Update pages container padding based on view mode
+        const pagesContainer = comicContainer.querySelector('.pages-container');
+        if (pagesContainer) {
+            if (this.isTruncatedView) {
+                pagesContainer.style.cssText = `
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 25px 10px;
+                    background: #000;
+                    min-height: 0;
+                    overflow: hidden;
+                `;
+            } else {
+                pagesContainer.style.cssText = `
+                    flex: 1;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 10px;
+                    padding: 10px;
+                    background: #000;
+                    min-height: 0;
+                    overflow: hidden;
+                `;
+            }
+        }
     }
 }
