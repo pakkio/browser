@@ -8,6 +8,8 @@ class PDFRenderer {
         this.renderTimeout = null;
         this.uiManager = new PDFUIManager();
         this.filePath = null;
+        this.zoomLevel = 1.0; // Default zoom level
+        this.fitToWidth = true; // Default to fit-to-width mode
     }
 
     cleanup() {
@@ -17,6 +19,17 @@ class PDFRenderer {
         }
         if (this.handleWheel) {
             document.removeEventListener('wheel', this.handleWheel);
+            
+            // Remove from specific PDF containers
+            if (this.wheelListenerElements) {
+                this.wheelListenerElements.forEach(element => {
+                    if (element) {
+                        element.removeEventListener('wheel', this.handleWheel);
+                    }
+                });
+                this.wheelListenerElements = null;
+            }
+            
             this.handleWheel = null;
         }
         
@@ -31,6 +44,19 @@ class PDFRenderer {
         if (this.renderTimeout) {
             clearTimeout(this.renderTimeout);
             this.renderTimeout = null;
+        }
+        
+        // Cancel and clean up any active render tasks
+        if (this.activeRenderTasks) {
+            this.activeRenderTasks.forEach((task, canvasId) => {
+                try {
+                    task.cancel();
+                } catch (e) {
+                    console.warn(`Failed to cancel render task for ${canvasId}:`, e);
+                }
+            });
+            this.activeRenderTasks.clear();
+            this.activeRenderTasks = null;
         }
         
         this.pdfDoc = null;
@@ -73,8 +99,26 @@ class PDFRenderer {
         this.uiManager.setupEventHandlers(
             controls,
             (page) => this.loadPage(page),
-            () => this.refreshCurrentPage()
+            (mode) => this.handleModeChange(mode)
         );
+        
+        // Add wheel listeners to PDF containers after they're created
+        setTimeout(() => {
+            const pdfContainer = document.querySelector('.pdf-container');
+            const pagesContainer = document.querySelector('.pdf-pages-container');
+            const leftContainer = document.getElementById('pdf-container-left');
+            const rightContainer = document.getElementById('pdf-container-right');
+            
+            [pdfContainer, pagesContainer, leftContainer, rightContainer].forEach(container => {
+                if (container) {
+                    console.log('PDF: Adding wheel listener to', container.className || container.id);
+                    container.addEventListener('wheel', this.handleWheel, { passive: false });
+                    // Store reference for cleanup
+                    if (!this.wheelListenerElements) this.wheelListenerElements = [];
+                    this.wheelListenerElements.push(container);
+                }
+            });
+        }, 50);
     }
 
     setupKeyboardNavigation() {
@@ -110,9 +154,23 @@ class PDFRenderer {
         };
 
         this.handleWheel = (e) => {
-            if (e.target.tagName === 'INPUT') return;
+            console.log('PDF Wheel event fired:', {
+                target: e.target.tagName,
+                targetId: e.target.id,
+                targetClass: e.target.className,
+                deltaY: e.deltaY
+            });
+            
+            // Skip if target is an input
+            if (e.target.tagName === 'INPUT') {
+                console.log('PDF Wheel: Skipping - target is INPUT');
+                return;
+            }
+            
+            console.log('PDF Wheel: Processing scroll', e.deltaY > 0 ? 'DOWN (next page)' : 'UP (previous page)');
             
             e.preventDefault();
+            e.stopPropagation();
             
             if (e.deltaY > 0) {
                 this.nextPage();
@@ -222,6 +280,9 @@ class PDFRenderer {
             this.uiManager.setTotalPages(this.pdfDoc.numPages);
             this.uiManager.setStatus('');
             
+            // Initialize zoom display
+            this.uiManager.updateZoomDisplay(this.zoomLevel, this.fitToWidth);
+            
             await this.loadPage(1);
         } catch (error) {
             console.error('Failed to load PDF:', error);
@@ -298,6 +359,24 @@ class PDFRenderer {
 
     async renderPage(pageNum, canvas) {
         try {
+            // Cancel any existing render task for this canvas
+            const canvasId = canvas.id;
+            if (this.activeRenderTasks && this.activeRenderTasks.has(canvasId)) {
+                const existingTask = this.activeRenderTasks.get(canvasId);
+                existingTask.cancel();
+                this.activeRenderTasks.delete(canvasId);
+                // Small delay to ensure canvas is freed
+                await new Promise(resolve => setTimeout(resolve, 10));
+            }
+            
+            // Clear the canvas to ensure clean state
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!this.activeRenderTasks) {
+                this.activeRenderTasks = new Map();
+            }
+            
             if (!this.pdfDoc) {
                 // Load the PDF document using authenticated fetch
                 const response = await window.authManager.authenticatedFetch(
@@ -327,14 +406,33 @@ class PDFRenderer {
             // Get the page
             const page = await this.pdfDoc.getPage(pageNum);
             
-            // Get viewport and calculate scale
+            // Get viewport and calculate scale for better readability
             const containerRect = canvas.parentElement.getBoundingClientRect();
-            const maxWidth = containerRect.width - 20;
-            const maxHeight = containerRect.height - 20;
+            const maxWidth = containerRect.width - 40; // More padding
+            const maxHeight = window.innerHeight - 200; // Use more of the viewport height
             
             const viewport = page.getViewport({ scale: 1.0 });
-            const scale = Math.min(maxWidth / viewport.width, maxHeight / viewport.height);
+            
+            // Calculate scale based on zoom mode
+            let scale;
+            
+            if (this.fitToWidth) {
+                // Fit to width mode
+                scale = maxWidth / viewport.width;
+                // Ensure minimum scale for readability (at least 1.0)
+                scale = Math.max(scale, 1.0);
+                // If the scaled height would be too tall, reduce scale but not below 0.8
+                if (scale * viewport.height > maxHeight) {
+                    scale = Math.max(maxHeight / viewport.height, 0.8);
+                }
+            } else {
+                // Manual zoom mode
+                scale = this.zoomLevel;
+            }
+            
             const scaledViewport = page.getViewport({ scale: scale });
+            
+            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
             
             // Set canvas dimensions
             canvas.width = scaledViewport.width;
@@ -349,11 +447,32 @@ class PDFRenderer {
             
             const renderTask = page.render(renderContext);
             
+            // Store the render task for cancellation if needed
+            this.activeRenderTasks.set(canvasId, renderTask);
+            
+            // Wait for the render to complete
+            await renderTask.promise;
+            
+            // Remove the completed task from tracking
+            this.activeRenderTasks.delete(canvasId);
+            
             // Render the text layer
             await this.renderTextLayer(page, scaledViewport, pageNum);
             
             return renderTask.promise;
         } catch (error) {
+            // Clean up the render task from tracking on error
+            const canvasId = canvas.id;
+            if (this.activeRenderTasks && this.activeRenderTasks.has(canvasId)) {
+                this.activeRenderTasks.delete(canvasId);
+            }
+            
+            // Check if this is a rendering cancellation (not an actual error)
+            if (error.name === 'RenderingCancelledException') {
+                console.debug(`PDF rendering cancelled for page ${pageNum} (this is normal when scrolling quickly)`);
+                return; // Don't treat this as an error
+            }
+            
             console.error(`Error rendering PDF page ${pageNum} from ${this.fileName || 'unknown file'}:`, {
                 error: error.message,
                 page: pageNum,
@@ -416,5 +535,26 @@ class PDFRenderer {
 
     refreshCurrentPage() {
         this.loadPage(this.uiManager.currentPage);
+    }
+
+    handleModeChange(mode) {
+        if (mode === 'zoom-out') {
+            this.fitToWidth = false;
+            this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.25);
+        } else if (mode === 'zoom-in') {
+            this.fitToWidth = false;
+            this.zoomLevel = Math.min(3.0, this.zoomLevel + 0.25);
+        } else if (mode === 'fit-width') {
+            this.fitToWidth = !this.fitToWidth;
+            if (!this.fitToWidth && this.zoomLevel === 1.0) {
+                this.zoomLevel = 1.25; // Default manual zoom
+            }
+        }
+        
+        // Update zoom display
+        this.uiManager.updateZoomDisplay(this.zoomLevel, this.fitToWidth);
+        
+        // Refresh the current page with new zoom
+        this.refreshCurrentPage();
     }
 }

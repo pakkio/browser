@@ -69,7 +69,7 @@ class FileRenderer {
 
         if (extension === 'html') {
             return 'html';
-        } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
+        } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro', 'lsl', 'lua', 'pl', 'asm', 's', 'vb', 'pas', 'f90', 'f95', 'f03', 'f08', 'for', 'cobol', 'cob', 'zig', 'm', 'mm', 'groovy', 'gradle', 'cmake', 'dockerfile'].includes(extension)) {
             return 'text';
         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
             return 'image';

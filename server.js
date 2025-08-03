@@ -21,6 +21,7 @@ const { serveEpubCover, serveEpubPreview, serveCoverImageFallback } = require('.
 const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } = require('./lib/annotation-handlers');
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
+const AIFileAnalyzer = require('./lib/ai-file-analyzer');
 
 const app = express();
 
@@ -95,10 +96,67 @@ app.post('/api/cache/clear', requireAuth, (req, res) => clearCache(req, res, cac
 // System routes
 app.post('/api/open-file', requireAuth, openFile);
 
+// AI File Analysis route
+app.post('/api/analyze-files', requireAuth, async (req, res) => {
+    try {
+        const { path: dirPath, context } = req.body;
+        
+        if (dirPath === undefined || dirPath === null) {
+            return res.status(400).json({ error: 'Directory path is required' });
+        }
+
+        // Resolve the full path based on the baseDir
+        // Handle empty string as root path
+        const normalizedPath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
+        const fullPath = path.resolve(baseDir, normalizedPath);
+        
+        // Security check - ensure the path is within baseDir
+        if (!fullPath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
+        }
+
+        const analyzer = new AIFileAnalyzer();
+        const result = await analyzer.analyzeDirectory(fullPath, context);
+        
+        res.json({
+            success: true,
+            ...result
+        });
+        
+    } catch (error) {
+        console.error('Error in AI file analysis:', error);
+        res.status(500).json({ 
+            error: 'Failed to analyze files',
+            message: error.message
+        });
+    }
+});
+
 // Image serving route for EPUB content
 app.get('/images/:filename', requireAuth, async (req, res) => {
     // This endpoint needs special handling for EPUB images - keeping as placeholder
     res.status(404).json({ error: 'Image endpoint not fully implemented yet' });
+});
+
+// Session-based current path persistence
+app.get('/api/current-path', (req, res) => {
+    const currentPath = req.session.currentPath || '';
+    res.json({ currentPath });
+});
+
+app.post('/api/current-path', (req, res) => {
+    const { path: newPath } = req.body;
+    req.session.currentPath = newPath || '';
+    req.session.lastBrowsedPath = newPath || '';  // Sync both session keys
+    res.json({ success: true, currentPath: req.session.currentPath });
+});
+
+// Endpoint to get server root info
+app.get('/api/server-info', (req, res) => {
+    res.json({ 
+        rootDir: baseDir,
+        currentPath: req.session.currentPath || req.session.lastBrowsedPath || ''
+    });
 });
 
 app.listen(port, () => {

@@ -8,6 +8,98 @@ class TextRenderer {
         this.coverMode = true;
     }
 
+    // Map file extensions to highlight.js language identifiers
+    getLanguageFromExtension(extension) {
+        const languageMap = {
+            // Common programming languages
+            'js': 'javascript',
+            'py': 'python',
+            'c': 'c',
+            'cpp': 'cpp',
+            'h': 'c',
+            'hpp': 'cpp',
+            'java': 'java',
+            'go': 'go',
+            'rs': 'rust',
+            'php': 'php',
+            'rb': 'ruby',
+            'swift': 'swift',
+            'kt': 'kotlin',
+            'dart': 'dart',
+            'r': 'r',
+            'scala': 'scala',
+            'clj': 'clojure',
+            'elm': 'elm',
+            'ts': 'typescript',
+            'tsx': 'typescript',
+            'jsx': 'javascript',
+            
+            // Scripting and shell
+            'sh': 'bash',
+            'bat': 'batch',
+            'ps1': 'powershell',
+            'lua': 'lua',
+            'pl': 'perl',
+            'lsl': 'cpp', // LSL syntax is similar to C/C++
+            
+            // Web technologies
+            'html': 'html',
+            'css': 'css',
+            'scss': 'scss',
+            'sass': 'sass',
+            'less': 'less',
+            'vue': 'vue',
+            'svelte': 'javascript',
+            'astro': 'javascript',
+            
+            // Data and config
+            'json': 'json',
+            'xml': 'xml',
+            'yaml': 'yaml',
+            'yml': 'yaml',
+            'toml': 'toml',
+            'ini': 'ini',
+            'conf': 'apache',
+            
+            // Database
+            'sql': 'sql',
+            
+            // Assembly and low-level
+            'asm': 'x86asm',
+            's': 'x86asm',
+            
+            // Other languages
+            'vb': 'vbnet',
+            'pas': 'pascal',
+            'f90': 'fortran',
+            'f95': 'fortran',
+            'f03': 'fortran',
+            'f08': 'fortran',
+            'for': 'fortran',
+            'cobol': 'cobol',
+            'cob': 'cobol',
+            'zig': 'zig',
+            'm': 'objectivec',
+            'mm': 'objectivec',
+            'groovy': 'groovy',
+            'gradle': 'gradle',
+            'cmake': 'cmake',
+            'dockerfile': 'dockerfile',
+            
+            // Markup and documentation
+            'md': 'markdown',
+            'tex': 'latex',
+            'srt': 'srt',
+            
+            // Default fallbacks
+            'txt': 'plaintext',
+            'log': 'plaintext',
+            'csv': 'csv'
+        };
+        
+        return languageMap[extension] || 'plaintext';
+    }
+
     cleanup() {
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
@@ -203,8 +295,13 @@ class TextRenderer {
             
             // Show left/first page
             codeContent1.textContent = this.pages[this.currentPage - 1];
-            codeContent1.className = `language-${extension}`;
-            hljs.highlightElement(codeContent1);
+            const language = this.getLanguageFromExtension(extension);
+            codeContent1.className = `language-${language}`;
+            
+            // Apply syntax highlighting if available
+            if (typeof hljs !== 'undefined') {
+                hljs.highlightElement(codeContent1);
+            }
             
             // Show right/second page if in double page mode
             if (this.doublePageMode) {
@@ -231,8 +328,12 @@ class TextRenderer {
                 
                 if (shouldShowRightPage) {
                     codeContent2.textContent = this.pages[rightPageIndex];
-                    codeContent2.className = `language-${extension}`;
-                    hljs.highlightElement(codeContent2);
+                    codeContent2.className = `language-${language}`;
+                    
+                    // Apply syntax highlighting if available
+                    if (typeof hljs !== 'undefined') {
+                        hljs.highlightElement(codeContent2);
+                    }
                 } else {
                     codeContent2.textContent = ''; // Clear if no more pages
                 }

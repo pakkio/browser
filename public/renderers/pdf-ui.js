@@ -50,6 +50,12 @@ class PDFUIManager {
                     <button id="pdf-jump-btn">Go</button>
                 </div>
                 <div style="display: flex; align-items: center; gap: 5px;">
+                    <button id="pdf-zoom-out" title="Zoom Out">🔍-</button>
+                    <span id="pdf-zoom-level" style="margin: 0 5px; min-width: 50px; text-align: center;">100%</span>
+                    <button id="pdf-zoom-in" title="Zoom In">🔍+</button>
+                    <button id="pdf-fit-width" title="Fit to Width">⏹️</button>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
                     <button id="pdf-double-page-toggle" title="Toggle Double Page View">📖</button>
                     <button id="pdf-cover-mode-toggle" title="Treat first page as cover">📚</button>
                     <button id="pdf-text-toggle" title="Toggle Text Selection">🔤</button>
@@ -68,11 +74,11 @@ class PDFUIManager {
             display: flex;
             gap: 20px;
             flex: 1;
-            align-items: center;
+            align-items: flex-start;
             justify-content: center;
             min-height: 0;
-            padding: 10px;
-            overflow: hidden;
+            padding: 20px;
+            overflow: auto;
             height: 100%;
         `;
 
@@ -91,20 +97,20 @@ class PDFUIManager {
         pageContainer.style.cssText = `
             position: relative;
             flex: 1;
-            max-height: 100%;
             display: flex;
             justify-content: center;
-            align-items: center;
-            overflow: hidden;
+            align-items: flex-start;
+            overflow: auto;
+            padding: 10px;
         `;
 
         const canvas = document.createElement('canvas');
         canvas.id = canvasId;
         canvas.style.cssText = `
-            max-width: 100%;
-            max-height: 100%;
             border: 1px solid #ccc;
             display: block;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            background: white;
         `;
 
         const textLayer = document.createElement('div');
@@ -165,6 +171,12 @@ class PDFUIManager {
                 pointer-events: auto !important;
             }
             
+            /* Ensure text layers don't interfere with mouse wheel when not in text selection mode */
+            #pdf-text-layer-left:not([data-text-visible="true"]), 
+            #pdf-text-layer-right:not([data-text-visible="true"]) {
+                pointer-events: none !important;
+            }
+            
             #pdf-text-layer-left:hover, #pdf-text-layer-right:hover {
                 background: rgba(255, 255, 0, 0.05);
             }
@@ -180,6 +192,12 @@ class PDFUIManager {
         const doublePageToggle = controls.querySelector('#pdf-double-page-toggle');
         const coverModeToggle = controls.querySelector('#pdf-cover-mode-toggle');
         const textToggle = controls.querySelector('#pdf-text-toggle');
+        
+        // Zoom controls
+        const zoomOutBtn = controls.querySelector('#pdf-zoom-out');
+        const zoomInBtn = controls.querySelector('#pdf-zoom-in');
+        const fitWidthBtn = controls.querySelector('#pdf-fit-width');
+        const zoomLevelSpan = controls.querySelector('#pdf-zoom-level');
 
         // Set initial button states
         doublePageToggle.innerHTML = '📄 Single Page';
@@ -232,6 +250,19 @@ class PDFUIManager {
             this.toggleTextLayer();
         });
 
+        // Zoom controls event listeners
+        zoomOutBtn.addEventListener('click', () => {
+            onModeChange('zoom-out');
+        });
+
+        zoomInBtn.addEventListener('click', () => {
+            onModeChange('zoom-in');
+        });
+
+        fitWidthBtn.addEventListener('click', () => {
+            onModeChange('fit-width');
+        });
+
         return {
             prevBtn,
             nextBtn,
@@ -239,7 +270,11 @@ class PDFUIManager {
             jumpBtn,
             doublePageToggle,
             coverModeToggle,
-            textToggle
+            textToggle,
+            zoomOutBtn,
+            zoomInBtn,
+            fitWidthBtn,
+            zoomLevelSpan
         };
     }
 
@@ -329,22 +364,26 @@ class PDFUIManager {
                 textLayer1.style.opacity = '1';
                 textLayer1.style.pointerEvents = 'auto';
                 textLayer1.style.display = 'block';
+                textLayer1.setAttribute('data-text-visible', 'true');
             }
             if (textLayer2) {
                 textLayer2.style.opacity = '1';
                 textLayer2.style.pointerEvents = 'auto';
                 textLayer2.style.display = 'block';
+                textLayer2.setAttribute('data-text-visible', 'true');
             }
         } else {
             if (textLayer1) {
                 textLayer1.style.opacity = '0';
                 textLayer1.style.pointerEvents = 'none';
                 textLayer1.style.display = 'none';
+                textLayer1.removeAttribute('data-text-visible');
             }
             if (textLayer2) {
                 textLayer2.style.opacity = '0';
                 textLayer2.style.pointerEvents = 'none';
                 textLayer2.style.display = 'none';
+                textLayer2.removeAttribute('data-text-visible');
             }
         }
     }
@@ -364,5 +403,22 @@ class PDFUIManager {
     setTotalPages(total) {
         this.totalPages = total;
         this.updatePageInfo();
+    }
+
+    updateZoomDisplay(zoomLevel, fitToWidth) {
+        const zoomLevelSpan = document.getElementById('pdf-zoom-level');
+        const fitWidthBtn = document.getElementById('pdf-fit-width');
+        
+        if (zoomLevelSpan) {
+            if (fitToWidth) {
+                zoomLevelSpan.textContent = 'Fit';
+            } else {
+                zoomLevelSpan.textContent = Math.round(zoomLevel * 100) + '%';
+            }
+        }
+        
+        if (fitWidthBtn) {
+            fitWidthBtn.style.background = fitToWidth ? '#4CAF50' : '#FF9800';
+        }
     }
 }

@@ -24,6 +24,7 @@ function initializeFileExplorer() {
     let currentFiles = [];
     let filteredFiles = [];
     let selectedIndex = -1;
+    let serverRootDir = '';  // Will be fetched from server
     const fileRenderer = new FileRenderer();
 
     function matchesSearchTerms(filename, searchTerms) {
@@ -39,6 +40,13 @@ function initializeFileExplorer() {
 
     function loadFiles(path) {
         console.log('Loading files for path:', path);
+        
+        // Save current path to session
+        fetch('/api/current-path', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: path })
+        }).catch(err => console.warn('Failed to save current path:', err));
         
         // Show loading indicator and progress
         const loadingIndicator = document.getElementById('loading-indicator');
@@ -100,15 +108,30 @@ function initializeFileExplorer() {
     function displayFiles(data, path) {
         fileList.innerHTML = '';
         
+        console.log('displayFiles called with path:', JSON.stringify(path), 'path !== "":', path !== '');
+        
         if (path !== '') {
             const parentLi = document.createElement('li');
             parentLi.textContent = '..';
             parentLi.classList.add('parent-dir');
             parentLi.addEventListener('click', () => {
-                currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
+                console.log('Parent directory clicked. Current path:', JSON.stringify(currentPath));
+                const lastSlashIndex = currentPath.lastIndexOf('/');
+                console.log('Last slash index:', lastSlashIndex);
+                
+                if (lastSlashIndex > 0) {
+                    currentPath = currentPath.substring(0, lastSlashIndex);
+                } else {
+                    currentPath = '';  // Go to root if we're at first level
+                }
+                
+                console.log('New path after parent navigation:', JSON.stringify(currentPath));
                 loadFiles(currentPath);
             });
             fileList.appendChild(parentLi);
+            console.log('Added parent directory (..) to file list');
+        } else {
+            console.log('At root directory - not showing parent (..)');
         }
         
         const selectedFilter = fileTypeFilter.value;
@@ -415,7 +438,7 @@ function initializeFileExplorer() {
         
         // Create breadcrumb navigation
         const pathParts = fullPath ? fullPath.split('/') : [];
-        let breadcrumbs = `<button class="path-home" onclick="window.fileExplorer.loadFiles('')" title="Home">🏠</button>`;
+        let breadcrumbs = `<button class="path-home" onclick="console.log('Home button clicked'); window.fileExplorer.loadFiles('')" title="Go to Root Directory (${serverRootDir})">🏠</button>`;
         
         if (pathParts.length > 0) {
             breadcrumbs += ' / ';
@@ -628,7 +651,20 @@ function initializeFileExplorer() {
         });
     }
 
-    loadFiles(currentPath);
+    // Fetch server info and restore saved current path from session, then load files
+    fetch('/api/server-info')
+        .then(response => response.json())
+        .then(data => {
+            serverRootDir = data.rootDir || '';
+            currentPath = data.currentPath || '';
+            console.log('Server root directory:', serverRootDir);
+            console.log('Restored current path:', currentPath);
+            loadFiles(currentPath);
+        })
+        .catch(err => {
+            console.warn('Failed to fetch server info, starting at root:', err);
+            loadFiles(currentPath);
+        });
     
     // Quick annotation function for keyboard shortcuts
     function quickAnnotate(file, type, value) {
