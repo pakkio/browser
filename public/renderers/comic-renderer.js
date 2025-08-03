@@ -12,6 +12,7 @@ class ComicRenderer {
         this.originalParent = null;
         this.fullscreenContainer = null;
         this.isTruncatedView = false;
+        this.retryAttempts = new Map(); // Track retry attempts per page
     }
 
     cleanup() {
@@ -183,26 +184,36 @@ class ComicRenderer {
             margin: 20px;
         `;
 
-        const isCorrupted = this.isComicCorruptionError(error);
+        const friendlyError = this.getUserFriendlyErrorMessage(error);
         
         errorDiv.innerHTML = `
             <div style="font-size: 64px; margin-bottom: 20px;">📚</div>
             <h3 style="margin: 0 0 15px 0; color: #ff6b6b;">
-                ${isCorrupted ? 'Comic File Corrupted' : 'Comic Load Failed'}
+                ${friendlyError.title}
             </h3>
             <p style="margin: 10px 0; font-size: 14px;">
                 <strong>File:</strong> ${fileName}
             </p>
-            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8; max-width: 400px;">
-                ${isCorrupted 
-                    ? 'The comic archive appears to be damaged, incomplete, or password-protected. Some pages may be missing or unreadable.'
-                    : 'Failed to load the comic file. This may be due to an unsupported format or network issues.'}
+            <p style="margin: 15px 0; font-size: 13px; opacity: 0.9; max-width: 500px; line-height: 1.4;">
+                ${friendlyError.message}
             </p>
+            <div style="margin: 20px 0; text-align: left; max-width: 500px;">
+                <h4 style="color: #4ecdc4; margin: 0 0 10px 0; font-size: 14px;">Suggestions:</h4>
+                <ul style="margin: 0; padding-left: 20px; font-size: 12px; opacity: 0.8; line-height: 1.5;">
+                    ${friendlyError.suggestions.map(suggestion => `<li style="margin-bottom: 5px;">${suggestion}</li>`).join('')}
+                </ul>
+            </div>
             <details style="margin: 15px 0; text-align: left; max-width: 500px;">
                 <summary style="cursor: pointer; color: #ff9999; text-align: center;">Show error details</summary>
                 <pre style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px; overflow-x: auto; text-align: left;">${error.message || error.toString()}</pre>
             </details>
             <div style="margin-top: 20px;">
+                ${error.message && (error.message.includes('timeout') || error.message.includes('heavy load')) ? 
+                    `<button onclick="window.location.reload()" 
+                            style="padding: 10px 20px; background: #f39c12; color: white; border: none; border-radius: 4px; cursor: pointer; margin-right: 10px;">
+                        ⏱️ Try Again
+                    </button>` : ''
+                }
                 <a href="/files?path=${encodeURIComponent(filePath)}" 
                    download="${fileName}"
                    style="display: inline-block; padding: 10px 20px; background: #4ecdc4; color: white; text-decoration: none; border-radius: 4px; margin-right: 10px;">
@@ -210,7 +221,7 @@ class ComicRenderer {
                 </a>
                 <button onclick="location.reload()" 
                         style="padding: 10px 20px; background: #666; color: white; border: none; border-radius: 4px; cursor: pointer;">
-                    🔄 Retry
+                    🔄 Reload Page
                 </button>
             </div>
         `;
@@ -225,9 +236,89 @@ class ComicRenderer {
             'unexpected end', 'truncated', 'bad format', 'parse error',
             'failed to load', 'network error', 'decode error', 'format error',
             'cannot extract', 'archive error', 'zip error', 'rar error',
-            'password', 'encrypted', 'access denied', 'permission denied'
+            'password', 'encrypted', 'access denied', 'permission denied',
+            'timeout', 'very large', 'heavy load', 'insufficient size'
         ];
         return corruptionIndicators.some(indicator => errorMessage.includes(indicator));
+    }
+
+    getUserFriendlyErrorMessage(error) {
+        const errorMessage = (error.message || error.toString()).toLowerCase();
+        
+        if (errorMessage.includes('timeout')) {
+            if (errorMessage.includes('very large') || errorMessage.includes('heavy load')) {
+                return {
+                    title: 'Loading Timeout',
+                    message: 'The comic file is very large or the system is busy. This can happen with high-resolution comics or when processing multiple files.',
+                    suggestions: [
+                        'Wait a moment and try again',
+                        'Try a smaller comic file',
+                        'Check if the file is corrupted',
+                        'Download the file to view locally'
+                    ]
+                };
+            }
+            return {
+                title: 'Processing Timeout',
+                message: 'The comic file took too long to process. This usually indicates a corrupted or very large file.',
+                suggestions: [
+                    'Try again - temporary issues often resolve',
+                    'Check if the file opens in other comic readers',
+                    'Re-download the file if possible',
+                    'Convert to a different format (CBZ recommended)'
+                ]
+            };
+        }
+        
+        if (errorMessage.includes('corrupted') || errorMessage.includes('invalid') || errorMessage.includes('damaged')) {
+            return {
+                title: 'Corrupted Archive',
+                message: 'The comic archive appears to be damaged or incomplete.',
+                suggestions: [
+                    'Re-download the file from the original source',
+                    'Try opening with a different comic reader to verify',
+                    'Check if the file was completely downloaded',
+                    'Contact the source for a replacement file'
+                ]
+            };
+        }
+        
+        if (errorMessage.includes('password') || errorMessage.includes('encrypted')) {
+            return {
+                title: 'Password Protected',
+                message: 'This comic archive is password protected and cannot be opened.',
+                suggestions: [
+                    'Obtain the password from the file source',
+                    'Extract the archive manually with the password',
+                    'Convert to an unprotected format'
+                ]
+            };
+        }
+        
+        if (errorMessage.includes('network') || errorMessage.includes('connection')) {
+            return {
+                title: 'Network Error',
+                message: 'There was a problem connecting to the server or downloading the comic.',
+                suggestions: [
+                    'Check your internet connection',
+                    'Try refreshing the page',
+                    'Wait a moment and try again',
+                    'Contact support if the problem persists'
+                ]
+            };
+        }
+        
+        // Default error message for unknown errors
+        return {
+            title: 'Comic Loading Error',
+            message: 'An unexpected error occurred while loading the comic.',
+            suggestions: [
+                'Try refreshing the page',
+                'Check if the file is accessible',
+                'Try a different comic file',
+                'Report this issue if it persists'
+            ]
+        };
     }
 
     setupEventHandlers(controls, filePath) {
@@ -505,6 +596,32 @@ class ComicRenderer {
                 filePath: this.getCurrentFilePath(),
                 timestamp: new Date().toISOString()
             });
+            
+            // Automatic retry for timeout errors (up to 2 retries)
+            const isTimeoutError = error.message && (
+                error.message.includes('timeout') || 
+                error.message.includes('network') ||
+                error.message.includes('fetch')
+            );
+            
+            if (isTimeoutError) {
+                const retryKey = `${this.getCurrentFilePath()}:${page}`;
+                const currentRetries = this.retryAttempts.get(retryKey) || 0;
+                
+                if (currentRetries < 2) {
+                    console.log(`[ComicRenderer] Retrying page ${page} (attempt ${currentRetries + 1}/2)`);
+                    this.retryAttempts.set(retryKey, currentRetries + 1);
+                    
+                    // Wait briefly before retry
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (currentRetries + 1)));
+                    
+                    // Recursive retry
+                    return this.fetchAndCachePage(page);
+                } else {
+                    console.error(`[ComicRenderer] Max retries reached for page ${page}`);
+                    this.retryAttempts.delete(retryKey);
+                }
+            }
             
             throw new Error(`Failed to load page ${page}: ${error.message}`);
         }
