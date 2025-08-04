@@ -196,7 +196,7 @@ function initializeFileExplorer() {
                         
                         if (extension === 'pdf') {
                             li.setAttribute('data-type', 'pdf');
-                        } else if (['cbz', 'cbr'].includes(extension)) {
+                        } else if (['cbz', 'cbr', 'zip'].includes(extension)) {
                             li.setAttribute('data-type', 'comic');
                         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
                             li.setAttribute('data-type', 'image');
@@ -386,7 +386,7 @@ function initializeFileExplorer() {
     
     function getFileTypeFromExtension(extension, fileName = '') {
         if (extension === 'pdf') return 'pdf';
-        if (['cbz', 'cbr'].includes(extension)) return 'comic';
+        if (['cbz', 'cbr', 'zip'].includes(extension)) return 'comic';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
         if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
@@ -416,10 +416,10 @@ function initializeFileExplorer() {
             'js': 'JavaScript', 'html': 'HTML Document', 'css': 'CSS Stylesheet', 'json': 'JSON Data',
             'py': 'Python Script', 'java': 'Java Source', 'c': 'C Source', 'cpp': 'C++ Source',
             'xml': 'XML Document', 'yaml': 'YAML Config', 'yml': 'YAML Config',
-            'cbz': 'Comic Book Archive', 'cbr': 'Comic Book Archive',
+            'cbz': 'Comic Book Archive', 'cbr': 'Comic Book Archive', 'zip': 'ZIP Archive/Comic Book Archive',
             'epub': 'EPUB E-book',
             'ipynb': 'Jupyter Notebook',
-            'zip': 'ZIP Archive', 'rar': 'RAR Archive', 'tar': 'TAR Archive',
+            'rar': 'RAR Archive', 'tar': 'TAR Archive',
             'tgz': 'Compressed TAR Archive', '7z': '7-Zip Archive'
         };
         return types[extension] || 'Text File';
