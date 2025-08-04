@@ -15,7 +15,7 @@ const {
     servePdfPreview, 
     serveVideoTranscode 
 } = require('./lib/file-handlers');
-const { serveComicPreview, getComicInfo } = require('./lib/comic-handlers');
+const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback } = require('./lib/epub-handlers');
 const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } = require('./lib/annotation-handlers');
@@ -140,6 +140,7 @@ app.get('/video-transcode', requireAuth, serveVideoTranscode);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
 // Archive routes
+app.get('/archive-video', requireAuth, (req, res) => serveArchiveVideo(req, res, cache));
 app.get('/archive-contents', requireAuth, (req, res) => serveArchiveContents(req, res, cache));
 app.get('/archive-file', requireAuth, serveArchiveFile);
 

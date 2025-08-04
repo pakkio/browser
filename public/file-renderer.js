@@ -75,7 +75,7 @@ class FileRenderer {
             return 'image';
         } else if (extension === 'pdf') {
             return 'pdf';
-        } else if (['cbz', 'cbr'].includes(extension)) {
+        } else if (['cbz', 'cbr', 'zip'].includes(extension)) {
             return 'comic';
         } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
             return 'audio';

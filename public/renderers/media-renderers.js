@@ -34,30 +34,56 @@ class VideoRenderer {
         video.style.maxWidth = '100%';
         video.style.height = 'auto';
         
-        // Check if this file needs transcoding
-        const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv');
+        // Check if this file is inside an archive
+        const isArchiveVideo = filePath.includes('||');
         
-        if (needsTranscoding) {
-            // Use transcoding endpoint for AVI/WMV files
-            video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
+        if (isArchiveVideo) {
+            // Extract archive path and file name from the filePath
+            const [archivePath, videoFileName] = filePath.split('||');
             
-            // Add loading indicator for transcoding
+            // Use archive video endpoint for archived videos
+            video.src = `/archive-video?path=${encodeURIComponent(archivePath)}&fileName=${encodeURIComponent(videoFileName)}`;
+            
+            // Add loading indicator for archive extraction
             const loadingDiv = document.createElement('div');
             loadingDiv.style.color = '#666';
             loadingDiv.style.marginBottom = '10px';
-            loadingDiv.innerHTML = `🔄 Transcoding ${fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 'WMV'} file for playback...`;
+            loadingDiv.innerHTML = `🔄 Extracting video from archive...`;
             contentOther.appendChild(loadingDiv);
             
             video.addEventListener('loadstart', () => {
-                loadingDiv.innerHTML = '🔄 Loading transcoded video...';
+                loadingDiv.innerHTML = '🔄 Loading extracted video...';
             });
             
             video.addEventListener('canplay', () => {
                 loadingDiv.style.display = 'none';
             });
         } else {
-            // Use direct file serving for other formats
-            video.src = `/files?path=${encodeURIComponent(filePath)}`;
+            // Check if this file needs transcoding
+            const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv');
+            
+            if (needsTranscoding) {
+                // Use transcoding endpoint for AVI/WMV files
+                video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
+                
+                // Add loading indicator for transcoding
+                const loadingDiv = document.createElement('div');
+                loadingDiv.style.color = '#666';
+                loadingDiv.style.marginBottom = '10px';
+                loadingDiv.innerHTML = `🔄 Transcoding ${fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 'WMV'} file for playback...`;
+                contentOther.appendChild(loadingDiv);
+                
+                video.addEventListener('loadstart', () => {
+                    loadingDiv.innerHTML = '🔄 Loading transcoded video...';
+                });
+                
+                video.addEventListener('canplay', () => {
+                    loadingDiv.style.display = 'none';
+                });
+            } else {
+                // Use direct file serving for other formats
+                video.src = `/files?path=${encodeURIComponent(filePath)}`;
+            }
         }
         
         // Error handling
