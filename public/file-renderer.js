@@ -11,6 +11,7 @@ class FileRenderer {
     setupHandlers() {
         this.handlers.set('text', new TextRenderer());
         this.handlers.set('image', new ImageRenderer());
+        this.handlers.set('image-pair', new ImagePairRenderer());
         this.handlers.set('pdf', new PDFRenderer());
         this.handlers.set('comic', new ComicRenderer());
         this.handlers.set('audio', new AudioRenderer());
@@ -62,7 +63,7 @@ class FileRenderer {
         document.head.appendChild(style);
     }
 
-    getFileType(fileName) {
+    async getFileType(fileName, filePath) {
         const extension = fileName.split('.').pop().toLowerCase();
         // Treat .doc as .docx
         if (extension === 'doc') return 'docx';
@@ -72,10 +73,13 @@ class FileRenderer {
         } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro', 'lsl', 'lua', 'pl', 'asm', 's', 'vb', 'pas', 'f90', 'f95', 'f03', 'f08', 'for', 'cobol', 'cob', 'zig', 'm', 'mm', 'groovy', 'gradle', 'cmake', 'dockerfile'].includes(extension)) {
             return 'text';
         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
-            return 'image';
+            const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+            const files = await response.json();
+            const imageFiles = files.filter(file => ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
+            return imageFiles.length > 1 ? 'image-pair' : 'image';
         } else if (extension === 'pdf') {
             return 'pdf';
-        } else if (['cbz', 'cbr', 'zip'].includes(extension)) {
+        } else if (['cbz', 'cbr'].includes(extension)) {
             return 'comic';
         } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
             return 'audio';
@@ -136,9 +140,15 @@ class FileRenderer {
                 }
             }
 
-            const fileType = this.getFileType(fileName);
+            const fileType = await this.getFileType(fileName, filePath);
             const handler = this.handlers.get(fileType);
             this.currentHandler = handler; // Set the new handler
+
+            if (fileType === 'image-pair') {
+                const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+                const files = await response.json();
+                options.images = files.filter(file => ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
+            }
 
             console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
 

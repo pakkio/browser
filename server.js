@@ -10,6 +10,7 @@ const { AUTH_ENABLED, port, baseDir } = require('./lib/config');
 const { setupAuthRoutes } = require('./lib/auth-routes');
 const { 
     serveBrowseRequest, 
+    serveFileList, 
     serveFile, 
     getPdfInfo, 
     servePdfPreview, 
@@ -134,6 +135,7 @@ app.get('/api/pdf-info', requireAuth, getPdfInfo);
 app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cache));
 
 // File serving routes
+app.get('/files/list', serveFileList);
 app.get('/files', requireAuth, serveFile);
 app.get('/pdf-preview', requireAuth, servePdfPreview);
 app.get('/video-transcode', requireAuth, serveVideoTranscode);

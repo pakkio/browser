@@ -80,6 +80,10 @@ function initializeFileExplorer() {
                 currentFiles = data.files;
                 displayFiles(data.files, path);
                 updateCurrentPathDisplay(data.currentPath, data.files.length);
+                
+                // Auto-display folder contents after loading
+                autoDisplayFolderContents(data.files, path);
+                
                 if (window.debugConsole) {
                     window.debugConsole.showProgress('Complete', 100);
                 }
@@ -118,6 +122,7 @@ function initializeFileExplorer() {
                 }
                 
                 console.log('New path after parent navigation:', JSON.stringify(currentPath));
+                clearContentView();
                 loadFiles(currentPath);
             });
             fileList.appendChild(parentLi);
@@ -196,7 +201,7 @@ function initializeFileExplorer() {
                         
                         if (extension === 'pdf') {
                             li.setAttribute('data-type', 'pdf');
-                        } else if (['cbz', 'cbr', 'zip'].includes(extension)) {
+                        } else if (['cbz', 'cbr'].includes(extension)) {
                             li.setAttribute('data-type', 'comic');
                         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
                             li.setAttribute('data-type', 'image');
@@ -386,7 +391,7 @@ function initializeFileExplorer() {
     
     function getFileTypeFromExtension(extension, fileName = '') {
         if (extension === 'pdf') return 'pdf';
-        if (['cbz', 'cbr', 'zip'].includes(extension)) return 'comic';
+        if (['cbz', 'cbr'].includes(extension)) return 'comic';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
         if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
@@ -758,6 +763,57 @@ function initializeFileExplorer() {
         }, 2000);
     }
 
+    // Auto-display folder contents based on primary content type
+    function autoDisplayFolderContents(files, currentPath) {
+        if (!files || files.length === 0) return;
+        
+        // Count different file types
+        const imageFiles = files.filter(file => !file.isDirectory && 
+            ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
+        const videoFiles = files.filter(file => !file.isDirectory && 
+            ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(file.name.split('.').pop().toLowerCase()));
+        const pdfFiles = files.filter(file => !file.isDirectory && 
+            file.name.split('.').pop().toLowerCase() === 'pdf');
+        const comicFiles = files.filter(file => !file.isDirectory && 
+            ['cbz', 'cbr'].includes(file.name.split('.').pop().toLowerCase()));
+        
+        let primaryContent = null;
+        
+        // Determine primary content type (prioritize images for pair viewing)
+        if (imageFiles.length > 1) {
+            primaryContent = { type: 'images', files: imageFiles };
+        } else if (videoFiles.length > 0) {
+            primaryContent = { type: 'video', files: videoFiles };
+        } else if (pdfFiles.length > 0) {
+            primaryContent = { type: 'pdf', files: pdfFiles };
+        } else if (comicFiles.length > 0) {
+            primaryContent = { type: 'comic', files: comicFiles };
+        } else if (imageFiles.length === 1) {
+            primaryContent = { type: 'image', files: imageFiles };
+        }
+        
+        // Auto-display the primary content
+        if (primaryContent) {
+            const firstFile = primaryContent.files[0];
+            const filePath = currentPath ? `${currentPath}/${firstFile.name}` : firstFile.name;
+            console.log(`Auto-displaying ${primaryContent.type} content:`, firstFile.name);
+            showContent(currentPath, firstFile.name);
+        }
+    }
+    
+    // Clear the content view
+    function clearContentView() {
+        contentCode.innerHTML = '';
+        contentOther.innerHTML = '';
+        contentCode.parentElement.style.display = 'none';
+        contentOther.style.display = 'none';
+        
+        // Stop any media that might be playing
+        if (fileRenderer) {
+            fileRenderer.stopAllMedia();
+        }
+    }
+
     // Expose file explorer state for keyboard navigation
     window.fileExplorer = {
         currentPath: () => currentPath,
@@ -767,7 +823,9 @@ function initializeFileExplorer() {
         updateDetails: updateDetails,
         selectFile: selectFile,
         showContent: showContent,
-        quickAnnotate: quickAnnotate
+        quickAnnotate: quickAnnotate,
+        autoDisplayFolderContents: autoDisplayFolderContents,
+        clearContentView: clearContentView
     };
 }
 
