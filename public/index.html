@@ -84,6 +84,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
             <div class="tab-container">
                 <div class="tab-buttons">
                     <button class="tab-button active" data-tab="details">Details</button>
+                    <button class="tab-button" data-tab="summary">AI Summary</button>
                     <button class="tab-button" data-tab="debug">Debug Console</button>
                 </div>
                 <div class="tab-content active" id="details-tab">
@@ -92,6 +93,35 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
                         <span id="current-path-display">Loading...</span>
                     </div>
                     <div id="file-details"></div>
+                </div>
+                <div class="tab-content" id="summary-tab">
+                    <div class="summary-container">
+                        <div class="summary-header">
+                            <h3>AI Summary</h3>
+                            <div class="summary-controls">
+                                <div id="pdf-summary-options" class="pdf-options" style="display: none;">
+                                    <label class="radio-option">
+                                        <input type="radio" name="pdf-summary-type" value="current" checked>
+                                        <span>Current View</span>
+                                    </label>
+                                    <label class="radio-option">
+                                        <input type="radio" name="pdf-summary-type" value="full">
+                                        <span>Full PDF</span>
+                                    </label>
+                                </div>
+                                <button id="generate-summary-btn" class="summary-btn" disabled>
+                                    <span class="summary-btn-text">Generate Summary</span>
+                                    <span class="summary-spinner" style="display: none;">⏳</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="summary-content" class="summary-content">
+                            <div class="summary-placeholder">
+                                Select a file to generate an AI summary of its content.
+                            </div>
+                        </div>
+                        <div id="summary-stats" class="summary-stats" style="display: none;"></div>
+                    </div>
                 </div>
                 <div class="tab-content" id="debug-tab">
                     <div class="debug-console">
@@ -141,6 +171,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
     <script src="file-renderer.js"></script>
     <script src="annotations.js"></script>
     <script src="ai-suggestions.js"></script>
+    <script src="ai-summary.js"></script>
     <script src="auth.js"></script>
     <script src="script.js"></script>
 </body>
