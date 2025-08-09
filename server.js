@@ -165,6 +165,32 @@ app.post('/api/cache/clear', requireAuth, (req, res) => clearCache(req, res, cac
 // System routes
 app.post('/api/open-file', requireAuth, openFile);
 
+// AI File Summary route
+app.post('/api/summarize-file', requireAuth, async (req, res) => {
+    try {
+        const { path: filePath, content, fullPdf } = req.body;
+        
+        if (!filePath && !content) {
+            return res.status(400).json({ error: 'File path or content is required' });
+        }
+
+        const analyzer = new AIFileAnalyzer();
+        const result = await analyzer.summarizeFileContent(filePath, content, fullPdf);
+        
+        res.json({
+            success: true,
+            summary: result.summary,
+            stats: result.stats
+        });
+    } catch (error) {
+        console.error('Error summarizing file:', error);
+        res.status(500).json({ 
+            error: 'Failed to summarize file', 
+            message: error.message 
+        });
+    }
+});
+
 // AI File Analysis route
 app.post('/api/analyze-files', requireAuth, async (req, res) => {
     try {

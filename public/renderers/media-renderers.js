@@ -99,7 +99,7 @@ class VideoRenderer {
                 <strong>Video Error:</strong><br>
                 ${this.getErrorMessage(video.error?.code)}<br>
                 <small>File: ${fileName}</small>
-                ${needsTranscoding ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
+                ${(options.needsTranscoding || false) ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
             `;
         });
         
