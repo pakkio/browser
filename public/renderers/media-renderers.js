@@ -34,6 +34,9 @@ class VideoRenderer {
         video.style.maxWidth = '100%';
         video.style.height = 'auto';
         
+        // Add a custom attribute to track our click handling
+        video.setAttribute('data-custom-click', 'true');
+        
         // Check if this file is inside an archive
         const isArchiveVideo = filePath.includes('||');
         
@@ -119,9 +122,82 @@ class VideoRenderer {
                     console.log('Auto-play/fullscreen error (may be due to browser policy):', err);
                 });
             }
+            
+            // Add click handlers after video is ready to play
+            this.setupVideoClickHandlers(video, fileName);
         });
         
-        contentOther.appendChild(video);
+        // Try multiple event approaches for maximum compatibility
+        console.log('Adding ALL click handlers for:', fileName);
+        
+        // Approach 1: Direct click with various phases
+        video.addEventListener('click', (e) => {
+            console.log('CLICK: Video click detected on', fileName);
+            e.stopPropagation();
+            setTimeout(() => {
+                console.log('CLICK: Executing video action');
+                this.togglePlayAndFullscreen(video);
+            }, 200);
+        }, false);
+        
+        // Approach 2: Pointer events (modern approach)
+        video.addEventListener('pointerup', (e) => {
+            if (e.button === 0) { // Left click
+                console.log('POINTER: Video pointer up on', fileName);
+                setTimeout(() => {
+                    console.log('POINTER: Executing video action');
+                    this.togglePlayAndFullscreen(video);
+                }, 150);
+            }
+        });
+        
+        // Approach 3: Touch events for mobile
+        video.addEventListener('touchend', (e) => {
+            console.log('TOUCH: Video touch end on', fileName);
+            e.preventDefault();
+            setTimeout(() => {
+                console.log('TOUCH: Executing video action');
+                this.togglePlayAndFullscreen(video);
+            }, 100);
+        });
+        
+        // Create simple clickable overlay for video
+        const videoWrapper = document.createElement('div');
+        videoWrapper.style.position = 'relative';
+        videoWrapper.style.display = 'inline-block';
+        videoWrapper.style.width = '100%';
+        
+        const clickOverlay = document.createElement('div');
+        clickOverlay.style.cssText = `
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 2;
+            cursor: pointer;
+            background: transparent;
+        `;
+        
+        clickOverlay.addEventListener('click', (e) => {
+            console.log('OVERLAY CLICK: Simulating spacebar press');
+            
+            // Create and dispatch a fake spacebar keydown event
+            const spaceEvent = new KeyboardEvent('keydown', {
+                code: 'Space',
+                key: ' ',
+                keyCode: 32,
+                which: 32,
+                bubbles: true,
+                cancelable: true
+            });
+            
+            document.dispatchEvent(spaceEvent);
+        });
+        
+        videoWrapper.appendChild(video);
+        videoWrapper.appendChild(clickOverlay);
+        contentOther.appendChild(videoWrapper);
         contentOther.appendChild(errorDiv);
         
         // Explicitly call load() to prevent premature load attempts
@@ -230,6 +306,52 @@ class VideoRenderer {
         };
         
         video.addEventListener('wheel', this.handleWheel);
+    }
+    
+    setupVideoClickHandlers(video, fileName) {
+        // Prevent multiple click handlers on the same video
+        if (video.hasAttribute('data-click-handlers-added')) {
+            return;
+        }
+        video.setAttribute('data-click-handlers-added', 'true');
+        
+        console.log('Adding video click handlers for:', fileName);
+        
+        // Try a timeout-based approach to let the browser handle its stuff first
+        let clickTimeout = null;
+        
+        video.addEventListener('click', (e) => {
+            console.log('Video click detected');
+            
+            // Clear any existing timeout
+            if (clickTimeout) {
+                clearTimeout(clickTimeout);
+            }
+            
+            // Set a small delay to let browser controls handle first
+            clickTimeout = setTimeout(() => {
+                console.log('Executing delayed video click action');
+                this.togglePlayAndFullscreen(video);
+            }, 50); // Very short delay
+        });
+        
+        // Also try the mousedown approach 
+        video.addEventListener('mousedown', (e) => {
+            if (e.button === 0) { // Left mouse button
+                console.log('Video mousedown - will toggle in 100ms');
+                setTimeout(() => {
+                    console.log('Executing mousedown video action');
+                    this.togglePlayAndFullscreen(video);
+                }, 100);
+            }
+        });
+        
+        // Keep double-click as reliable backup
+        video.addEventListener('dblclick', (e) => {
+            console.log('Video double-click triggered');
+            e.preventDefault();
+            this.togglePlayAndFullscreen(video);
+        });
     }
     
     seekVideo(video, seconds) {
@@ -471,7 +593,7 @@ class VideoRenderer {
     
     async loadCurrentAnnotations() {
         try {
-            const response = await fetch('/api/annotations');
+            const response = await window.authManager.authenticatedFetch('/api/annotations');
             const data = await response.json();
             // Handle different possible response formats
             let annotation = {};
@@ -542,7 +664,7 @@ class VideoRenderer {
         // Get current annotation first
         let existingAnnotation = {};
         try {
-            const response = await fetch('/api/annotations');
+            const response = await window.authManager.authenticatedFetch('/api/annotations');
             const data = await response.json();
             if (data.annotations && data.annotations[filePath]) {
                 existingAnnotation = data.annotations[filePath];
@@ -565,7 +687,7 @@ class VideoRenderer {
         
         // Save annotation
         try {
-            const response = await fetch('/api/annotations', {
+            const response = await window.authManager.authenticatedFetch('/api/annotations', {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -587,10 +709,10 @@ class VideoRenderer {
                 // Update the overlay display
                 this.updateAnnotationDisplay(annotation);
                 
-                // Refresh file list display if file explorer is available
-                if (window.fileExplorer && window.fileExplorer.loadFiles) {
-                    const currentPath = window.fileExplorer.currentPath();
-                    window.fileExplorer.loadFiles(currentPath);
+                // DON'T refresh file list - it causes jumping back to first file
+                // Just update the current file's annotation display in the file list
+                if (window.fileExplorer && window.fileExplorer.updateFileAnnotationDisplay) {
+                    window.fileExplorer.updateFileAnnotationDisplay(filePath, annotation);
                 }
                 
                 // Show feedback
