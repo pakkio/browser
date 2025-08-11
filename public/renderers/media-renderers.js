@@ -63,7 +63,7 @@ class VideoRenderer {
             });
         } else {
             // Check if this file needs transcoding
-            const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv');
+            const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv') || fileName.toLowerCase().endsWith('.mpg') || fileName.toLowerCase().endsWith('.mpeg');
             
             if (needsTranscoding) {
                 // Use transcoding endpoint for AVI/WMV files
@@ -73,7 +73,10 @@ class VideoRenderer {
                 const loadingDiv = document.createElement('div');
                 loadingDiv.style.color = '#666';
                 loadingDiv.style.marginBottom = '10px';
-                loadingDiv.innerHTML = `🔄 Transcoding ${fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 'WMV'} file for playback...`;
+                const ext = fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 
+                          fileName.toLowerCase().endsWith('.wmv') ? 'WMV' : 
+                          fileName.toLowerCase().endsWith('.mpg') ? 'MPG' : 'MPEG';
+                loadingDiv.innerHTML = `🔄 Transcoding ${ext} file for playback...`;
                 contentOther.appendChild(loadingDiv);
                 
                 video.addEventListener('loadstart', () => {
