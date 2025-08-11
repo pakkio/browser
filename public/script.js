@@ -240,9 +240,13 @@ function initializeFileExplorer() {
                             }
                             
                             const filePath = path ? `${path}/${file.name}` : file.name;
-                            selectFile(index, filePath, file.name);
-                            showContent(path, file.name);
-                            updateDetails(file);
+const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+                             const ext = file.name.split('.').pop().toLowerCase();
+                             const isVideo = videoExtensions.includes(ext);
+                             const options = isVideo ? { autoPlay: true, keyboardNavigation: true } : {};
+                             selectFile(index, filePath, file.name, options);
+                             showContent(path, file.name, options);
+                             updateDetails(file);
                         });
 
                         li.addEventListener('dblclick', (e) => {
