@@ -1,5 +1,69 @@
 console.log('FileRenderer type:', typeof FileRenderer);
 
+// Show a modal with all keyboard shortcuts
+function showShortcutHelpPopup() {
+    // Remove any existing help popup
+    const existing = document.getElementById('shortcut-help-popup');
+    if (existing) existing.remove();
+
+    const backdrop = document.createElement('div');
+    backdrop.id = 'shortcut-help-popup';
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.5);
+        z-index: 2000;
+        display: flex; align-items: center; justify-content: center;
+    `;
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+        background: #23272e;
+        color: #d4d4d4;
+        border-radius: 10px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+        padding: 32px 28px 24px 28px;
+        min-width: 340px;
+        max-width: 90vw;
+        font-size: 1rem;
+        border: 1px solid #444;
+        position: relative;
+    `;
+    modal.innerHTML = `
+        <h2 style="margin-top:0;color:#00aacc;font-size:1.3rem;">Keyboard Shortcuts</h2>
+        <table style="width:100%;margin:18px 0 0 0;font-size:1rem;border-collapse:collapse;">
+            <tr><td style="padding:4px 12px 4px 0;">1–5</td><td>Set star rating</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">b</td><td>Set color: Blue</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">r</td><td>Set color: Red</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">g</td><td>Set color: Green</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">w</td><td>Set color: White</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">l</td><td>Set color: Black</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">o</td><td>Set color: Orange</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">p</td><td>Set color: Purple</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">y</td><td>Set color: Yellow</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">s</td><td>Clear color label</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">c</td><td>Add/edit comment</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">?</td><td>Show this help</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Arrow keys</td><td>Navigate file list</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Enter</td><td>Open selected file</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">/</td><td>Focus search</td></tr>
+        </table>
+        <button id="close-shortcut-help" style="position:absolute;top:12px;right:16px;background:#444;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:1.1rem;">×</button>
+        <div style="margin-top:18px;font-size:0.95rem;color:#aaa;">Press <b>Esc</b> or click outside to close</div>
+    `;
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    // Close logic
+    function close() { backdrop.remove(); }
+    backdrop.addEventListener('click', e => { if (e.target === backdrop) close(); });
+    modal.querySelector('#close-shortcut-help').addEventListener('click', close);
+    document.addEventListener('keydown', function escListener(ev) {
+        if (ev.key === 'Escape') {
+            close();
+            document.removeEventListener('keydown', escListener);
+        }
+    });
+}
+
 // Initialize the main application
 function initializeApp() {
     console.log('Initializing main application...');
@@ -562,29 +626,64 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                     document.querySelector('.file-item.selected')?.focus();
                 }
                 return;
-            case 'r':
+            // Color label shortcuts
+            case 'b': // blue
                 event.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
-                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#f44336');
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'blue');
                 }
                 return;
-            case 'g':
+            case 'r': // red
                 event.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
-                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#4caf50');
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'red');
                 }
                 return;
-            case 'y':
+            case 'g': // green
                 event.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
-                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#ffeb3b');
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'green');
                 }
                 return;
-            case 'b':
+            case 'w': // white
                 event.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
-                    quickAnnotate(filteredFiles[selectedIndex], 'color', '#2196f3');
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'white');
                 }
+                return;
+            case 'l': // black
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'black');
+                }
+                return;
+            case 'o': // orange
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'orange');
+                }
+                return;
+            case 'p': // purple
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'purple');
+                }
+                return;
+            case 'y': // yellow
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', 'yellow');
+                }
+                return;
+            case 's': // clear color
+                event.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
+                    quickAnnotate(filteredFiles[selectedIndex], 'color', '');
+                }
+                return;
+            case '?': // show help popup
+                event.preventDefault();
+                showShortcutHelpPopup();
                 return;
             case 'c':
                 event.preventDefault();
@@ -757,13 +856,33 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         let message = '';
         if (type === 'color') {
             const colorNames = {
-                '#f44336': 'Red',
-                '#4caf50': 'Green', 
-                '#ffeb3b': 'Yellow',
-                '#2196f3': 'Blue'
+                red: 'Red',
+                orange: 'Orange',
+                yellow: 'Yellow',
+                green: 'Green',
+                blue: 'Blue',
+                purple: 'Purple',
+                white: 'White',
+                black: 'Black',
+                pink: 'Pink',
+                teal: 'Teal',
+                '': 'None',
             };
-            message = `Color: ${colorNames[value]}`;
-            feedback.style.backgroundColor = value;
+            const colorHex = {
+                red: '#f44336',
+                orange: '#ff9800',
+                yellow: '#ffeb3b',
+                green: '#4caf50',
+                blue: '#2196f3',
+                purple: '#9c27b0',
+                white: '#fff',
+                black: '#111',
+                pink: '#e91e63',
+                teal: '#009688',
+                '': '#444',
+            };
+            message = value === '' ? 'Color: None' : `Color: ${colorNames[value] || value}`;
+            feedback.style.backgroundColor = colorHex[value] || value || '#444';
         } else if (type === 'stars') {
             message = `Rating: ${'⭐'.repeat(value)}`;
         } else if (type === 'error') {

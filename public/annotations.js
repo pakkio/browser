@@ -1039,3 +1039,4 @@ class AnnotationManager {
 
 // Initialize global annotation manager
 window.annotationManager = new AnnotationManager();
+window.showAnnotationDialog = window.annotationManager.showAnnotationDialog.bind(window.annotationManager);

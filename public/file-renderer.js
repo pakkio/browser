@@ -93,7 +93,7 @@ class FileRenderer {
             return 'pptx';
         } else if (extension === 'epub') {
             return 'epub';
-        } else if (['zip', 'rar', 'tar', 'tgz', 'tar.gz'].includes(extension) || fileName.endsWith('.tar.gz')) {
+        } else if (["zip", "rar", "tar", "tgz", "tar.gz", "oar"].includes(extension) || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz') || fileName.endsWith('.tar') || fileName.endsWith('.oar')) {
             return 'archive';
         }
         return 'unsupported';

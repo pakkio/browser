@@ -607,14 +607,28 @@ class ArchiveRenderer {
                 const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
-                const blob = await response.blob();
-                const url = URL.createObjectURL(blob);
-                img.src = url;
-
-                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, url, fileIndex);
-                document.addEventListener('keydown', this.previewKeydownHandler);
-
-                img.onload = () => URL.revokeObjectURL(url); // Revoke on load to free memory
+                const contentMode = response.headers.get('X-Content-Mode');
+                const contentType = response.headers.get('Content-Type') || '';
+                if (contentMode === 'hex') {
+                    const text = await response.text();
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word; box-sizing: border-box;';
+                    pre.textContent = text;
+                    previewContainer.appendChild(pre);
+                } else if (contentType.startsWith('text/plain')) {
+                    const text = await response.text();
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word; box-sizing: border-box;';
+                    pre.textContent = text;
+                    previewContainer.appendChild(pre);
+                } else {
+                    const blob = await response.blob();
+                    const url = URL.createObjectURL(blob);
+                    img.src = url;
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, url, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                    img.onload = () => URL.revokeObjectURL(url); // Revoke on load to free memory
+                }
             }
 
         } catch (error) {
