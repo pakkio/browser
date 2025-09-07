@@ -1,6 +1,8 @@
 require('dotenv').config();
 
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const path = require('path');
 const session = require('express-session');
 const { passport, requireAuth, optionalAuth } = require('./auth');
@@ -99,13 +101,32 @@ console.log(`🔧 Port: ${port}`);
 console.log(`🔐 Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
 console.log('================================');
 
+// Security headers & CSP
+app.use(helmet({
+    contentSecurityPolicy: {
+        useDefaults: true,
+        directives: {
+            "default-src": ["'self'"],
+            "script-src": ["'self'","'unsafe-inline'"],
+            "style-src": ["'self'","'unsafe-inline'"],
+            "img-src": ["'self'","data:"],
+            "connect-src": ["'self'"],
+            "object-src": ["'none'"],
+            "frame-ancestors": ["'none'"]
+        }
+    },
+    crossOriginEmbedderPolicy: false
+}));
+
 // Session configuration (always enabled for browse state persistence)
 app.use(session({
     secret: process.env.SESSION_SECRET || 'your-fallback-secret-key-change-in-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
-        secure: false,
+        secure: process.env.NODE_ENV === 'production',
+        httpOnly: true,
+        sameSite: 'lax',
         maxAge: 24 * 60 * 60 * 1000
     }
 }));
@@ -120,6 +141,21 @@ if (AUTH_ENABLED) {
 const cache = new FileCache({
     maxAge: 24 * 60 * 60 * 1000,
     maxSize: 500 * 1024 * 1024
+});
+
+// Rate limiting costose
+const heavyLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false
+});
+
+const previewLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false
 });
 
 // Setup routes
@@ -137,8 +173,8 @@ app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cac
 // File serving routes
 app.get('/files/list', serveFileList);
 app.get('/files', requireAuth, serveFile);
-app.get('/pdf-preview', requireAuth, servePdfPreview);
-app.get('/video-transcode', requireAuth, serveVideoTranscode);
+app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
+app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
 // Archive routes
@@ -192,7 +228,7 @@ app.post('/api/summarize-file', requireAuth, async (req, res) => {
 });
 
 // AI File Analysis route
-app.post('/api/analyze-files', requireAuth, async (req, res) => {
+app.post('/api/analyze-files', requireAuth, heavyLimiter, async (req, res) => {
     try {
         const { path: dirPath, context } = req.body;
         
