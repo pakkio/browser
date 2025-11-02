@@ -429,6 +429,31 @@ body.authenticated .container {
     padding: 8px;
 }
 
+.sort-direction-btn {
+    padding: 5px 12px;
+    background: #444444;
+    border: 1px solid #666666;
+    border-radius: 3px;
+    color: #d4d4d4;
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: 36px;
+}
+
+.sort-direction-btn:hover {
+    background: #555555;
+    border-color: #777777;
+}
+
+.sort-direction-btn:focus {
+    outline: none;
+    background: #555555;
+    border-color: #007acc;
+    box-shadow: 0 0 0 1px #007acc;
+}
+
 .content-viewer {
     flex: 1;
     padding: 20px;

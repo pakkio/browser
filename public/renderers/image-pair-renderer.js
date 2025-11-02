@@ -12,7 +12,7 @@ class ImagePairRenderer {
         this.zoomLevel = 1.0; // Current zoom level
         this.minZoom = 0.25; // Minimum zoom (25%)
         this.maxZoom = 5.0; // Maximum zoom (500%)
-        this.zoomStep = 0.25; // Zoom increment
+        this.zoomStep = 0.10; // Zoom increment
     }
 
     cleanup() {
