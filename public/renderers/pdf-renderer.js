@@ -280,30 +280,67 @@ class PDFRenderer {
     async loadPDF(filePath) {
         this.uiManager.setStatus('Loading PDF...');
         
+        // Wait for PDF.js to load
+        if (window.pdfJsLoaded) {
+            try {
+                await window.pdfJsLoaded;
+            } catch (error) {
+                throw new Error('PDF.js library failed to load. Please refresh the page.');
+            }
+        }
+        
+        // Check if PDF.js is loaded
+        if (typeof pdfjsLib === 'undefined') {
+            throw new Error('PDF.js library not loaded. Please refresh the page.');
+        }
+        
         // Show prominent loading popup
         if (window.debugConsole) {
             window.debugConsole.showProgress('Loading PDF document...', 10);
         }
         
         try {
+            // Determine the URL to fetch
+            // If filePath starts with /, treat it as a full API path (e.g., /epub-pdf?path=...)
+            // Otherwise, construct the standard /files?path=... URL
+            const fetchUrl = filePath.startsWith('/epub-pdf') || filePath.startsWith('/files')
+                ? filePath
+                : `/files?path=${encodeURIComponent(filePath)}`;
+            
+            console.log(`[PDF] Fetching from: ${fetchUrl}`);
+            
             // Load the PDF document using authenticated fetch
             const response = await window.authManager.authenticatedFetch(
-                `/files?path=${encodeURIComponent(filePath)}`,
-                { timeout: 30000 } // 30 second timeout
+                fetchUrl,
+                { timeout: 120000 } // 120 second timeout for EPUB conversion
             );
             
             if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
                 let errorMessage;
-                if (response.status === 404) {
-                    errorMessage = `PDF file not found`;
-                } else if (response.status === 500) {
-                    errorMessage = `Server error loading PDF - file may be corrupted`;
-                } else if (response.status === 403) {
-                    errorMessage = `Access denied - PDF may be password protected`;
-                } else {
-                    errorMessage = `HTTP ${response.status}: ${errorText}`;
+                
+                // Try to parse JSON error response first (e.g., from /epub-pdf)
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorData.message || `HTTP ${response.status}`;
+                    } else {
+                        const errorText = await response.text();
+                        errorMessage = errorText || `HTTP ${response.status}`;
+                    }
+                } catch (parseError) {
+                    // If parsing fails, use generic message
+                    if (response.status === 404) {
+                        errorMessage = `PDF file not found`;
+                    } else if (response.status === 500) {
+                        errorMessage = `Server error loading PDF - file may be corrupted`;
+                    } else if (response.status === 403) {
+                        errorMessage = `Access denied - PDF may be password protected`;
+                    } else {
+                        errorMessage = `HTTP ${response.status}: Unknown error`;
+                    }
                 }
+                
                 throw new Error(errorMessage);
             }
             
@@ -432,6 +469,11 @@ class PDFRenderer {
 
     async renderPage(pageNum, canvas) {
         try {
+            // Check if PDF.js is loaded
+            if (typeof pdfjsLib === 'undefined') {
+                throw new Error('PDF.js library not loaded. Please refresh the page.');
+            }
+            
             // Cancel any existing render task for this canvas
             const canvasId = canvas.id;
             if (this.activeRenderTasks && this.activeRenderTasks.has(canvasId)) {
@@ -503,13 +545,20 @@ class PDFRenderer {
                 scale = this.zoomLevel;
             }
             
-            const scaledViewport = page.getViewport({ scale: scale });
+            // Apply high-DPI rendering for crisp text on retina displays
+            const pixelRatio = window.devicePixelRatio || 1;
+            const outputScale = pixelRatio * scale;
             
-            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
+            const scaledViewport = page.getViewport({ scale: outputScale });
             
-            // Set canvas dimensions
+            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, pixelRatio: ${pixelRatio}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
+            
+            // Set canvas dimensions for high-DPI rendering
             canvas.width = scaledViewport.width;
             canvas.height = scaledViewport.height;
+            // Scale down the CSS size to display at correct size
+            canvas.style.width = Math.floor(scaledViewport.width / pixelRatio) + 'px';
+            canvas.style.height = Math.floor(scaledViewport.height / pixelRatio) + 'px';
             canvas.style.display = 'block';
             
             // Render the page
@@ -558,6 +607,12 @@ class PDFRenderer {
     
     async renderTextLayer(page, viewport, pageNum) {
         try {
+            // Check if PDF.js is loaded
+            if (typeof pdfjsLib === 'undefined') {
+                console.warn('PDF.js library not loaded, skipping text layer');
+                return;
+            }
+            
             // Get text content
             const textContent = await page.getTextContent();
             

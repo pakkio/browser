@@ -4,9 +4,12 @@
   "main": "index.js",
   "scripts": {
     "start": "node server.js",
-    "test": "jest",
-    "test:watch": "jest --watch",
-    "test:coverage": "jest --coverage"
+    "test": "jest --config jest.config.js",
+    "test:watch": "jest --watch --config jest.config.js",
+    "test:coverage": "jest --coverage --config jest.config.js",
+    "test:min": "jest tests/sanity.test.js tests/contract/homogeneity.test.js tests/integration/homogeneity-orthogonality.integration.test.js tests/unit/orthogonality.model.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json",
+    "test:min:node": "node scripts/mini-test.js",
+    "test:min:direct": "node ./node_modules/jest/bin/jest.js tests/sanity.test.js tests/contract/homogeneity.test.js tests/integration/homogeneity-orthogonality.integration.test.js tests/unit/orthogonality.model.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json"
   },
   "keywords": [
     "file-browser",
@@ -25,7 +28,9 @@
   "dependencies": {
     "dotenv": "^16.6.1",
     "express": "^5.1.0",
+    "express-rate-limit": "^8.1.0",
     "express-session": "^1.18.0",
+    "helmet": "^8.1.0",
     "node-unrar-js": "^2.0.2",
     "passport": "^0.7.0",
     "passport-google-oauth20": "^2.0.0",
@@ -41,14 +46,5 @@
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.0.2",
     "supertest": "^6.3.3"
-  },
-  "jest": {
-    "testEnvironment": "node",
-    "coverageDirectory": "coverage",
-    "collectCoverageFrom": [
-      "server.js",
-      "public/script.js",
-      "!node_modules/**"
-    ]
   }
 }

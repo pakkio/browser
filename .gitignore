@@ -153,3 +153,4 @@ sample.*
 !test.pdf
 !test-files/
 !test-files/**
+.aider*
