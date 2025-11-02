@@ -25,6 +25,8 @@ const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } 
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
 const AIFileAnalyzer = require('./lib/ai-file-analyzer');
+const { getHomogeneityModules } = require('./src/services/homogeneityService');
+const { updateEntity } = require('./src/services/orthogonalityService');
 
 const app = express();
 
@@ -288,6 +290,19 @@ app.get('/api/server-info', (req, res) => {
         rootDir: baseDir,
         currentPath: req.session.currentPath || req.session.lastBrowsedPath || ''
     });
+});
+
+// Homogeneity endpoint
+app.get('/api/homogeneity', (req, res) => {
+  const modules = getHomogeneityModules();
+  res.json({ modules });
+});
+
+// Orthogonality endpoint
+app.post('/api/orthogonality', (req, res) => {
+  const { name, value } = req.body;
+  const result = updateEntity(name, value);
+  res.json({ updated: { name, value: result } });
 });
 
 // Global Express error handler - must be last middleware
