@@ -280,6 +280,15 @@ class PDFRenderer {
     async loadPDF(filePath) {
         this.uiManager.setStatus('Loading PDF...');
         
+        // Wait for PDF.js to load
+        if (window.pdfJsLoaded) {
+            try {
+                await window.pdfJsLoaded;
+            } catch (error) {
+                throw new Error('PDF.js library failed to load. Please refresh the page.');
+            }
+        }
+        
         // Check if PDF.js is loaded
         if (typeof pdfjsLib === 'undefined') {
             throw new Error('PDF.js library not loaded. Please refresh the page.');

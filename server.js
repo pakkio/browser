@@ -109,10 +109,12 @@ app.use(helmet({
         useDefaults: true,
         directives: {
             "default-src": ["'self'"],
-            "script-src": ["'self'","'unsafe-inline'"],
-            "style-src": ["'self'","'unsafe-inline'"],
-            "img-src": ["'self'","data:"],
+            "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            "script-src-elem": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
+            "img-src": ["'self'", "data:"],
             "connect-src": ["'self'"],
+            "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
             "object-src": ["'none'"],
             "frame-ancestors": ["'none'"]
         }
