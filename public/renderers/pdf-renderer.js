@@ -316,17 +316,31 @@ class PDFRenderer {
             );
             
             if (!response.ok) {
-                const errorText = await response.text().catch(() => 'Unknown error');
                 let errorMessage;
-                if (response.status === 404) {
-                    errorMessage = `PDF file not found`;
-                } else if (response.status === 500) {
-                    errorMessage = `Server error loading PDF - file may be corrupted`;
-                } else if (response.status === 403) {
-                    errorMessage = `Access denied - PDF may be password protected`;
-                } else {
-                    errorMessage = `HTTP ${response.status}: ${errorText}`;
+                
+                // Try to parse JSON error response first (e.g., from /epub-pdf)
+                try {
+                    const contentType = response.headers.get('content-type');
+                    if (contentType && contentType.includes('application/json')) {
+                        const errorData = await response.json();
+                        errorMessage = errorData.error || errorData.message || `HTTP ${response.status}`;
+                    } else {
+                        const errorText = await response.text();
+                        errorMessage = errorText || `HTTP ${response.status}`;
+                    }
+                } catch (parseError) {
+                    // If parsing fails, use generic message
+                    if (response.status === 404) {
+                        errorMessage = `PDF file not found`;
+                    } else if (response.status === 500) {
+                        errorMessage = `Server error loading PDF - file may be corrupted`;
+                    } else if (response.status === 403) {
+                        errorMessage = `Access denied - PDF may be password protected`;
+                    } else {
+                        errorMessage = `HTTP ${response.status}: Unknown error`;
+                    }
                 }
+                
                 throw new Error(errorMessage);
             }
             
