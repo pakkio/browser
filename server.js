@@ -112,7 +112,7 @@ app.use(helmet({
             "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
             "script-src-elem": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
             "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            "img-src": ["'self'", "data:"],
+            "img-src": ["'self'", "data:", "blob:"],
             "connect-src": ["'self'"],
             "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
             "object-src": ["'none'"],
