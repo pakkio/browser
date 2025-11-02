@@ -668,14 +668,14 @@ class PDFRenderer {
     handleModeChange(mode) {
         if (mode === 'zoom-out') {
             this.fitToWidth = false;
-            this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.25);
+            this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.10);
         } else if (mode === 'zoom-in') {
             this.fitToWidth = false;
-            this.zoomLevel = Math.min(3.0, this.zoomLevel + 0.25);
+            this.zoomLevel = Math.min(3.0, this.zoomLevel + 0.10);
         } else if (mode === 'fit-width') {
             this.fitToWidth = !this.fitToWidth;
             if (!this.fitToWidth && this.zoomLevel === 1.0) {
-                this.zoomLevel = 1.25; // Default manual zoom
+                this.zoomLevel = 1.10; // Default manual zoom
             }
         }
         

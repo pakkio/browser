@@ -84,11 +84,15 @@ function initializeFileExplorer() {
     const fileDetails = document.getElementById('file-details');
     const fileTypeFilter = document.getElementById('file-type-filter');
     const searchInput = document.getElementById('search-input');
+    const sortFieldSelect = document.getElementById('sort-field');
+    const sortDirectionBtn = document.getElementById('sort-direction');
     let currentPath = '';
     let currentFiles = [];
     let filteredFiles = [];
     let selectedIndex = -1;
     let serverRootDir = '';  // Will be fetched from server
+    let sortField = 'name';  // name, date, size, type
+    let sortAscending = true;  // true = ascending, false = descending
     const fileRenderer = new FileRenderer();
 
     function matchesSearchTerms(filename, searchTerms) {
@@ -100,6 +104,51 @@ function initializeFileExplorer() {
 
     function parseSearchQuery(query) {
         return query.trim().split(/\s+/).filter(term => term.length > 0);
+    }
+
+    function sortFiles(files) {
+        // Separate directories and files
+        const directories = files.filter(f => f.isDirectory);
+        const regularFiles = files.filter(f => !f.isDirectory);
+
+        // Sort function based on current sort field
+        const compareFn = (a, b) => {
+            let comparison = 0;
+
+            switch(sortField) {
+                case 'name':
+                    comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    break;
+                case 'date':
+                    const dateA = a.modified ? new Date(a.modified).getTime() : 0;
+                    const dateB = b.modified ? new Date(b.modified).getTime() : 0;
+                    comparison = dateA - dateB;
+                    break;
+                case 'size':
+                    const sizeA = a.size || 0;
+                    const sizeB = b.size || 0;
+                    comparison = sizeA - sizeB;
+                    break;
+                case 'type':
+                    const extA = a.name.split('.').pop().toLowerCase();
+                    const extB = b.name.split('.').pop().toLowerCase();
+                    comparison = extA.localeCompare(extB);
+                    // If extensions are the same, sort by name
+                    if (comparison === 0) {
+                        comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    }
+                    break;
+            }
+
+            return sortAscending ? comparison : -comparison;
+        };
+
+        // Sort directories and files separately
+        directories.sort(compareFn);
+        regularFiles.sort(compareFn);
+
+        // Return directories first, then files
+        return [...directories, ...regularFiles];
     }
 
     function loadFiles(path) {
@@ -212,12 +261,15 @@ function initializeFileExplorer() {
                     typeMatches = fileType === selectedFilter;
                 }
             }
-            
+
             // Search filter
             const searchMatches = matchesSearchTerms(file.name, searchTerms);
-            
+
             return typeMatches && searchMatches;
         });
+
+        // Sort the filtered files
+        filteredFiles = sortFiles(filteredFiles);
         
         // Update path display with filtered count if different from total
         const hasFilters = selectedFilter !== 'all' || searchTerms.length > 0;
@@ -741,7 +793,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             if (window.debugConsole) {
                 window.debugConsole.showProgress('Searching files...', 30);
             }
-            
+
             setTimeout(() => {
                 displayFiles(currentFiles, currentPath);
                 if (window.debugConsole) {
@@ -751,6 +803,20 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         } else {
             displayFiles(currentFiles, currentPath);
         }
+    });
+
+    // Sort field change event
+    sortFieldSelect.addEventListener('change', () => {
+        sortField = sortFieldSelect.value;
+        displayFiles(currentFiles, currentPath);
+    });
+
+    // Sort direction toggle event
+    sortDirectionBtn.addEventListener('click', () => {
+        sortAscending = !sortAscending;
+        sortDirectionBtn.textContent = sortAscending ? '↑' : '↓';
+        sortDirectionBtn.title = sortAscending ? 'Sorted ascending (click for descending)' : 'Sorted descending (click for ascending)';
+        displayFiles(currentFiles, currentPath);
     });
 
     // Tab switching functionality

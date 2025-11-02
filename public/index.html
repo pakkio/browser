@@ -92,6 +92,13 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
                     <option value="archive">📦 Archives</option>
                     <option value="file">📄 Other Files</option>
                 </select>
+                <select id="sort-field" class="filter-select">
+                    <option value="name">Sort: Name</option>
+                    <option value="date">Sort: Date</option>
+                    <option value="size">Sort: Size</option>
+                    <option value="type">Sort: Type</option>
+                </select>
+                <button id="sort-direction" class="sort-direction-btn" title="Sorted ascending (click for descending)">↑</button>
             </div>
             <div class="tree-view">
                 <ul id="file-list"></ul>
