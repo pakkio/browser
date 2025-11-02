@@ -7,15 +7,30 @@
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js" crossorigin="anonymous"></script>
 <script>
-// Configure PDF.js worker after library loads
-if (typeof pdfjsLib !== 'undefined') {
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
-    console.log('PDF.js loaded successfully, version:', pdfjsLib.version);
-} else {
-    console.error('PDF.js failed to load from CDN');
-}
+// Load PDF.js and configure it before the rest of the page loads
+window.pdfJsLoaded = new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.min.js';
+    script.crossOrigin = 'anonymous';
+    script.onload = () => {
+        if (typeof pdfjsLib !== 'undefined') {
+            pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.14.305/pdf.worker.min.js';
+            console.log('PDF.js loaded successfully, version:', pdfjsLib.version);
+            resolve();
+        } else {
+            const error = 'PDF.js loaded but pdfjsLib is undefined';
+            console.error(error);
+            reject(new Error(error));
+        }
+    };
+    script.onerror = () => {
+        const error = 'Failed to load PDF.js from CDN';
+        console.error(error);
+        reject(new Error(error));
+    };
+    document.head.appendChild(script);
+});
 </script>
 </head>
 <body>
