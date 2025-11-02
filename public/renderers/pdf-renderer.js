@@ -531,13 +531,20 @@ class PDFRenderer {
                 scale = this.zoomLevel;
             }
             
-            const scaledViewport = page.getViewport({ scale: scale });
+            // Apply high-DPI rendering for crisp text on retina displays
+            const pixelRatio = window.devicePixelRatio || 1;
+            const outputScale = pixelRatio * scale;
             
-            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
+            const scaledViewport = page.getViewport({ scale: outputScale });
             
-            // Set canvas dimensions
+            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, pixelRatio: ${pixelRatio}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
+            
+            // Set canvas dimensions for high-DPI rendering
             canvas.width = scaledViewport.width;
             canvas.height = scaledViewport.height;
+            // Scale down the CSS size to display at correct size
+            canvas.style.width = Math.floor(scaledViewport.width / pixelRatio) + 'px';
+            canvas.style.height = Math.floor(scaledViewport.height / pixelRatio) + 'px';
             canvas.style.display = 'block';
             
             // Render the page
