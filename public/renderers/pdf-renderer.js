@@ -280,6 +280,11 @@ class PDFRenderer {
     async loadPDF(filePath) {
         this.uiManager.setStatus('Loading PDF...');
         
+        // Check if PDF.js is loaded
+        if (typeof pdfjsLib === 'undefined') {
+            throw new Error('PDF.js library not loaded. Please refresh the page.');
+        }
+        
         // Show prominent loading popup
         if (window.debugConsole) {
             window.debugConsole.showProgress('Loading PDF document...', 10);
@@ -432,6 +437,11 @@ class PDFRenderer {
 
     async renderPage(pageNum, canvas) {
         try {
+            // Check if PDF.js is loaded
+            if (typeof pdfjsLib === 'undefined') {
+                throw new Error('PDF.js library not loaded. Please refresh the page.');
+            }
+            
             // Cancel any existing render task for this canvas
             const canvasId = canvas.id;
             if (this.activeRenderTasks && this.activeRenderTasks.has(canvasId)) {
@@ -558,6 +568,12 @@ class PDFRenderer {
     
     async renderTextLayer(page, viewport, pageNum) {
         try {
+            // Check if PDF.js is loaded
+            if (typeof pdfjsLib === 'undefined') {
+                console.warn('PDF.js library not loaded, skipping text layer');
+                return;
+            }
+            
             // Get text content
             const textContent = await page.getTextContent();
             
