@@ -19,7 +19,8 @@ class FileRenderer {
         this.handlers.set('docx', new DocxRenderer());
         this.handlers.set('xlsx', new XlsxRenderer());
         this.handlers.set('pptx', new PptxRenderer());
-        this.handlers.set('epub', new EpubRenderer());
+        // Use PDF renderer for EPUB files (converts EPUB to PDF on the server)
+        this.handlers.set('epub', new EpubPdfRenderer());
         this.handlers.set('archive', new ArchiveRenderer());
         this.handlers.set('html', new HtmlRenderer());
         // Treat .doc as .docx for rendering
