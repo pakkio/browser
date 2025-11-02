@@ -1,3 +1,56 @@
+// EpubPdfRenderer - Renders EPUB files as PDF
+class EpubPdfRenderer {
+    constructor() {
+        this.pdfRenderer = new PDFRenderer();
+    }
+
+    cleanup() {
+        if (this.pdfRenderer) {
+            this.pdfRenderer.cleanup();
+        }
+    }
+
+    async render(filePath, fileName, contentCode, contentOther) {
+        console.log(`[EPUB-PDF] Rendering EPUB as PDF: ${fileName}`);
+        
+        // Show loading message
+        if (window.debugConsole) {
+            window.debugConsole.showProgress('Converting EPUB to PDF...', 10);
+        }
+        
+        try {
+            // Use the /epub-pdf endpoint which converts EPUB to PDF on the server
+            const pdfUrl = `/epub-pdf?path=${encodeURIComponent(filePath)}`;
+            console.log(`[EPUB-PDF] Converting EPUB to PDF via: ${pdfUrl}`);
+            
+            // Use the PDF renderer's full render method with the EPUB-to-PDF endpoint
+            // This will set up the PDF UI and load the converted PDF
+            await this.pdfRenderer.render(pdfUrl, fileName, contentCode, contentOther);
+            
+            if (window.debugConsole) {
+                window.debugConsole.hideProgress();
+            }
+            
+            console.log(`[EPUB-PDF] Successfully rendered EPUB as PDF`);
+        } catch (error) {
+            console.error(`[EPUB-PDF] Error rendering EPUB as PDF:`, error);
+            
+            if (window.debugConsole) {
+                window.debugConsole.hideProgress();
+            }
+            
+            contentOther.innerHTML = `
+                <div class="error-message" style="padding: 20px; text-align: center;">
+                    <h3>Failed to Convert EPUB</h3>
+                    <p>${error.message}</p>
+                    <p style="color: #888;">The EPUB file could not be converted to PDF for viewing.</p>
+                </div>
+            `;
+            contentOther.style.display = 'block';
+        }
+    }
+}
+
 // EpubRenderer for EPUB books
 class EpubRenderer {
     constructor() {

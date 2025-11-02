@@ -20,7 +20,7 @@ const {
 } = require('./lib/file-handlers');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
-const { serveEpubCover, serveEpubPreview, serveCoverImageFallback } = require('./lib/epub-handlers');
+const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
 const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } = require('./lib/annotation-handlers');
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
@@ -189,6 +189,7 @@ app.get('/archive-file', requireAuth, serveArchiveFile);
 // EPUB routes
 app.get('/epub-cover', requireAuth, serveEpubCover);
 app.get('/epub-preview', requireAuth, serveEpubPreview);
+app.get('/epub-pdf', requireAuth, serveEpubAsPdf);
 app.get('/cover.jpeg', serveCoverImageFallback);
 app.get('/cover.jpg', serveCoverImageFallback);
 
