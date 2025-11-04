@@ -16,7 +16,8 @@ const {
     serveFile, 
     getPdfInfo, 
     servePdfPreview, 
-    serveVideoTranscode 
+    serveVideoTranscode,
+    serveSubtitle
 } = require('./lib/file-handlers');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
@@ -179,6 +180,7 @@ app.get('/files/list', serveFileList);
 app.get('/files', requireAuth, serveFile);
 app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
 app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
+app.get('/subtitle', requireAuth, serveSubtitle);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
 // Archive routes

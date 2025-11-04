@@ -29,6 +29,9 @@ A sleek, modern web-based file browser with support for multiple file types incl
 ### 🎨 Media Support
 - **Images** - JPG, JPEG, PNG, GIF, WebP, BMP, SVG preview
 - **Video** - MP4, AVI, MOV, MKV, WebM playback with controls (AVI with real-time transcoding)
+  - **Subtitle Support** - Automatic detection and loading of SRT/VTT subtitle files
+  - **Manual Subtitle Selection** - Choose custom subtitle files for any video
+  - **Multi-language Support** - Detect and display subtitles in multiple languages
 - **Audio** - MP3, WAV, FLAC, OGG, AAC playback with controls
 
 ### 🎯 Modern UI
@@ -170,7 +173,7 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 | **Office** | DOCX, XLSX, PPTX | Document rendering, spreadsheet viewing |
 | **Comics** | CBZ, CBR | Page navigation, archive extraction |
 | **Images** | JPG, JPEG, PNG, GIF, WebP, BMP, SVG | Full-size preview, hover effects |
-| **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls, AVI transcoding |
+| **Videos** | MP4, AVI, MOV, MKV, WebM | HTML5 video player with controls, AVI transcoding, automatic subtitle detection |
 | **Audio** | MP3, WAV, FLAC, OGG, AAC | HTML5 audio player with controls |
 | **Subtitles** | SRT | Enhanced formatting with styled time codes |
 | **Code/Text** | JS, TS, HTML, CSS, JSON, PY, JAVA, C, CPP, GO, RS, MD, TXT, XML, YAML, SQL | **Double-page & cover modes by default**, syntax highlighting |
@@ -255,6 +258,7 @@ browser/
 | `/comic-preview` | GET | Extract comic page from archive |
 | `/epub-preview` | GET | Extract EPUB page content |
 | `/video-transcode` | GET | Real-time AVI to WebM transcoding |
+| `/subtitle` | GET | Serve SRT/VTT subtitle files (auto-converts SRT to WebVTT) |
 
 ## 🎯 Usage Examples
 
@@ -291,6 +295,16 @@ Text and code files open with enhanced features:
 ### Play AVI Videos
 AVI files are automatically transcoded to WebM format for browser compatibility. The transcoding happens in real-time using FFmpeg, providing seamless playback without requiring pre-conversion.
 
+### Video Subtitles
+Videos automatically detect and load matching subtitle files:
+- **Automatic Detection** - Looks for `.srt` or `.vtt` files with the same name as the video
+- **Multi-language Support** - Detects language codes like `.en.srt`, `.it.srt`, etc.
+- **Keyboard Shortcut** - Press `s` or `S` to open subtitle selection dialog with prefix search
+- **Prefix Search** - Type to filter available subtitles in the current directory
+- **Manual Selection** - Use the "Select Subtitle File" button to choose any subtitle file from your computer
+- **Format Support** - Both SRT and WebVTT formats supported (SRT auto-converted to WebVTT)
+- **Naming Patterns** - Auto-detects: `video.srt`, `video.en.srt`, `video.eng.srt`, `video.english.srt`
+
 ## ⌨️ Keyboard Shortcuts
 
 ### PDF Viewer
@@ -308,6 +322,19 @@ AVI files are automatically transcoded to WebM format for browser compatibility.
 - `←` / `→` Arrow keys - Navigate between pages
 - `d` or `D` - Toggle double-page viewing mode (enabled by default)
 - `c` or `C` - Toggle cover mode (enabled by default)
+
+### Video Player
+- `Space` - Play/pause and toggle fullscreen
+- `↑` / `↓` Arrow keys - Navigate to previous/next video in directory
+- `Page Up` / `Page Down` - Navigate to previous/next video in directory
+- `Mouse Wheel` - Fast forward/rewind by 10 seconds
+- `s` or `S` - Open subtitle selection dialog with search
+- `r` - Mark video with red color
+- `g` - Mark video with green color
+- `y` - Mark video with yellow color
+- `b` - Mark video with blue color
+- `c` - Add comment to video
+- `1-5` - Rate video with 1-5 stars
 
 ### General Navigation
 - Click on page numbers or use jump inputs for direct navigation
