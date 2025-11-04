@@ -10,15 +10,16 @@ const FileCache = require('./cache');
 
 const { AUTH_ENABLED, port, baseDir } = require('./lib/config');
 const { setupAuthRoutes } = require('./lib/auth-routes');
-const { 
-    serveBrowseRequest, 
-    serveFileList, 
-    serveFile, 
-    getPdfInfo, 
-    servePdfPreview, 
+const {
+    serveBrowseRequest,
+    serveFileList,
+    serveFile,
+    getPdfInfo,
+    servePdfPreview,
     serveVideoTranscode,
     serveSubtitle
 } = require('./lib/file-handlers');
+const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-checker');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
@@ -80,23 +81,6 @@ process.on('unhandledRejection', (reason, promise) => {
     // Don't exit the process - try to continue serving other requests
 });
 
-// Graceful shutdown handling
-process.on('SIGTERM', () => {
-    console.log('🛑 SIGTERM received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed successfully');
-        process.exit(0);
-    });
-});
-
-process.on('SIGINT', () => {
-    console.log('🛑 SIGINT received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed successfully');
-        process.exit(0);
-    });
-});
-
 console.log('================================');
 console.log('🚀 File Browser Server Starting...');
 console.log(`📂 Base directory: ${baseDir}`);
@@ -114,6 +98,7 @@ app.use(helmet({
             "script-src-elem": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
             "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
             "img-src": ["'self'", "data:", "blob:"],
+            "media-src": ["'self'", "blob:"],
             "connect-src": ["'self'"],
             "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
             "object-src": ["'none'"],
@@ -183,6 +168,30 @@ app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
 app.get('/subtitle', requireAuth, serveSubtitle);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
+// Video codec check endpoint
+app.get('/api/video-codec-check', requireAuth, async (req, res) => {
+    try {
+        const requestedFile = req.query.path;
+        if (!requestedFile) {
+            return res.status(400).json({ error: 'File path is required' });
+        }
+
+        const filePath = path.join(baseDir, requestedFile);
+        if (!filePath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Forbidden' });
+        }
+
+        const codecInfo = await checkVideoCodec(filePath);
+        res.json(codecInfo);
+    } catch (error) {
+        console.error('Error checking video codec:', error);
+        res.status(500).json({
+            error: 'Failed to check video codec',
+            message: error.message
+        });
+    }
+});
+
 // Archive routes
 app.get('/archive-video', requireAuth, (req, res) => serveArchiveVideo(req, res, cache));
 app.get('/archive-contents', requireAuth, (req, res) => serveArchiveContents(req, res, cache));
@@ -207,6 +216,93 @@ app.post('/api/cache/clear', requireAuth, (req, res) => clearCache(req, res, cac
 
 // System routes
 app.post('/api/open-file', requireAuth, openFile);
+
+// File operation routes
+app.delete('/api/file', requireAuth, async (req, res) => {
+    try {
+        const { path: filePath } = req.body;
+        
+        if (!filePath) {
+            return res.status(400).json({ error: 'File path is required' });
+        }
+
+        // Resolve the full path based on the baseDir
+        const normalizedPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+        const fullPath = path.resolve(baseDir, normalizedPath);
+        
+        // Security check - ensure the path is within baseDir
+        if (!fullPath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
+        }
+
+        const fs = require('fs').promises;
+        const stats = await fs.stat(fullPath);
+        
+        if (stats.isDirectory()) {
+            await fs.rmdir(fullPath, { recursive: true });
+        } else {
+            await fs.unlink(fullPath);
+        }
+        
+        res.json({ success: true, message: 'File deleted successfully' });
+        
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        res.status(500).json({ 
+            error: 'Failed to delete file', 
+            message: error.message 
+        });
+    }
+});
+
+app.post('/api/file/rename', requireAuth, async (req, res) => {
+    try {
+        const { oldPath, newName } = req.body;
+        
+        if (!oldPath || !newName) {
+            return res.status(400).json({ error: 'Old path and new name are required' });
+        }
+
+        // Resolve the full paths based on the baseDir
+        const normalizedOldPath = oldPath.startsWith('/') ? oldPath.slice(1) : oldPath;
+        const fullOldPath = path.resolve(baseDir, normalizedOldPath);
+        
+        // Security check - ensure the old path is within baseDir
+        if (!fullOldPath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
+        }
+
+        // Calculate new path (same directory, new name)
+        const dir = path.dirname(fullOldPath);
+        const fullNewPath = path.join(dir, newName);
+        
+        // Security check - ensure the new path is also within baseDir
+        if (!fullNewPath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: New path outside allowed directory' });
+        }
+
+        const fs = require('fs').promises;
+        
+        // Check if new name already exists
+        try {
+            await fs.access(fullNewPath);
+            return res.status(409).json({ error: 'File with that name already exists' });
+        } catch (err) {
+            // File doesn't exist, which is what we want
+        }
+        
+        await fs.rename(fullOldPath, fullNewPath);
+        
+        res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(baseDir, fullNewPath) });
+        
+    } catch (error) {
+        console.error('Error renaming file:', error);
+        res.status(500).json({ 
+            error: 'Failed to rename file', 
+            message: error.message 
+        });
+    }
+});
 
 // AI File Summary route
 app.post('/api/summarize-file', requireAuth, async (req, res) => {
@@ -354,5 +450,22 @@ const server = app.listen(port, () => {
 
 // Set server timeout to prevent hanging connections
 server.setTimeout(300000); // 5 minutes
+
+// Graceful shutdown handling (must be after server is created)
+process.on('SIGTERM', () => {
+    console.log('🛑 SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed successfully');
+        process.exit(0);
+    });
+});
+
+process.on('SIGINT', () => {
+    console.log('🛑 SIGINT received. Shutting down gracefully...');
+    server.close(() => {
+        console.log('✅ Server closed successfully');
+        process.exit(0);
+    });
+});
 
 module.exports = app;

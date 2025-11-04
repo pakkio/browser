@@ -100,38 +100,57 @@ class FileRenderer {
         return 'unsupported';
     }
 
-    stopAllMedia() {
+    async stopAllMedia() {
         // Stop all video elements
         const videos = document.querySelectorAll('video');
+        const stopVideoPromises = [];
+
         videos.forEach(video => {
-            video.pause();
-            video.currentTime = 0;
-            video.src = '';
-            video.load(); // Reset the video element
+            // Create a promise that resolves when the video is fully stopped
+            const stopPromise = new Promise(resolve => {
+                video.pause();
+                // Remove all event listeners by cloning the element
+                video.onloadstart = null;
+                video.oncanplay = null;
+                video.onerror = null;
+                video.onplay = null;
+                video.onplaying = null;
+                // Clear the src to stop any loading
+                video.removeAttribute('src');
+                video.load();
+                // Wait a tick for the video to process the stop
+                setTimeout(resolve, 10);
+            });
+            stopVideoPromises.push(stopPromise);
         });
-        
+
         // Stop all audio elements
         const audios = document.querySelectorAll('audio');
         audios.forEach(audio => {
             audio.pause();
             audio.currentTime = 0;
-            audio.src = '';
-            audio.load(); // Reset the audio element
+            audio.removeAttribute('src');
+            audio.load();
         });
-        
+
         // Exit fullscreen if active
         if (document.fullscreenElement) {
-            document.exitFullscreen().catch(err => {
+            try {
+                await document.exitFullscreen();
+            } catch (err) {
                 console.log('Error exiting fullscreen:', err);
-            });
+            }
         }
+
+        // Wait for all videos to stop
+        await Promise.all(stopVideoPromises);
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
         try {
-            // Stop all media playback before switching files
-            this.stopAllMedia();
-            
+            // Stop all media playback before switching files (await to ensure cleanup completes)
+            await this.stopAllMedia();
+
             // Cleanup previous renderer's specific event listeners or states
             if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
                 try {
@@ -158,6 +177,7 @@ class FileRenderer {
                 window.debugConsole.showProgress(`Rendering ${fileType}: ${fileName}`, 20);
             }
 
+            // Now safe to clear the DOM after media is stopped
             contentCode.innerHTML = '';
             contentOther.innerHTML = '';
             contentCode.parentElement.style.display = 'none';

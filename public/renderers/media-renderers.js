@@ -67,26 +67,30 @@ class VideoRenderer {
             });
         } else {
             // Check if this file needs transcoding
-            const needsTranscoding = fileName.toLowerCase().endsWith('.avi') || fileName.toLowerCase().endsWith('.wmv') || fileName.toLowerCase().endsWith('.mpg') || fileName.toLowerCase().endsWith('.mpeg');
-            
-            if (needsTranscoding) {
-                // Use transcoding endpoint for AVI/WMV files
+            const needsTranscoding = fileName.toLowerCase().endsWith('.avi') ||
+                                    fileName.toLowerCase().endsWith('.wmv') ||
+                                    fileName.toLowerCase().endsWith('.mpg') ||
+                                    fileName.toLowerCase().endsWith('.mpeg');
+
+            // Allow forcing transcoding via options (for MP4 files with codec issues)
+            const forceTranscode = options.forceTranscode || false;
+
+            if (needsTranscoding || forceTranscode) {
+                // Use transcoding endpoint
                 video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
-                
+
                 // Add loading indicator for transcoding
                 const loadingDiv = document.createElement('div');
                 loadingDiv.style.color = '#666';
                 loadingDiv.style.marginBottom = '10px';
-                const ext = fileName.toLowerCase().endsWith('.avi') ? 'AVI' : 
-                          fileName.toLowerCase().endsWith('.wmv') ? 'WMV' : 
-                          fileName.toLowerCase().endsWith('.mpg') ? 'MPG' : 'MPEG';
+                const ext = fileName.split('.').pop().toUpperCase();
                 loadingDiv.innerHTML = `🔄 Transcoding ${ext} file for playback...`;
                 contentOther.appendChild(loadingDiv);
-                
+
                 video.addEventListener('loadstart', () => {
                     loadingDiv.innerHTML = '🔄 Loading transcoded video...';
                 });
-                
+
                 video.addEventListener('canplay', () => {
                     loadingDiv.style.display = 'none';
                 });
@@ -108,13 +112,66 @@ class VideoRenderer {
         errorDiv.style.marginTop = '10px';
         errorDiv.style.display = 'none';
         
-        video.addEventListener('error', (e) => {
+        video.addEventListener('error', async (e) => {
             console.error('Video error:', e, video.error);
             errorDiv.style.display = 'block';
+
+            const errorCode = video.error?.code;
+            const errorMessage = video.error?.message || '';
+            const isDemuxerError = errorMessage.includes('DEMUXER_ERROR') || errorMessage.includes('FFmpegDemuxer');
+            const isNetworkError = errorCode === 2;
+            const isDecodeError = errorCode === 3;
+            const isFormatError = errorCode === 4;
+
+            let troubleshootingHint = '';
+            let transcodeButton = '';
+
+            if (isDemuxerError || isDecodeError || isFormatError) {
+                troubleshootingHint = '<br><small>⚠️ This video may have an unsupported codec or be corrupted.</small>';
+
+                // For MP4/MOV/MKV files with codec issues, offer transcoding
+                if (fileName.toLowerCase().match(/\.(mp4|mov|mkv)$/)) {
+                    transcodeButton = `
+                        <br><button id="transcode-video-btn" style="
+                            margin-top: 10px;
+                            padding: 8px 16px;
+                            background: #4ecdc4;
+                            color: white;
+                            border: none;
+                            border-radius: 4px;
+                            cursor: pointer;
+                            font-size: 14px;
+                        ">🔄 Try Transcoding</button>
+                        <br><small style="color: #999;">Click to attempt automatic transcoding to a browser-compatible format</small>
+                    `;
+
+                    // Add click handler after DOM update
+                    setTimeout(() => {
+                        const transcodeBtn = document.getElementById('transcode-video-btn');
+                        if (transcodeBtn) {
+                            transcodeBtn.addEventListener('click', () => {
+                                // Reload the video renderer with forceTranscode option
+                                if (window.fileExplorer && window.fileExplorer.showContent) {
+                                    const path = filePath.substring(0, filePath.lastIndexOf('/'));
+                                    window.fileExplorer.showContent(path, fileName, { forceTranscode: true });
+                                } else {
+                                    location.reload();
+                                }
+                            });
+                        }
+                    }, 100);
+                }
+            } else if (isNetworkError) {
+                troubleshootingHint = '<br><small>⚠️ Network issue - check if the file path contains special characters or emojis.</small>';
+            }
+
             errorDiv.innerHTML = `
                 <strong>Video Error:</strong><br>
-                ${this.getErrorMessage(video.error?.code)}<br>
+                ${this.getErrorMessage(errorCode)}<br>
                 <small>File: ${fileName}</small>
+                ${errorMessage ? `<br><small style="color: #ff9999;">Details: ${errorMessage}</small>` : ''}
+                ${troubleshootingHint}
+                ${transcodeButton}
                 ${(options.needsTranscoding || false) ? '<br><small>Try refreshing if transcoding failed</small>' : ''}
             `;
         });
@@ -878,32 +935,39 @@ class VideoRenderer {
         // Get directory path from video path
         const lastSlash = videoPath.lastIndexOf('/');
         const directoryPath = lastSlash > 0 ? videoPath.substring(0, lastSlash) : '';
-        
+
+        // Get video filename without extension (e.g., "rashomon" from "rashomon.mp4" or "Ramoshon.mp4")
+        // Use lowercase for case-insensitive matching
+        const videoBaseName = videoFileName.replace(/\.[^.]+$/, '').toLowerCase();
+
         try {
             // Fetch directory listing
             const response = await window.authManager.authenticatedFetch(
                 `/files?path=${encodeURIComponent(directoryPath)}`
             );
-            
+
             if (!response.ok) {
                 console.log('Could not fetch directory listing for subtitle discovery');
                 return;
             }
-            
+
             const data = await response.json();
-            
-            // Filter for subtitle files (.srt and .vtt)
+
+            // Filter for subtitle files that match the video filename pattern (case-insensitive)
+            // For "rashomon.mp4" or "Ramoshon.mp4", match: Ramoshon.srt, rashomon.en.srt, Ramoshon_pippo.srt, etc.
             this.availableSubtitles = (data.files || [])
                 .filter(file => {
-                    const name = file.name.toLowerCase();
-                    return (name.endsWith('.srt') || name.endsWith('.vtt')) && !file.isDirectory;
+                    const name = file.name.toLowerCase(); // Case-insensitive comparison
+                    const hasSubtitleExt = name.endsWith('.srt') || name.endsWith('.vtt');
+                    const matchesVideoName = name.startsWith(videoBaseName); // Both are lowercase now
+                    return hasSubtitleExt && matchesVideoName && !file.isDirectory;
                 })
                 .map(file => ({
                     name: file.name,
                     path: directoryPath ? `${directoryPath}/${file.name}` : file.name
                 }));
-            
-            console.log(`Found ${this.availableSubtitles.length} subtitle files in directory`);
+
+            console.log(`Found ${this.availableSubtitles.length} subtitle files matching "${videoBaseName}*" (case-insensitive)`);
         } catch (error) {
             console.error('Error discovering subtitles:', error);
             this.availableSubtitles = [];
@@ -1237,20 +1301,14 @@ class VideoRenderer {
             color: #999;
             margin-bottom: 10px;
         `;
-        info.textContent = 'Subtitles are auto-loaded if found. You can also manually select a subtitle file:';
+        info.textContent = 'Subtitles are auto-loaded if found. Press "S" or click the button to select from available subtitles:';
         container.appendChild(info);
-        
+
         const buttonContainer = document.createElement('div');
         buttonContainer.style.cssText = 'display: flex; gap: 10px; align-items: center;';
-        
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.srt,.vtt';
-        input.style.display = 'none';
-        input.id = 'subtitle-file-input';
-        
+
         const selectButton = document.createElement('button');
-        selectButton.textContent = 'Select Subtitle File';
+        selectButton.textContent = 'Select Subtitle (S)';
         selectButton.style.cssText = `
             padding: 8px 16px;
             background: rgba(76, 175, 80, 0.2);
@@ -1261,81 +1319,20 @@ class VideoRenderer {
             font-size: 13px;
             transition: all 0.3s;
         `;
-        
+
         selectButton.addEventListener('mouseenter', () => {
             selectButton.style.background = 'rgba(76, 175, 80, 0.3)';
         });
-        
+
         selectButton.addEventListener('mouseleave', () => {
             selectButton.style.background = 'rgba(76, 175, 80, 0.2)';
         });
-        
+
         selectButton.addEventListener('click', () => {
-            input.click();
-        });
-        
-        const statusDiv = document.createElement('div');
-        statusDiv.style.cssText = `
-            font-size: 12px;
-            color: #4caf50;
-        `;
-        
-        input.addEventListener('change', async (e) => {
-            const file = e.target.files[0];
-            if (!file) return;
-            
-            statusDiv.textContent = `Loading ${file.name}...`;
-            
-            try {
-                // Read the file content
-                const text = await file.text();
-                
-                // Create a blob URL for the subtitle file
-                let content = text;
-                
-                // Convert SRT to VTT if needed
-                if (file.name.toLowerCase().endsWith('.srt')) {
-                    content = 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
-                }
-                
-                const blob = new Blob([content], { type: 'text/vtt' });
-                const blobUrl = URL.createObjectURL(blob);
-                
-                // Remove existing subtitle tracks
-                const existingTracks = video.querySelectorAll('track');
-                existingTracks.forEach(track => track.remove());
-                
-                // Add new track
-                const track = document.createElement('track');
-                track.kind = 'subtitles';
-                track.label = file.name.replace(/\.(srt|vtt)$/i, '');
-                track.srclang = 'en';
-                track.src = blobUrl;
-                track.default = true;
-                
-                video.appendChild(track);
-                
-                // Enable the track
-                setTimeout(() => {
-                    if (video.textTracks.length > 0) {
-                        video.textTracks[0].mode = 'showing';
-                    }
-                }, 100);
-                
-                statusDiv.textContent = `✓ Loaded: ${file.name}`;
-                this.showSubtitleNotification(`Custom subtitle loaded: ${file.name}`);
-                
-            } catch (error) {
-                statusDiv.textContent = `✗ Error loading subtitle: ${error.message}`;
-                statusDiv.style.color = '#f44336';
-                console.error('Error loading subtitle file:', error);
-            }
+            this.showSubtitleSearchDialog();
         });
         
         buttonContainer.appendChild(selectButton);
-        buttonContainer.appendChild(input);
-        buttonContainer.appendChild(statusDiv);
-        
         container.appendChild(buttonContainer);
         
         return container;

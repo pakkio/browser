@@ -64,6 +64,187 @@ function showShortcutHelpPopup() {
     });
 }
 
+// Context menu functionality
+function showContextMenu(x, y, filePath, fileName, isDirectory) {
+    // Remove any existing context menu
+    const existing = document.getElementById('context-menu');
+    if (existing) existing.remove();
+
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.style.cssText = `
+        position: fixed;
+        top: ${y}px;
+        left: ${x}px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 1000;
+        min-width: 150px;
+        font-size: 14px;
+        color: #e0e0e0;
+    `;
+
+    const menuItems = [
+        {
+            text: `Rename ${isDirectory ? 'Folder' : 'File'}`,
+            icon: '✏️',
+            action: () => renameFile(filePath, fileName)
+        },
+        {
+            text: `Delete ${isDirectory ? 'Folder' : 'File'}`,
+            icon: '🗑️',
+            action: () => deleteFile(filePath, fileName, isDirectory)
+        }
+    ];
+
+    menuItems.forEach((item, index) => {
+        const menuItem = document.createElement('div');
+        menuItem.style.cssText = `
+            padding: 8px 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            border-bottom: ${index < menuItems.length - 1 ? '1px solid #444' : 'none'};
+        `;
+        menuItem.innerHTML = `<span>${item.icon}</span><span>${item.text}</span>`;
+        
+        menuItem.addEventListener('mouseenter', () => {
+            menuItem.style.background = '#444';
+        });
+        menuItem.addEventListener('mouseleave', () => {
+            menuItem.style.background = 'transparent';
+        });
+        menuItem.addEventListener('click', () => {
+            menu.remove();
+            item.action();
+        });
+        
+        menu.appendChild(menuItem);
+    });
+
+    document.body.appendChild(menu);
+
+    // Adjust position if menu goes off screen
+    const rect = menu.getBoundingClientRect();
+    if (rect.right > window.innerWidth) {
+        menu.style.left = (x - rect.width) + 'px';
+    }
+    if (rect.bottom > window.innerHeight) {
+        menu.style.top = (y - rect.height) + 'px';
+    }
+
+    // Close menu when clicking elsewhere
+    function closeMenu(e) {
+        if (!menu.contains(e.target)) {
+            menu.remove();
+            document.removeEventListener('click', closeMenu);
+        }
+    }
+    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+}
+
+// File operation functions
+async function renameFile(filePath, currentName) {
+    const newName = prompt(`Rename "${currentName}" to:`, currentName);
+    if (!newName || newName === currentName) return;
+
+    try {
+        const response = await window.authManager.authenticatedFetch('/api/file/rename', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                oldPath: filePath,
+                newName: newName
+            })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            // Clear current content view to avoid showing stale data
+            if (window.fileExplorer && window.fileExplorer.clearContentView) {
+                window.fileExplorer.clearContentView();
+            }
+            
+            // Refresh the file list
+            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+            }
+            showToast(`Successfully renamed to "${newName}"`, 'success');
+        } else {
+            showToast(`Failed to rename: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error renaming file:', error);
+        showToast(`Error renaming file: ${error.message}`, 'error');
+    }
+}
+
+async function deleteFile(filePath, fileName, isDirectory) {
+    const fileType = isDirectory ? 'folder' : 'file';
+    if (!confirm(`Are you sure you want to delete the ${fileType} "${fileName}"?\n\nThis action cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await window.authManager.authenticatedFetch('/api/file', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: filePath })
+        });
+
+        const result = await response.json();
+        if (result.success) {
+            // Clear current content view to avoid showing deleted file
+            if (window.fileExplorer && window.fileExplorer.clearContentView) {
+                window.fileExplorer.clearContentView();
+            }
+            
+            // Refresh the file list
+            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+            }
+            showToast(`Successfully deleted "${fileName}"`, 'success');
+        } else {
+            showToast(`Failed to delete: ${result.error}`, 'error');
+        }
+    } catch (error) {
+        console.error('Error deleting file:', error);
+        showToast(`Error deleting file: ${error.message}`, 'error');
+    }
+}
+
+// Toast notification function
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: ${type === 'error' ? '#d32f2f' : type === 'success' ? '#388e3c' : '#1976d2'};
+        color: white;
+        padding: 12px 16px;
+        border-radius: 6px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 2000;
+        font-size: 14px;
+        max-width: 300px;
+        word-wrap: break-word;
+    `;
+    toast.textContent = message;
+    
+    document.body.appendChild(toast);
+    
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        if (toast.parentNode) {
+            toast.remove();
+        }
+    }, 4000);
+}
+
 // Initialize the main application
 function initializeApp() {
     console.log('Initializing main application...');
@@ -312,6 +493,13 @@ function initializeFileExplorer() {
                             loadFiles(currentPath);
                             updateDetails(null);
                         });
+                        
+                        // Add context menu for directories
+                        li.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            const filePath = path ? `${path}/${file.name}` : file.name;
+                            showContextMenu(e.pageX, e.pageY, filePath, file.name, file.isDirectory);
+                        });
                     } else {
                         const extension = file.name.split('.').pop().toLowerCase();
                         
@@ -363,6 +551,13 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                              selectFile(index, filePath, file.name, options);
                              showContent(path, file.name, options);
                              updateDetails(file);
+                        });
+
+                        // Add context menu for files
+                        li.addEventListener('contextmenu', (e) => {
+                            e.preventDefault();
+                            const filePath = path ? `${path}/${file.name}` : file.name;
+                            showContextMenu(e.pageX, e.pageY, filePath, file.name, file.isDirectory);
                         });
 
                         li.addEventListener('dblclick', (e) => {
