@@ -805,8 +805,11 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         // Don't interfere when specific renderers are active that handle their own navigation
         const archiveContainer = document.querySelector('.archive-container');
         const pdfContainer = document.querySelector('.pdf-container');
-        if ((archiveContainer && contentOther.style.display !== 'none') || (pdfContainer && contentOther.style.display !== 'none')) {
-            return; // Renderer handles its own arrow keys
+        const videoElement = document.querySelector('#content-other video');
+        if ((archiveContainer && contentOther.style.display !== 'none') ||
+            (pdfContainer && contentOther.style.display !== 'none') ||
+            (videoElement && contentOther.style.display !== 'none')) {
+            return; // Renderer handles its own keys
         }
 
         if (filteredFiles.length === 0 && event.key !== 'Backspace') return;

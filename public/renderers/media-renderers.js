@@ -943,7 +943,7 @@ class VideoRenderer {
         try {
             // Fetch directory listing
             const response = await window.authManager.authenticatedFetch(
-                `/files?path=${encodeURIComponent(directoryPath)}`
+                `/files/list?path=${encodeURIComponent(directoryPath)}`
             );
 
             if (!response.ok) {
