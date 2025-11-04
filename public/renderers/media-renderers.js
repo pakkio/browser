@@ -936,10 +936,6 @@ class VideoRenderer {
         const lastSlash = videoPath.lastIndexOf('/');
         const directoryPath = lastSlash > 0 ? videoPath.substring(0, lastSlash) : '';
 
-        // Get video filename without extension (e.g., "rashomon" from "rashomon.mp4" or "Ramoshon.mp4")
-        // Use lowercase for case-insensitive matching
-        const videoBaseName = videoFileName.replace(/\.[^.]+$/, '').toLowerCase();
-
         try {
             // Fetch directory listing
             const response = await window.authManager.authenticatedFetch(
@@ -953,21 +949,19 @@ class VideoRenderer {
 
             const data = await response.json();
 
-            // Filter for subtitle files that match the video filename pattern (case-insensitive)
-            // For "rashomon.mp4" or "Ramoshon.mp4", match: Ramoshon.srt, rashomon.en.srt, Ramoshon_pippo.srt, etc.
+            // Get ALL subtitle files in the directory (no filtering by video name)
             this.availableSubtitles = (data.files || [])
                 .filter(file => {
-                    const name = file.name.toLowerCase(); // Case-insensitive comparison
+                    const name = file.name.toLowerCase();
                     const hasSubtitleExt = name.endsWith('.srt') || name.endsWith('.vtt');
-                    const matchesVideoName = name.startsWith(videoBaseName); // Both are lowercase now
-                    return hasSubtitleExt && matchesVideoName && !file.isDirectory;
+                    return hasSubtitleExt && !file.isDirectory;
                 })
                 .map(file => ({
                     name: file.name,
                     path: directoryPath ? `${directoryPath}/${file.name}` : file.name
                 }));
 
-            console.log(`Found ${this.availableSubtitles.length} subtitle files matching "${videoBaseName}*" (case-insensitive)`);
+            console.log(`Found ${this.availableSubtitles.length} subtitle files in directory`);
         } catch (error) {
             console.error('Error discovering subtitles:', error);
             this.availableSubtitles = [];
