@@ -27,12 +27,16 @@ class VideoRenderer {
         // Store current file info for annotations
         this.currentFilePath = filePath;
         this.currentFileName = fileName;
+        this.currentVideo = null; // Will store reference to video element
+        this.availableSubtitles = []; // Will store list of available subtitle files
         
         const video = document.createElement('video');
+        this.currentVideo = video;
         video.controls = true;
         video.preload = 'metadata';
         video.style.maxWidth = '100%';
         video.style.height = 'auto';
+        video.crossOrigin = 'anonymous'; // Allow loading subtitles from same server
         
         // Add a custom attribute to track our click handling
         video.setAttribute('data-custom-click', 'true');
@@ -90,6 +94,12 @@ class VideoRenderer {
                 // Use direct file serving for other formats
                 video.src = `/files?path=${encodeURIComponent(filePath)}`;
             }
+            
+            // Try to auto-detect and load subtitle files
+            await this.loadSubtitles(video, filePath, fileName);
+            
+            // Discover all available subtitle files in the directory
+            await this.discoverSubtitles(filePath, fileName);
         }
         
         // Error handling
@@ -203,6 +213,12 @@ class VideoRenderer {
         contentOther.appendChild(videoWrapper);
         contentOther.appendChild(errorDiv);
         
+        // Add subtitle selector UI
+        if (!isArchiveVideo) {
+            const subtitleControls = this.createSubtitleControls(video, filePath, fileName);
+            contentOther.appendChild(subtitleControls);
+        }
+        
         // Explicitly call load() to prevent premature load attempts
         video.load();
         
@@ -240,6 +256,9 @@ class VideoRenderer {
             } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'PageUp' || e.code === 'PageDown') {
                 e.preventDefault();
                 this.navigateToAdjacentFile(e.code);
+            } else if (e.key === 's' || e.key === 'S') {
+                e.preventDefault();
+                this.showSubtitleSearchDialog();
             } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'b' || e.key === 'c' || 
                        (e.key >= '1' && e.key <= '5')) {
                 e.preventDefault();
@@ -642,7 +661,7 @@ class VideoRenderer {
             <div style="margin-bottom: 4px;">Stars: ${starsDisplay}</div>
             <div style="margin-bottom: 4px;">Color: <span style="color: ${annotation.color || '#ccc'}">${color}</span></div>
             <div style="font-size: 11px;">${comment}</div>
-            <div style="font-size: 10px; color: #999; margin-top: 4px;">Press 1-5 for stars, R/G/Y/B for colors, C for comment</div>
+            <div style="font-size: 10px; color: #999; margin-top: 4px;">Press 1-5 for stars, R/G/Y/B for colors, C for comment, S for subtitles</div>
         `;
         
         if (annotation.color) {
@@ -797,6 +816,529 @@ class VideoRenderer {
                 console.error('Error attempting to exit fullscreen:', err);
             });
         }
+    }
+    
+    async loadSubtitles(video, videoPath, videoFileName) {
+        // Get base path without file extension
+        const basePath = videoPath.substring(0, videoPath.lastIndexOf('.'));
+        const baseFileName = videoFileName.substring(0, videoFileName.lastIndexOf('.'));
+        
+        // Try common subtitle naming patterns
+        const subtitleExtensions = ['.srt', '.vtt'];
+        const subtitlePatterns = [
+            basePath,  // same name as video
+            `${basePath}.en`,  // with language code
+            `${basePath}.eng`,
+            `${basePath}.english`
+        ];
+        
+        for (const pattern of subtitlePatterns) {
+            for (const ext of subtitleExtensions) {
+                const subtitlePath = pattern + ext;
+                const subtitleFileName = subtitlePath.split('/').pop();
+                
+                try {
+                    // Try to fetch the subtitle file to see if it exists
+                    const response = await window.authManager.authenticatedFetch(
+                        `/subtitle?path=${encodeURIComponent(subtitlePath)}`
+                    );
+                    
+                    if (response.ok) {
+                        console.log(`Found subtitle file: ${subtitleFileName}`);
+                        
+                        // Create a track element
+                        const track = document.createElement('track');
+                        track.kind = 'subtitles';
+                        track.label = this.getSubtitleLabel(subtitleFileName);
+                        track.srclang = this.detectLanguage(subtitleFileName);
+                        track.src = `/subtitle?path=${encodeURIComponent(subtitlePath)}`;
+                        track.default = true; // Make this the default subtitle track
+                        
+                        video.appendChild(track);
+                        
+                        console.log(`Added subtitle track: ${subtitleFileName} (${track.srclang})`);
+                        
+                        // Show a subtle notification
+                        this.showSubtitleNotification(`Subtitles loaded: ${subtitleFileName}`);
+                        
+                        // Stop after finding the first subtitle file
+                        return;
+                    }
+                } catch (error) {
+                    // File doesn't exist or error fetching, continue trying other patterns
+                    console.debug(`Subtitle not found: ${subtitleFileName}`);
+                }
+            }
+        }
+        
+        console.log('No subtitle files found for video');
+    }
+    
+    async discoverSubtitles(videoPath, videoFileName) {
+        // Get directory path from video path
+        const lastSlash = videoPath.lastIndexOf('/');
+        const directoryPath = lastSlash > 0 ? videoPath.substring(0, lastSlash) : '';
+        
+        try {
+            // Fetch directory listing
+            const response = await window.authManager.authenticatedFetch(
+                `/files?path=${encodeURIComponent(directoryPath)}`
+            );
+            
+            if (!response.ok) {
+                console.log('Could not fetch directory listing for subtitle discovery');
+                return;
+            }
+            
+            const data = await response.json();
+            
+            // Filter for subtitle files (.srt and .vtt)
+            this.availableSubtitles = (data.files || [])
+                .filter(file => {
+                    const name = file.name.toLowerCase();
+                    return (name.endsWith('.srt') || name.endsWith('.vtt')) && !file.isDirectory;
+                })
+                .map(file => ({
+                    name: file.name,
+                    path: directoryPath ? `${directoryPath}/${file.name}` : file.name
+                }));
+            
+            console.log(`Found ${this.availableSubtitles.length} subtitle files in directory`);
+        } catch (error) {
+            console.error('Error discovering subtitles:', error);
+            this.availableSubtitles = [];
+        }
+    }
+    
+    showSubtitleSearchDialog() {
+        if (!this.currentVideo) {
+            console.log('No video element available');
+            return;
+        }
+        
+        if (this.availableSubtitles.length === 0) {
+            this.showSubtitleNotification('No subtitle files found in this directory');
+            return;
+        }
+        
+        // Create modal dialog
+        const modal = document.createElement('div');
+        modal.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 10001;
+            backdrop-filter: blur(5px);
+        `;
+        
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            background: rgba(30, 30, 30, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 25px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 80vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+        `;
+        
+        const title = document.createElement('h3');
+        title.textContent = '💬 Select Subtitle File';
+        title.style.cssText = `
+            margin: 0 0 15px 0;
+            color: #fff;
+            font-size: 18px;
+        `;
+        
+        const searchBox = document.createElement('input');
+        searchBox.type = 'text';
+        searchBox.placeholder = 'Type to filter subtitles...';
+        searchBox.style.cssText = `
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 5px;
+            color: #fff;
+            font-size: 14px;
+            box-sizing: border-box;
+        `;
+        
+        const listContainer = document.createElement('div');
+        listContainer.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            margin-bottom: 15px;
+        `;
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = `
+            display: flex;
+            gap: 10px;
+            justify-content: flex-end;
+        `;
+        
+        const cancelButton = document.createElement('button');
+        cancelButton.textContent = 'Cancel (Esc)';
+        cancelButton.style.cssText = `
+            padding: 8px 16px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: #fff;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+        `;
+        
+        const renderList = (filter = '') => {
+            listContainer.innerHTML = '';
+            
+            const filtered = this.availableSubtitles.filter(sub => 
+                sub.name.toLowerCase().includes(filter.toLowerCase())
+            );
+            
+            if (filtered.length === 0) {
+                const noResults = document.createElement('div');
+                noResults.textContent = 'No matching subtitles found';
+                noResults.style.cssText = `
+                    color: #999;
+                    padding: 20px;
+                    text-align: center;
+                `;
+                listContainer.appendChild(noResults);
+                return;
+            }
+            
+            filtered.forEach((subtitle, index) => {
+                const item = document.createElement('div');
+                item.textContent = subtitle.name;
+                item.style.cssText = `
+                    padding: 12px 15px;
+                    margin-bottom: 5px;
+                    background: rgba(255, 255, 255, 0.05);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    border-radius: 5px;
+                    color: #fff;
+                    cursor: pointer;
+                    transition: all 0.2s;
+                `;
+                
+                item.addEventListener('mouseenter', () => {
+                    item.style.background = 'rgba(76, 175, 80, 0.3)';
+                    item.style.borderColor = 'rgba(76, 175, 80, 0.5)';
+                });
+                
+                item.addEventListener('mouseleave', () => {
+                    item.style.background = 'rgba(255, 255, 255, 0.05)';
+                    item.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                });
+                
+                item.addEventListener('click', async () => {
+                    await this.loadSubtitleFile(subtitle.path, subtitle.name);
+                    modal.remove();
+                });
+                
+                listContainer.appendChild(item);
+            });
+        };
+        
+        // Initial render
+        renderList();
+        
+        // Search functionality
+        searchBox.addEventListener('input', (e) => {
+            renderList(e.target.value);
+        });
+        
+        // Close on cancel
+        cancelButton.addEventListener('click', () => {
+            modal.remove();
+        });
+        
+        // Close on Escape
+        const handleEscape = (e) => {
+            if (e.key === 'Escape') {
+                modal.remove();
+                document.removeEventListener('keydown', handleEscape);
+            }
+        };
+        document.addEventListener('keydown', handleEscape);
+        
+        // Close on background click
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                modal.remove();
+            }
+        });
+        
+        buttonContainer.appendChild(cancelButton);
+        
+        dialog.appendChild(title);
+        dialog.appendChild(searchBox);
+        dialog.appendChild(listContainer);
+        dialog.appendChild(buttonContainer);
+        
+        modal.appendChild(dialog);
+        document.body.appendChild(modal);
+        
+        // Focus search box
+        setTimeout(() => searchBox.focus(), 100);
+    }
+    
+    async loadSubtitleFile(subtitlePath, subtitleName) {
+        if (!this.currentVideo) {
+            console.error('No video element available');
+            return;
+        }
+        
+        try {
+            // Fetch the subtitle file
+            const response = await window.authManager.authenticatedFetch(
+                `/subtitle?path=${encodeURIComponent(subtitlePath)}`
+            );
+            
+            if (!response.ok) {
+                throw new Error(`Failed to load subtitle: ${response.statusText}`);
+            }
+            
+            // Remove existing subtitle tracks
+            const existingTracks = this.currentVideo.querySelectorAll('track');
+            existingTracks.forEach(track => track.remove());
+            
+            // Create new track element
+            const track = document.createElement('track');
+            track.kind = 'subtitles';
+            track.label = this.getSubtitleLabel(subtitleName);
+            track.srclang = this.detectLanguage(subtitleName);
+            track.src = `/subtitle?path=${encodeURIComponent(subtitlePath)}`;
+            track.default = true;
+            
+            this.currentVideo.appendChild(track);
+            
+            // Enable the track
+            setTimeout(() => {
+                if (this.currentVideo.textTracks.length > 0) {
+                    this.currentVideo.textTracks[0].mode = 'showing';
+                }
+            }, 100);
+            
+            console.log(`Loaded subtitle: ${subtitleName}`);
+            this.showSubtitleNotification(`Subtitle loaded: ${subtitleName}`);
+            
+        } catch (error) {
+            console.error('Error loading subtitle file:', error);
+            this.showSubtitleNotification(`Error loading subtitle: ${error.message}`);
+        }
+    }
+    
+    getSubtitleLabel(filename) {
+        // Extract language from filename if present
+        const lowerName = filename.toLowerCase();
+        if (lowerName.includes('.en.') || lowerName.includes('.eng.') || lowerName.includes('.english.')) {
+            return 'English';
+        }
+        if (lowerName.includes('.it.') || lowerName.includes('.ita.') || lowerName.includes('.italian.')) {
+            return 'Italian';
+        }
+        if (lowerName.includes('.es.') || lowerName.includes('.spa.') || lowerName.includes('.spanish.')) {
+            return 'Spanish';
+        }
+        if (lowerName.includes('.fr.') || lowerName.includes('.fra.') || lowerName.includes('.french.')) {
+            return 'French';
+        }
+        if (lowerName.includes('.de.') || lowerName.includes('.ger.') || lowerName.includes('.german.')) {
+            return 'German';
+        }
+        return 'Subtitles';
+    }
+    
+    detectLanguage(filename) {
+        // Detect language code from filename
+        const lowerName = filename.toLowerCase();
+        if (lowerName.includes('.en.') || lowerName.includes('.eng.') || lowerName.includes('.english.')) {
+            return 'en';
+        }
+        if (lowerName.includes('.it.') || lowerName.includes('.ita.') || lowerName.includes('.italian.')) {
+            return 'it';
+        }
+        if (lowerName.includes('.es.') || lowerName.includes('.spa.') || lowerName.includes('.spanish.')) {
+            return 'es';
+        }
+        if (lowerName.includes('.fr.') || lowerName.includes('.fra.') || lowerName.includes('.french.')) {
+            return 'fr';
+        }
+        if (lowerName.includes('.de.') || lowerName.includes('.ger.') || lowerName.includes('.german.')) {
+            return 'de';
+        }
+        return 'en'; // Default to English
+    }
+    
+    showSubtitleNotification(message) {
+        const notification = document.createElement('div');
+        notification.textContent = message;
+        notification.style.cssText = `
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: rgba(76, 175, 80, 0.9);
+            color: white;
+            padding: 10px 15px;
+            border-radius: 5px;
+            font-size: 14px;
+            z-index: 10000;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+            backdrop-filter: blur(10px);
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Fade out after 3 seconds
+        setTimeout(() => {
+            notification.style.transition = 'opacity 0.5s';
+            notification.style.opacity = '0';
+            setTimeout(() => notification.remove(), 500);
+        }, 3000);
+    }
+    
+    createSubtitleControls(video, videoPath, videoFileName) {
+        const container = document.createElement('div');
+        container.style.cssText = `
+            margin-top: 15px;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        `;
+        
+        const title = document.createElement('div');
+        title.textContent = '💬 Subtitles';
+        title.style.cssText = `
+            font-weight: bold;
+            margin-bottom: 10px;
+            color: #fff;
+            font-size: 14px;
+        `;
+        container.appendChild(title);
+        
+        const info = document.createElement('div');
+        info.style.cssText = `
+            font-size: 12px;
+            color: #999;
+            margin-bottom: 10px;
+        `;
+        info.textContent = 'Subtitles are auto-loaded if found. You can also manually select a subtitle file:';
+        container.appendChild(info);
+        
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.cssText = 'display: flex; gap: 10px; align-items: center;';
+        
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.srt,.vtt';
+        input.style.display = 'none';
+        input.id = 'subtitle-file-input';
+        
+        const selectButton = document.createElement('button');
+        selectButton.textContent = 'Select Subtitle File';
+        selectButton.style.cssText = `
+            padding: 8px 16px;
+            background: rgba(76, 175, 80, 0.2);
+            border: 1px solid rgba(76, 175, 80, 0.5);
+            color: #4caf50;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 13px;
+            transition: all 0.3s;
+        `;
+        
+        selectButton.addEventListener('mouseenter', () => {
+            selectButton.style.background = 'rgba(76, 175, 80, 0.3)';
+        });
+        
+        selectButton.addEventListener('mouseleave', () => {
+            selectButton.style.background = 'rgba(76, 175, 80, 0.2)';
+        });
+        
+        selectButton.addEventListener('click', () => {
+            input.click();
+        });
+        
+        const statusDiv = document.createElement('div');
+        statusDiv.style.cssText = `
+            font-size: 12px;
+            color: #4caf50;
+        `;
+        
+        input.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            statusDiv.textContent = `Loading ${file.name}...`;
+            
+            try {
+                // Read the file content
+                const text = await file.text();
+                
+                // Create a blob URL for the subtitle file
+                let content = text;
+                
+                // Convert SRT to VTT if needed
+                if (file.name.toLowerCase().endsWith('.srt')) {
+                    content = 'WEBVTT\n\n' + text.replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');
+                }
+                
+                const blob = new Blob([content], { type: 'text/vtt' });
+                const blobUrl = URL.createObjectURL(blob);
+                
+                // Remove existing subtitle tracks
+                const existingTracks = video.querySelectorAll('track');
+                existingTracks.forEach(track => track.remove());
+                
+                // Add new track
+                const track = document.createElement('track');
+                track.kind = 'subtitles';
+                track.label = file.name.replace(/\.(srt|vtt)$/i, '');
+                track.srclang = 'en';
+                track.src = blobUrl;
+                track.default = true;
+                
+                video.appendChild(track);
+                
+                // Enable the track
+                setTimeout(() => {
+                    if (video.textTracks.length > 0) {
+                        video.textTracks[0].mode = 'showing';
+                    }
+                }, 100);
+                
+                statusDiv.textContent = `✓ Loaded: ${file.name}`;
+                this.showSubtitleNotification(`Custom subtitle loaded: ${file.name}`);
+                
+            } catch (error) {
+                statusDiv.textContent = `✗ Error loading subtitle: ${error.message}`;
+                statusDiv.style.color = '#f44336';
+                console.error('Error loading subtitle file:', error);
+            }
+        });
+        
+        buttonContainer.appendChild(selectButton);
+        buttonContainer.appendChild(input);
+        buttonContainer.appendChild(statusDiv);
+        
+        container.appendChild(buttonContainer);
+        
+        return container;
     }
     
     cleanup() {
