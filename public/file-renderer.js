@@ -14,6 +14,7 @@ class FileRenderer {
         this.handlers.set('image-pair', new ImagePairRenderer());
         this.handlers.set('pdf', new PDFRenderer());
         this.handlers.set('comic', new ComicRenderer());
+        this.handlers.set('notebook', new NotebookRenderer());
         this.handlers.set('audio', new AudioRenderer());
         this.handlers.set('video', new VideoRenderer());
         this.handlers.set('docx', new DocxRenderer());
@@ -82,9 +83,9 @@ class FileRenderer {
             return 'pdf';
         } else if (['cbz', 'cbr'].includes(extension)) {
             return 'comic';
-        } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
+        } else if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) {
             return 'audio';
-        } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(extension)) {
+        } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) {
             return 'video';
         } else if (extension === 'docx') {
             return 'docx';
@@ -92,6 +93,8 @@ class FileRenderer {
             return 'xlsx';
         } else if (extension === 'pptx') {
             return 'pptx';
+        } else if (extension === 'ipynb') {
+            return 'notebook';
         } else if (extension === 'epub') {
             return 'epub';
         } else if (["zip", "rar", "tar", "tgz", "tar.gz", "oar"].includes(extension) || fileName.endsWith('.tar.gz') || fileName.endsWith('.tgz') || fileName.endsWith('.tar') || fileName.endsWith('.oar')) {

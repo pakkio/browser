@@ -925,6 +925,178 @@ audio, video {
     font-family: 'Georgia', serif;
 }
 
+/* Notebook styling */
+.notebook-container {
+    display: flex;
+    flex-direction: column;
+    height: 75vh;
+    max-height: 75vh;
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+.notebook-header {
+    padding: 14px 16px;
+    background: rgba(0, 0, 0, 0.25);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+}
+
+.notebook-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #ffcc80;
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.notebook-meta {
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.75);
+    white-space: nowrap;
+}
+
+.notebook-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.notebook-action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    cursor: pointer;
+    text-decoration: none;
+}
+
+.notebook-action-btn:hover {
+    background: rgba(255, 255, 255, 0.22);
+}
+
+.notebook-body {
+    flex: 1;
+    overflow: auto;
+    padding: 14px;
+}
+
+.notebook-body::-webkit-scrollbar {
+    width: 6px;
+}
+
+.notebook-body::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 3px;
+}
+
+.notebook-body::-webkit-scrollbar-thumb {
+    background: rgba(255, 204, 128, 0.35);
+    border-radius: 3px;
+}
+
+.notebook-raw {
+    margin: 0;
+    padding: 14px;
+    background: rgba(0, 0, 0, 0.35);
+    border-radius: 10px;
+    white-space: pre;
+    overflow: auto;
+    color: #e0e0e0;
+    font-size: 0.85rem;
+}
+
+.nb-cell {
+    margin-bottom: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 10px;
+    overflow: hidden;
+    background: rgba(0, 0, 0, 0.18);
+}
+
+.nb-cell-header {
+    padding: 8px 12px;
+    font-family: monospace;
+    font-size: 0.8rem;
+    color: rgba(255, 255, 255, 0.75);
+    background: rgba(0, 0, 0, 0.22);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.nb-cell-body {
+    padding: 12px;
+}
+
+.nb-code {
+    background: #222;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: 8px;
+    padding: 12px;
+    margin: 0;
+    overflow: auto;
+}
+
+.nb-output {
+    margin-top: 10px;
+}
+
+.nb-output-text,
+.nb-output-stream {
+    background: rgba(0, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0;
+    overflow: auto;
+    color: #d4d4d4;
+}
+
+.nb-output-error {
+    background: rgba(255, 0, 0, 0.12);
+    border: 1px solid rgba(255, 0, 0, 0.25);
+    border-radius: 8px;
+    padding: 10px;
+    margin: 0;
+    overflow: auto;
+    color: #ffb3b3;
+}
+
+.nb-output-image {
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+}
+
+.nb-markdown h1,
+.nb-markdown h2,
+.nb-markdown h3,
+.nb-markdown h4,
+.nb-markdown h5,
+.nb-markdown h6 {
+    margin: 0.2em 0 0.6em 0;
+}
+
+.nb-markdown p {
+    margin: 0.4em 0;
+    line-height: 1.6;
+}
+
+.nb-markdown ul {
+    margin: 0.4em 0 0.4em 1.2em;
+}
+
+.nb-markdown li {
+    margin: 0.2em 0;
+}
+
 .epub-container::-webkit-scrollbar {
     width: 6px;
 }

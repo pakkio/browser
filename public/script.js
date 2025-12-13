@@ -509,9 +509,9 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'comic');
                         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
                             li.setAttribute('data-type', 'image');
-                        } else if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) {
+                        } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) {
                             li.setAttribute('data-type', 'video');
-                        } else if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) {
+                        } else if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) {
                             li.setAttribute('data-type', 'audio');
                         } else if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) {
                             li.setAttribute('data-type', 'code');
@@ -544,7 +544,7 @@ function initializeFileExplorer() {
                             }
                             
                             const filePath = path ? `${path}/${file.name}` : file.name;
-const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'];
                              const ext = file.name.split('.').pop().toLowerCase();
                              const isVideo = videoExtensions.includes(ext);
                              const options = isVideo ? { autoPlay: true, keyboardNavigation: true } : {};
@@ -717,8 +717,8 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         if (extension === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(extension)) return 'comic';
         if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
-        if (['mp4', 'avi', 'mov', 'mkv'].includes(extension)) return 'video';
-        if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
+        if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) return 'video';
+        if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) return 'audio';
         if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
         if (extension === 'ipynb') return 'notebook';
         if (['txt', 'md', 'rtf', 'doc', 'docx', 'odt'].includes(extension)) return 'text';
@@ -736,7 +736,10 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             'pdf': 'PDF Document',
             'jpg': 'JPEG Image', 'jpeg': 'JPEG Image', 'png': 'PNG Image', 'gif': 'GIF Image', 'webp': 'WebP Image',
             'mp4': 'MP4 Video', 'avi': 'AVI Video', 'mov': 'QuickTime Video', 'mkv': 'Matroska Video',
+            'webm': 'WebM Video', 'mpg': 'MPEG Video', 'mpeg': 'MPEG Video', 'wmv': 'WMV Video',
+            'm4v': 'M4V Video', 'flv': 'Flash Video', '3gp': '3GP Video', 'ts': 'MPEG-TS Video', 'mts': 'AVCHD Video', 'm2ts': 'Blu-ray Video',
             'mp3': 'MP3 Audio', 'wav': 'WAV Audio', 'flac': 'FLAC Audio', 'ogg': 'OGG Audio',
+            'm4a': 'M4A Audio', 'aac': 'AAC Audio', 'wma': 'WMA Audio',
             'txt': 'Text File', 'md': 'Markdown', 'rtf': 'Rich Text Format',
             'doc': 'Word Document', 'docx': 'Word Document', 'odt': 'OpenDocument Text',
             'csv': 'CSV Spreadsheet', 'xls': 'Excel Spreadsheet', 'xlsx': 'Excel Spreadsheet', 'ods': 'OpenDocument Spreadsheet',
@@ -955,7 +958,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         if (newIndex !== selectedIndex) {
             const file = filteredFiles[newIndex];
             const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-            const isVideo = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(
+            const isVideo = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(
                 file.name.split('.').pop().toLowerCase()
             );
             const options = isVideo ? { autoPlay: true, keyboardNavigation: true } : {};
@@ -1188,7 +1191,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         const imageFiles = files.filter(file => !file.isDirectory && 
             ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
         const videoFiles = files.filter(file => !file.isDirectory && 
-            ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(file.name.split('.').pop().toLowerCase()));
+            ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(file.name.split('.').pop().toLowerCase()));
         const pdfFiles = files.filter(file => !file.isDirectory && 
             file.name.split('.').pop().toLowerCase() === 'pdf');
         const comicFiles = files.filter(file => !file.isDirectory && 

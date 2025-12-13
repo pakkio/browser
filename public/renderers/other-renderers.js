@@ -577,6 +577,133 @@ class ArchiveRenderer {
 
                 this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, pdfUrl, fileIndex);
                 document.addEventListener('keydown', this.previewKeydownHandler);
+            } else if (extension === 'ipynb') {
+                // Handle Jupyter Notebook files from archives
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #1a1a2e; border: 1px solid #333; padding: 10px; border-radius: 5px; max-height: 90vh; overflow-y: auto;`;
+
+                const controls = document.createElement('div');
+                controls.className = 'archive-preview-controls';
+                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
+
+                const backBtn = document.createElement('button');
+                backBtn.textContent = '← Back to Archive';
+                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
+
+                const fileInfo = document.createElement('span');
+                fileInfo.textContent = `Viewing: ${fileName}`;
+                fileInfo.style.fontWeight = 'bold';
+                fileInfo.style.color = '#fff';
+
+                controls.appendChild(backBtn);
+                controls.appendChild(fileInfo);
+                previewContainer.appendChild(controls);
+
+                // Fetch notebook content from archive
+                const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+
+                const rawText = await response.text();
+                
+                // Create a container for the notebook content
+                const notebookContent = document.createElement('div');
+                notebookContent.id = 'archive-notebook-content';
+                previewContainer.appendChild(notebookContent);
+                contentOther.appendChild(previewContainer);
+
+                // Use the NotebookRenderer if available
+                if (typeof NotebookRenderer !== 'undefined') {
+                    const notebookRenderer = new NotebookRenderer();
+                    // Create a mock contentOther for the notebook renderer
+                    const mockContentCode = document.createElement('pre');
+                    
+                    // Parse and render the notebook manually since we already have the content
+                    let notebook;
+                    try {
+                        notebook = JSON.parse(rawText);
+                    } catch (e) {
+                        notebookContent.innerHTML = `<div style="color: #ff6b6b; padding: 20px;">Invalid .ipynb file (not valid JSON)</div>`;
+                        return;
+                    }
+
+                    if (!notebook || !Array.isArray(notebook.cells)) {
+                        notebookContent.innerHTML = `<div style="color: #ff6b6b; padding: 20px;">Invalid .ipynb file (missing cells)</div>`;
+                        return;
+                    }
+
+                    // Build the notebook UI
+                    const wrapper = document.createElement('div');
+                    wrapper.className = 'notebook-container';
+
+                    const header = document.createElement('div');
+                    header.className = 'notebook-header';
+
+                    const title = document.createElement('div');
+                    title.className = 'notebook-title';
+                    title.textContent = fileName;
+
+                    const meta = document.createElement('div');
+                    meta.className = 'notebook-meta';
+                    meta.textContent = notebookRenderer.formatNotebookMeta(notebook);
+
+                    const actions = document.createElement('div');
+                    actions.className = 'notebook-actions';
+
+                    const toggleRawBtn = document.createElement('button');
+                    toggleRawBtn.className = 'notebook-action-btn';
+                    toggleRawBtn.textContent = 'Raw JSON';
+
+                    const downloadLink = document.createElement('a');
+                    downloadLink.className = 'notebook-action-btn';
+                    downloadLink.href = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`;
+                    downloadLink.download = fileName;
+                    downloadLink.textContent = 'Download';
+
+                    actions.appendChild(toggleRawBtn);
+                    actions.appendChild(downloadLink);
+
+                    header.appendChild(title);
+                    header.appendChild(meta);
+                    header.appendChild(actions);
+
+                    const body = document.createElement('div');
+                    body.className = 'notebook-body';
+
+                    const rawPanel = document.createElement('pre');
+                    rawPanel.className = 'notebook-raw';
+                    rawPanel.style.display = 'none';
+                    rawPanel.textContent = rawText;
+
+                    const renderedPanel = document.createElement('div');
+                    renderedPanel.className = 'notebook-rendered';
+
+                    notebookRenderer.renderCells(notebook, renderedPanel);
+
+                    body.appendChild(renderedPanel);
+                    body.appendChild(rawPanel);
+
+                    wrapper.appendChild(header);
+                    wrapper.appendChild(body);
+
+                    notebookContent.appendChild(wrapper);
+
+                    toggleRawBtn.addEventListener('click', () => {
+                        const showRaw = rawPanel.style.display === 'none';
+                        rawPanel.style.display = showRaw ? 'block' : 'none';
+                        renderedPanel.style.display = showRaw ? 'none' : 'block';
+                        toggleRawBtn.textContent = showRaw ? 'Rendered' : 'Raw JSON';
+                    });
+                } else {
+                    // Fallback: show raw JSON
+                    const pre = document.createElement('pre');
+                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word;';
+                    pre.textContent = rawText;
+                    notebookContent.appendChild(pre);
+                }
+
+                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, null, fileIndex);
+                document.addEventListener('keydown', this.previewKeydownHandler);
             } else {
                 const previewContainer = document.createElement('div');
                 previewContainer.className = 'archive-preview-container';

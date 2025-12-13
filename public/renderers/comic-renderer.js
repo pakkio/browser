@@ -536,6 +536,12 @@ class ComicRenderer {
 
     async fetchAndCachePage(page) {
         try {
+            // Check if we've been cleaned up before starting
+            if (!this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
+                console.log(`[ComicRenderer] Skipping fetch for page ${page} - renderer was cleaned up`);
+                return null;
+            }
+            
             const filePath = this.getCurrentFilePath();
             console.log(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
             
@@ -645,6 +651,12 @@ class ComicRenderer {
     }
 
     async processPreloadQueue() {
+        // Stop processing if we've been cleaned up
+        if (!this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
+            this.preloadQueue = [];
+            return;
+        }
+        
         if (this.preloadQueue.length === 0) return;
         
         const page = this.preloadQueue.shift();
