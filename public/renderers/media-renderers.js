@@ -180,6 +180,96 @@ class VideoRenderer {
             console.log('Video loaded:', fileName, `${video.videoWidth}x${video.videoHeight}`);
         });
         
+        // Buffering indicator for seeking to unbuffered positions
+        let bufferingOverlay = null;
+        let bufferingStartTime = null;
+        let bufferingInterval = null;
+        
+        const showBufferingIndicator = (targetTime) => {
+            if (bufferingOverlay) return; // Already showing
+            
+            bufferingStartTime = Date.now();
+            bufferingOverlay = document.createElement('div');
+            bufferingOverlay.id = 'video-buffering-overlay';
+            bufferingOverlay.style.cssText = `
+                position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                background: rgba(0,0,0,0.85); color: white; padding: 20px 30px;
+                border-radius: 12px; z-index: 10000; font-size: 18px; text-align: center;
+                min-width: 200px; backdrop-filter: blur(5px);
+            `;
+            bufferingOverlay.innerHTML = `
+                <div style="margin-bottom: 10px;">⏳ Buffering...</div>
+                <div style="font-size: 14px; color: #aaa;">Seeking to ${Math.floor(targetTime / 60)}:${String(Math.floor(targetTime % 60)).padStart(2, '0')}</div>
+                <div id="buffering-time" style="font-size: 24px; margin-top: 10px;">0s</div>
+            `;
+            document.body.appendChild(bufferingOverlay);
+            
+            // Update elapsed time every 100ms
+            bufferingInterval = setInterval(() => {
+                const elapsed = ((Date.now() - bufferingStartTime) / 1000).toFixed(1);
+                const timeEl = document.getElementById('buffering-time');
+                if (timeEl) timeEl.textContent = `${elapsed}s`;
+            }, 100);
+        };
+        
+        const hideBufferingIndicator = () => {
+            if (bufferingInterval) {
+                clearInterval(bufferingInterval);
+                bufferingInterval = null;
+            }
+            if (bufferingOverlay) {
+                bufferingOverlay.remove();
+                bufferingOverlay = null;
+                bufferingStartTime = null;
+            }
+        };
+        
+        // Show buffering when waiting for data
+        video.addEventListener('waiting', () => {
+            console.log('VIDEO EVENT: waiting at', video.currentTime);
+            showBufferingIndicator(video.currentTime);
+        });
+        
+        video.addEventListener('seeking', () => {
+            console.log('VIDEO EVENT: seeking to', video.currentTime);
+            showBufferingIndicator(video.currentTime);
+        });
+        
+        video.addEventListener('stalled', () => {
+            console.log('VIDEO EVENT: stalled at', video.currentTime);
+            showBufferingIndicator(video.currentTime);
+        });
+        
+        // Hide buffering when playback resumes
+        video.addEventListener('playing', () => {
+            console.log('VIDEO EVENT: playing at', video.currentTime);
+            hideBufferingIndicator();
+        });
+        
+        video.addEventListener('seeked', () => {
+            console.log('VIDEO EVENT: seeked to', video.currentTime, 'readyState:', video.readyState);
+            // Small delay to check if we're actually playing or still buffering
+            setTimeout(() => {
+                if (!video.paused && video.readyState >= 3) {
+                    hideBufferingIndicator();
+                }
+            }, 100);
+        });
+        
+        video.addEventListener('canplaythrough', () => {
+            console.log('VIDEO EVENT: canplaythrough');
+            hideBufferingIndicator();
+        });
+        
+        // Also hide on pause (user intentionally paused)
+        video.addEventListener('pause', () => {
+            console.log('VIDEO EVENT: pause, readyState:', video.readyState);
+            // Only hide if we were buffering, not if user paused
+            if (bufferingOverlay && video.readyState >= 3) {
+                hideBufferingIndicator();
+            }
+        });
+        
         video.addEventListener('canplay', () => {
             console.log('Video can play:', fileName);
             
@@ -434,13 +524,12 @@ class VideoRenderer {
     }
     
     seekVideo(video, seconds) {
-        if (video.duration && !isNaN(video.duration) && video.readyState >= 2 && 
-            video.seekable.length > 0 && video.seekable.end(0) > 5) {
+        // Allow seeking anywhere in the video - the browser will make Range requests as needed
+        if (video.duration && !isNaN(video.duration)) {
             
             const oldTime = video.currentTime;
-            const seekableEnd = video.seekable.end(video.seekable.length - 1);
             const newTime = seconds > 0 
-                ? Math.min(oldTime + seconds, seekableEnd)
+                ? Math.min(oldTime + seconds, video.duration)
                 : Math.max(oldTime + seconds, 0);
             
             if (newTime !== oldTime) {
@@ -534,7 +623,7 @@ class VideoRenderer {
     }
     
     findNextVideoFile(filteredFiles, startIndex) {
-        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'];
         
         // Search forward from current position
         for (let i = startIndex + 1; i < filteredFiles.length; i++) {
@@ -556,7 +645,7 @@ class VideoRenderer {
     }
     
     findPreviousVideoFile(filteredFiles, startIndex) {
-        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'];
+        const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'];
         
         // Search backward from current position
         for (let i = startIndex - 1; i >= 0; i--) {
@@ -1341,6 +1430,12 @@ class VideoRenderer {
             // Note: wheel event listener is attached to video element, not document
             // It will be automatically cleaned up when video element is removed
             this.handleWheel = null;
+        }
+        
+        // Remove any buffering overlay
+        const bufferingOverlay = document.getElementById('video-buffering-overlay');
+        if (bufferingOverlay) {
+            bufferingOverlay.remove();
         }
         
         // Stop any playing videos in content areas

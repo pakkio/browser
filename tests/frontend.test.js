@@ -79,6 +79,7 @@ describe('Frontend Script Tests', () => {
     expect(fs.existsSync(rendererPath)).toBe(true);
     expect(fs.existsSync(path.join(rendererPath, 'text-renderer.js'))).toBe(true);
     expect(fs.existsSync(path.join(rendererPath, 'image-renderer.js'))).toBe(true);
+    expect(fs.existsSync(path.join(rendererPath, 'notebook-renderer.js'))).toBe(true);
     expect(fs.existsSync(path.join(rendererPath, 'document-renderers.js'))).toBe(true);
     expect(fs.existsSync(path.join(rendererPath, 'media-renderers.js'))).toBe(true);
     expect(fs.existsSync(path.join(rendererPath, 'other-renderers.js'))).toBe(true);
