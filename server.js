@@ -17,7 +17,8 @@ const {
     getPdfInfo,
     servePdfPreview,
     serveVideoTranscode,
-    serveSubtitle
+    serveSubtitle,
+    validatePdf
 } = require('./lib/file-handlers');
 const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-checker');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
@@ -65,8 +66,10 @@ const memoryMonitor = {
     }
 };
 
-// Start memory monitoring
-memoryMonitor.startMonitoring();
+// Start memory monitoring (skip during tests)
+if (process.env.NODE_ENV !== 'test') {
+    memoryMonitor.startMonitoring();
+}
 
 // Global error handling to prevent crashes
 process.on('uncaughtException', (error) => {
@@ -158,6 +161,7 @@ setupAuthRoutes(app, passport);
 // API routes
 app.get('/api/browse', requireAuth, serveBrowseRequest);
 app.get('/api/pdf-info', requireAuth, getPdfInfo);
+app.get('/api/validate-pdf', requireAuth, validatePdf);
 app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cache));
 
 // File serving routes
@@ -442,30 +446,32 @@ app.use((req, res) => {
     });
 });
 
-const server = app.listen(port, () => {
-    console.log(`🌐 Server running at http://localhost:${port}`);
-    console.log(`📂 Serving files from: ${baseDir}`);
-    console.log('✅ Server started successfully!');
-});
-
-// Set server timeout to prevent hanging connections
-server.setTimeout(300000); // 5 minutes
-
-// Graceful shutdown handling (must be after server is created)
-process.on('SIGTERM', () => {
-    console.log('🛑 SIGTERM received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed successfully');
-        process.exit(0);
+if (require.main === module) {
+    const server = app.listen(port, () => {
+        console.log(`🌐 Server running at http://localhost:${port}`);
+        console.log(`📂 Serving files from: ${baseDir}`);
+        console.log('✅ Server started successfully!');
     });
-});
 
-process.on('SIGINT', () => {
-    console.log('🛑 SIGINT received. Shutting down gracefully...');
-    server.close(() => {
-        console.log('✅ Server closed successfully');
-        process.exit(0);
+    // Set server timeout to prevent hanging connections
+    server.setTimeout(300000); // 5 minutes
+
+    // Graceful shutdown handling (must be after server is created)
+    process.on('SIGTERM', () => {
+        console.log('🛑 SIGTERM received. Shutting down gracefully...');
+        server.close(() => {
+            console.log('✅ Server closed successfully');
+            process.exit(0);
+        });
     });
-});
+
+    process.on('SIGINT', () => {
+        console.log('🛑 SIGINT received. Shutting down gracefully...');
+        server.close(() => {
+            console.log('✅ Server closed successfully');
+            process.exit(0);
+        });
+    });
+}
 
 module.exports = app;
