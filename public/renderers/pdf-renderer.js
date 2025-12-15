@@ -242,6 +242,7 @@ class PDFRenderer {
 
         const isCorrupted = this.isPDFCorruptionError(error);
         
+        // Show initial error while we fetch detailed diagnosis
         errorDiv.innerHTML = `
             <div style="font-size: 64px; margin-bottom: 20px;">📄</div>
             <h3 style="margin: 0 0 15px 0; color: #ff6b6b;">
@@ -250,11 +251,10 @@ class PDFRenderer {
             <p style="margin: 10px 0; font-size: 14px;">
                 <strong>File:</strong> ${fileName}
             </p>
-            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8; max-width: 400px;">
-                ${isCorrupted 
-                    ? 'The PDF file appears to be damaged, incomplete, password-protected, or in an unsupported format.'
-                    : 'Failed to load the PDF file. This may be due to browser compatibility issues or network problems.'}
-            </p>
+            <div id="pdf-diagnosis-loading" style="margin: 15px 0;">
+                <p style="font-size: 12px; opacity: 0.8;">🔍 Analyzing PDF file...</p>
+            </div>
+            <div id="pdf-diagnosis-result" style="display: none; margin: 15px 0; text-align: left; max-width: 500px;"></div>
             <details style="margin: 15px 0; text-align: left; max-width: 500px;">
                 <summary style="cursor: pointer; color: #ff9999; text-align: center;">Show error details</summary>
                 <pre style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px; font-size: 11px; overflow-x: auto; text-align: left;">${error.message || error.toString()}</pre>
@@ -273,6 +273,81 @@ class PDFRenderer {
         `;
         
         pagesContainer.appendChild(errorDiv);
+        
+        // Fetch detailed PDF diagnosis from server
+        this.fetchPDFDiagnosis(filePath);
+    }
+
+    async fetchPDFDiagnosis(filePath) {
+        const loadingEl = document.getElementById('pdf-diagnosis-loading');
+        const resultEl = document.getElementById('pdf-diagnosis-result');
+        
+        if (!loadingEl || !resultEl) return;
+        
+        try {
+            const response = await window.authManager.authenticatedFetch(
+                `/api/validate-pdf?path=${encodeURIComponent(filePath)}`,
+                { timeout: 35000 }
+            );
+            
+            if (!response.ok) {
+                throw new Error('Validation request failed');
+            }
+            
+            const diagnosis = await response.json();
+            
+            loadingEl.style.display = 'none';
+            resultEl.style.display = 'block';
+            
+            // Build diagnosis display
+            let severityIcon = '✅';
+            let severityColor = '#4ecdc4';
+            
+            if (diagnosis.severity === 'critical') {
+                severityIcon = '❌';
+                severityColor = '#ff6b6b';
+            } else if (diagnosis.severity === 'warning') {
+                severityIcon = '⚠️';
+                severityColor = '#ffd93d';
+            } else if (diagnosis.severity === 'protected') {
+                severityIcon = '🔒';
+                severityColor = '#ff9f43';
+            }
+            
+            let issuesHtml = '';
+            if (diagnosis.issues && diagnosis.issues.length > 0) {
+                issuesHtml = `
+                    <div style="margin: 10px 0; padding: 10px; background: rgba(0,0,0,0.2); border-radius: 4px;">
+                        <strong style="color: ${severityColor};">Issues Found:</strong>
+                        <ul style="margin: 5px 0 0 0; padding-left: 20px; font-size: 12px;">
+                            ${diagnosis.issues.map(issue => `<li>${issue}</li>`).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            resultEl.innerHTML = `
+                <div style="padding: 15px; background: rgba(0,0,0,0.2); border-radius: 8px; border-left: 4px solid ${severityColor};">
+                    <div style="font-size: 16px; margin-bottom: 10px;">
+                        ${severityIcon} <strong style="color: ${severityColor};">Diagnosis</strong>
+                    </div>
+                    <p style="margin: 5px 0; font-size: 13px;">${diagnosis.diagnosis}</p>
+                    ${diagnosis.recommendation ? `
+                        <p style="margin: 10px 0 5px 0; font-size: 12px; color: #aaa;">
+                            <strong>💡 Recommendation:</strong> ${diagnosis.recommendation}
+                        </p>
+                    ` : ''}
+                    ${issuesHtml}
+                    <p style="margin: 10px 0 0 0; font-size: 11px; opacity: 0.6;">
+                        File size: ${diagnosis.fileSize || 'Unknown'}
+                    </p>
+                </div>
+            `;
+            
+        } catch (error) {
+            console.warn('Failed to fetch PDF diagnosis:', error);
+            loadingEl.innerHTML = `<p style="font-size: 11px; opacity: 0.6;">Could not analyze PDF (ghostscript may not be available)</p>`;
+        }
     }
 
     isPDFCorruptionError(error) {
