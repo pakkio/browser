@@ -14,6 +14,8 @@ class PDFRenderer {
         this.originalParent = null;
         this.fullscreenContainer = null;
         this.isTruncatedView = false;
+        this.outline = null; // PDF outline/TOC
+        this.outlineVisible = false;
     }
 
     cleanup() {
@@ -109,7 +111,8 @@ class PDFRenderer {
             controls,
             (page) => this.loadPage(page),
             (mode) => this.handleModeChange(mode),
-            () => this.toggleFullscreen()
+            () => this.toggleFullscreen(),
+            () => this.toggleOutline()
         );
         
         // Add wheel listeners to PDF containers after they're created
@@ -172,7 +175,14 @@ class PDFRenderer {
                         this.toggleTruncatedView();
                     }
                     break;
-                case 'r': case 'g': case 'y': case 'b': case 'c':
+                case 't':
+                case 'T':
+                    e.preventDefault();
+                    if (this.outline && this.outline.length > 0) {
+                        this.toggleOutline();
+                    }
+                    break;
+                case 'r': case 'g': case 'y': case 'c':
                 case '1': case '2': case '3': case '4': case '5':
                     if (typeof handleAnnotationShortcut === 'function') {
                         handleAnnotationShortcut(e.key);
@@ -358,6 +368,9 @@ class PDFRenderer {
             
             this.uiManager.setTotalPages(this.pdfDoc.numPages);
             this.uiManager.setStatus('');
+            
+            // Load and display PDF outline/TOC if available
+            await this.loadOutline();
             
             // Initialize zoom display
             this.uiManager.updateZoomDisplay(this.zoomLevel, this.fitToWidth);
@@ -899,5 +912,63 @@ class PDFRenderer {
                 `;
             }
         }
+    }
+
+    async loadOutline() {
+        try {
+            if (!this.pdfDoc) return;
+            
+            this.outline = await this.pdfDoc.getOutline();
+            
+            if (this.outline && this.outline.length > 0) {
+                console.log(`PDF: Found ${this.outline.length} outline entries`);
+                this.uiManager.enableOutlineButton();
+                this.uiManager.createOutlineSidebar(this.outline, (dest) => this.navigateToDestination(dest));
+            } else {
+                console.log('PDF: No outline/TOC available');
+                this.uiManager.disableOutlineButton();
+            }
+        } catch (error) {
+            console.warn('Failed to load PDF outline:', error);
+            this.uiManager.disableOutlineButton();
+        }
+    }
+
+    async navigateToDestination(dest) {
+        try {
+            if (!this.pdfDoc || !dest) return;
+            
+            let pageNumber;
+            
+            // Handle different destination types
+            if (typeof dest === 'string') {
+                // Named destination - resolve it
+                const resolvedDest = await this.pdfDoc.getDestination(dest);
+                if (resolvedDest) {
+                    const pageRef = resolvedDest[0];
+                    pageNumber = await this.pdfDoc.getPageIndex(pageRef) + 1; // 0-indexed
+                }
+            } else if (Array.isArray(dest)) {
+                // Explicit destination array
+                const pageRef = dest[0];
+                if (typeof pageRef === 'object' && pageRef !== null) {
+                    pageNumber = await this.pdfDoc.getPageIndex(pageRef) + 1;
+                } else if (typeof pageRef === 'number') {
+                    pageNumber = pageRef + 1; // Already a page index
+                }
+            }
+            
+            if (pageNumber && pageNumber >= 1 && pageNumber <= this.uiManager.totalPages) {
+                console.log(`PDF: Navigating to page ${pageNumber} from outline`);
+                this.loadPage(pageNumber);
+            }
+        } catch (error) {
+            console.warn('Failed to navigate to destination:', error);
+        }
+    }
+
+    toggleOutline() {
+        this.outlineVisible = !this.outlineVisible;
+        this.uiManager.toggleOutlineSidebar(this.outlineVisible);
     }
 }

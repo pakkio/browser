@@ -5,6 +5,8 @@ class PDFUIManager {
         this.textLayerVisible = false;
         this.currentPage = 1;
         this.totalPages = null;
+        this.outlineSidebar = null;
+        this.onNavigateToDestination = null;
     }
 
     createPDFContainer() {
@@ -41,6 +43,7 @@ class PDFUIManager {
         controls.innerHTML = `
             <div style="display: flex; align-items: center; gap: 10px; flex-wrap: wrap; color: white;">
                 <div style="display: flex; align-items: center; gap: 5px;">
+                    <button id="pdf-outline-toggle" title="Show Table of Contents (T key)" style="opacity: 0.5; cursor: not-allowed;" disabled>📑 TOC</button>
                     <button id="pdf-prev">Previous</button>
                     <span id="pdf-page-info" style="margin: 0 10px;">Page 1</span>
                     <button id="pdf-next">Next</button>
@@ -185,7 +188,7 @@ class PDFUIManager {
         document.head.appendChild(style);
     }
 
-    setupEventHandlers(controls, onPageChange, onModeChange, onFullscreenToggle) {
+    setupEventHandlers(controls, onPageChange, onModeChange, onFullscreenToggle, onOutlineToggle) {
         const prevBtn = controls.querySelector('#pdf-prev');
         const nextBtn = controls.querySelector('#pdf-next');
         const jumpInput = controls.querySelector('#pdf-page-jump');
@@ -194,6 +197,7 @@ class PDFUIManager {
         const coverModeToggle = controls.querySelector('#pdf-cover-mode-toggle');
         const textToggle = controls.querySelector('#pdf-text-toggle');
         const fullscreenBtn = controls.querySelector('#pdf-fullscreen');
+        const outlineToggle = controls.querySelector('#pdf-outline-toggle');
         
         // Zoom controls
         const zoomOutBtn = controls.querySelector('#pdf-zoom-out');
@@ -256,6 +260,15 @@ class PDFUIManager {
         if (fullscreenBtn && onFullscreenToggle) {
             fullscreenBtn.addEventListener('click', () => {
                 onFullscreenToggle();
+            });
+        }
+
+        // Outline toggle event listener
+        if (outlineToggle && onOutlineToggle) {
+            outlineToggle.addEventListener('click', () => {
+                if (!outlineToggle.disabled) {
+                    onOutlineToggle();
+                }
             });
         }
 
@@ -428,6 +441,181 @@ class PDFUIManager {
         
         if (fitWidthBtn) {
             fitWidthBtn.style.background = fitToWidth ? '#4CAF50' : '#FF9800';
+        }
+    }
+
+    enableOutlineButton() {
+        const outlineBtn = document.getElementById('pdf-outline-toggle');
+        if (outlineBtn) {
+            outlineBtn.disabled = false;
+            outlineBtn.style.opacity = '1';
+            outlineBtn.style.cursor = 'pointer';
+            outlineBtn.title = 'Show Table of Contents (T key)';
+        }
+    }
+
+    disableOutlineButton() {
+        const outlineBtn = document.getElementById('pdf-outline-toggle');
+        if (outlineBtn) {
+            outlineBtn.disabled = true;
+            outlineBtn.style.opacity = '0.5';
+            outlineBtn.style.cursor = 'not-allowed';
+            outlineBtn.title = 'No Table of Contents available';
+        }
+    }
+
+    createOutlineSidebar(outline, onNavigate) {
+        this.onNavigateToDestination = onNavigate;
+        
+        // Remove existing sidebar if present
+        if (this.outlineSidebar) {
+            this.outlineSidebar.remove();
+        }
+
+        // Create sidebar container
+        this.outlineSidebar = document.createElement('div');
+        this.outlineSidebar.id = 'pdf-outline-sidebar';
+        this.outlineSidebar.style.cssText = `
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 280px;
+            background: rgba(30, 30, 30, 0.95);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+            z-index: 100;
+            display: none;
+            flex-direction: column;
+            color: white;
+            font-size: 14px;
+            box-shadow: 4px 0 15px rgba(0, 0, 0, 0.3);
+        `;
+
+        // Header
+        const header = document.createElement('div');
+        header.style.cssText = `
+            padding: 15px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.3);
+        `;
+        header.innerHTML = `
+            <span>Table of Contents</span>
+            <button id="pdf-outline-close" style="background: none; border: none; color: white; font-size: 18px; cursor: pointer; padding: 5px;">✕</button>
+        `;
+        this.outlineSidebar.appendChild(header);
+
+        // Outline content
+        const content = document.createElement('div');
+        content.style.cssText = `
+            flex: 1;
+            overflow-y: auto;
+            padding: 10px 0;
+        `;
+        content.appendChild(this.buildOutlineTree(outline, 0));
+        this.outlineSidebar.appendChild(content);
+
+        // Add to PDF container
+        const pdfContainer = document.querySelector('.pdf-container');
+        if (pdfContainer) {
+            pdfContainer.appendChild(this.outlineSidebar);
+        }
+
+        // Close button handler
+        const closeBtn = this.outlineSidebar.querySelector('#pdf-outline-close');
+        if (closeBtn) {
+            closeBtn.addEventListener('click', () => {
+                this.toggleOutlineSidebar(false);
+                // Update button state via renderer
+                const outlineBtn = document.getElementById('pdf-outline-toggle');
+                if (outlineBtn) {
+                    outlineBtn.style.background = '';
+                }
+            });
+        }
+    }
+
+    buildOutlineTree(items, level) {
+        const container = document.createElement('ul');
+        container.style.cssText = `
+            list-style: none;
+            margin: 0;
+            padding: 0;
+            padding-left: ${level * 16}px;
+        `;
+
+        for (const item of items) {
+            const li = document.createElement('li');
+            li.style.cssText = `margin: 0; padding: 0;`;
+
+            const link = document.createElement('a');
+            link.href = '#';
+            link.textContent = item.title || 'Untitled';
+            link.style.cssText = `
+                display: block;
+                padding: 8px 15px;
+                color: #e0e0e0;
+                text-decoration: none;
+                border-left: 3px solid transparent;
+                transition: all 0.2s ease;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            `;
+            link.title = item.title || 'Untitled';
+
+            link.addEventListener('mouseenter', () => {
+                link.style.background = 'rgba(255, 255, 255, 0.1)';
+                link.style.borderLeftColor = '#4CAF50';
+                link.style.color = 'white';
+            });
+
+            link.addEventListener('mouseleave', () => {
+                link.style.background = 'transparent';
+                link.style.borderLeftColor = 'transparent';
+                link.style.color = '#e0e0e0';
+            });
+
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                if (this.onNavigateToDestination && item.dest) {
+                    this.onNavigateToDestination(item.dest);
+                }
+            });
+
+            li.appendChild(link);
+
+            // Recursively add nested items
+            if (item.items && item.items.length > 0) {
+                li.appendChild(this.buildOutlineTree(item.items, level + 1));
+            }
+
+            container.appendChild(li);
+        }
+
+        return container;
+    }
+
+    toggleOutlineSidebar(visible) {
+        if (!this.outlineSidebar) return;
+
+        if (visible) {
+            this.outlineSidebar.style.display = 'flex';
+            const outlineBtn = document.getElementById('pdf-outline-toggle');
+            if (outlineBtn) {
+                outlineBtn.style.background = '#4CAF50';
+            }
+        } else {
+            this.outlineSidebar.style.display = 'none';
+            const outlineBtn = document.getElementById('pdf-outline-toggle');
+            if (outlineBtn) {
+                outlineBtn.style.background = '';
+            }
         }
     }
 }
