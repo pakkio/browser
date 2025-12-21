@@ -117,6 +117,38 @@ class TextRenderer {
         }
         
         if (!response.ok) {
+            // Check for file-not-found errors and trigger auto-refresh
+            if (response.status === 404 || response.status === 410) {
+                console.log(`[TextRenderer] File not found: ${fileName}, triggering directory refresh`);
+                
+                // Show toast notification
+                if (typeof showToast === 'function') {
+                    showToast(`File "${fileName}" not found. The file may have been renamed, moved, or deleted. Refreshing...`, 'info');
+                }
+                
+                contentOther.innerHTML = `
+                    <div style="padding: 20px; margin: 20px; background: rgba(33, 150, 243, 0.1); border: 1px solid rgba(33, 150, 243, 0.3); border-radius: 8px; color: #64b5f6; font-family: monospace; text-align: center;">
+                        <h3 style="color: #64b5f6; margin: 0 0 15px 0;">🔄 File Changed</h3>
+                        <p style="margin: 10px 0; font-size: 14px;">
+                            <strong>${fileName}</strong> was not found.
+                        </p>
+                        <p style="margin: 10px 0; font-size: 12px; opacity: 0.8;">
+                            The file may have been renamed, moved, or deleted. Refreshing directory...
+                        </p>
+                    </div>
+                `;
+                contentOther.style.display = 'block';
+                
+                // Trigger directory refresh after a brief delay
+                setTimeout(() => {
+                    if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                        const currentPath = window.fileExplorer.currentPath();
+                        console.log(`[TextRenderer] Refreshing directory: ${currentPath}`);
+                        window.fileExplorer.loadFiles(currentPath);
+                    }
+                }, 500);
+                return;
+            }
             throw new Error(`HTTP ${response.status}: ${response.statusText}`);
         }
         

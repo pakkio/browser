@@ -174,6 +174,12 @@ class ComicRenderer {
             statusElement.textContent = `Error: ${error.message}`;
         }
 
+        // Check if this is a file-not-found error - trigger auto-refresh
+        if (this.isFileNotFoundError(error)) {
+            this.handleFileNotFound(fileName, pagesContainer);
+            return;
+        }
+
         // Clear pages container and show error
         pagesContainer.innerHTML = '';
         const errorDiv = document.createElement('div');
@@ -250,8 +256,72 @@ class ComicRenderer {
         return corruptionIndicators.some(indicator => errorMessage.includes(indicator));
     }
 
+    isFileNotFoundError(error) {
+        const errorMessage = (error.message || error.toString()).toLowerCase();
+        const notFoundIndicators = [
+            'not found', '404', 'enoent', 'no such file', 'does not exist',
+            'file not found', 'inaccessible'
+        ];
+        return notFoundIndicators.some(indicator => errorMessage.includes(indicator));
+    }
+
+    handleFileNotFound(fileName, pagesContainer) {
+        console.log(`[ComicRenderer] File not found: ${fileName}, triggering directory refresh`);
+        
+        // Show toast notification
+        if (typeof showToast === 'function') {
+            showToast(`File "${fileName}" not found. The file may have been renamed, moved, or deleted. Refreshing...`, 'info');
+        }
+        
+        // Show a message in the container
+        pagesContainer.innerHTML = '';
+        const refreshDiv = document.createElement('div');
+        refreshDiv.style.cssText = `
+            padding: 20px;
+            margin: 20px;
+            background: rgba(33, 150, 243, 0.1);
+            border: 1px solid rgba(33, 150, 243, 0.3);
+            border-radius: 8px;
+            color: #64b5f6;
+            font-family: monospace;
+            text-align: center;
+        `;
+        refreshDiv.innerHTML = `
+            <h3 style="color: #64b5f6; margin: 0 0 15px 0;">🔄 File Changed</h3>
+            <p style="margin: 10px 0; font-size: 14px;">
+                <strong>${fileName}</strong> was not found.
+            </p>
+            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8;">
+                The file may have been renamed, moved, or deleted. Refreshing directory...
+            </p>
+        `;
+        pagesContainer.appendChild(refreshDiv);
+        
+        // Trigger directory refresh after a brief delay
+        setTimeout(() => {
+            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                const currentPath = window.fileExplorer.currentPath();
+                console.log(`[ComicRenderer] Refreshing directory: ${currentPath}`);
+                window.fileExplorer.loadFiles(currentPath);
+            }
+        }, 500);
+    }
+
     getUserFriendlyErrorMessage(error) {
         const errorMessage = (error.message || error.toString()).toLowerCase();
+        
+        // Check for file not found errors
+        if (this.isFileNotFoundError(error)) {
+            return {
+                title: 'File Not Found',
+                message: 'The comic file could not be found. It may have been renamed, moved, or deleted.',
+                suggestions: [
+                    'The directory will refresh automatically',
+                    'Check if the file was moved to another location',
+                    'Try refreshing the file list manually'
+                ]
+            };
+        }
         
         if (errorMessage.includes('timeout')) {
             if (errorMessage.includes('very large') || errorMessage.includes('heavy load')) {
