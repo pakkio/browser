@@ -123,6 +123,41 @@ class VideoRenderer {
             const isDecodeError = errorCode === 3;
             const isFormatError = errorCode === 4;
 
+            // Check if this might be a file not found error (network error with empty response)
+            // This typically happens when a file was renamed/moved/deleted
+            if (isNetworkError) {
+                // Try to verify if the file still exists
+                try {
+                    const checkResponse = await fetch(`/files?path=${encodeURIComponent(filePath)}`, { method: 'HEAD' });
+                    if (checkResponse.status === 404 || checkResponse.status === 410) {
+                        console.log('[VideoRenderer] File not found, triggering directory refresh');
+                        
+                        // Show toast notification
+                        if (typeof showToast === 'function') {
+                            showToast(`File "${fileName}" not found. The file may have been renamed, moved, or deleted. Refreshing...`, 'info');
+                        }
+                        
+                        // Trigger directory refresh
+                        setTimeout(() => {
+                            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                                const currentPath = window.fileExplorer.currentPath();
+                                console.log(`[VideoRenderer] Refreshing directory: ${currentPath}`);
+                                window.fileExplorer.loadFiles(currentPath);
+                            }
+                        }, 500);
+                        
+                        errorDiv.innerHTML = `
+                            <strong>File Not Found</strong><br>
+                            <small>The file "${fileName}" may have been renamed, moved, or deleted.</small><br>
+                            <small style="color: #64b5f6;">Refreshing directory...</small>
+                        `;
+                        return;
+                    }
+                } catch (checkError) {
+                    console.log('Error checking file existence:', checkError);
+                }
+            }
+
             let troubleshootingHint = '';
             let transcodeButton = '';
 
