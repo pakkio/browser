@@ -141,13 +141,62 @@ class ImageRenderer {
                 imageContainer.appendChild(infoDiv);
             };
 
-            img.onerror = (errorEvent) => {
+            img.onerror = async (errorEvent) => {
                 cleanup();
                 console.error(`Failed to load image: ${fileName}`, errorEvent);
                 
                 // Hide loading popup on error
                 if (window.debugConsole) {
                     window.debugConsole.hideProgress();
+                }
+                
+                // Check if this is a file-not-found error by verifying file existence
+                try {
+                    const checkResponse = await fetch(`/files?path=${encodeURIComponent(filePath)}`, { method: 'HEAD' });
+                    if (checkResponse.status === 404 || checkResponse.status === 410) {
+                        console.log('[ImageRenderer] File not found, triggering directory refresh');
+                        
+                        // Show toast notification
+                        if (typeof showToast === 'function') {
+                            showToast(`File "${fileName}" not found. The file may have been renamed, moved, or deleted. Refreshing...`, 'info');
+                        }
+                        
+                        // Show a message in the container
+                        imageContainer.innerHTML = '';
+                        const refreshDiv = document.createElement('div');
+                        refreshDiv.style.cssText = `
+                            padding: 20px;
+                            margin: 20px;
+                            background: rgba(33, 150, 243, 0.1);
+                            border: 1px solid rgba(33, 150, 243, 0.3);
+                            border-radius: 8px;
+                            color: #64b5f6;
+                            font-family: monospace;
+                            text-align: center;
+                        `;
+                        refreshDiv.innerHTML = `
+                            <h3 style="color: #64b5f6; margin: 0 0 15px 0;">🔄 File Changed</h3>
+                            <p style="margin: 10px 0; font-size: 14px;">
+                                <strong>${fileName}</strong> was not found.
+                            </p>
+                            <p style="margin: 10px 0; font-size: 12px; opacity: 0.8;">
+                                The file may have been renamed, moved, or deleted. Refreshing directory...
+                            </p>
+                        `;
+                        imageContainer.appendChild(refreshDiv);
+                        
+                        // Trigger directory refresh after a brief delay
+                        setTimeout(() => {
+                            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                                const currentPath = window.fileExplorer.currentPath();
+                                console.log(`[ImageRenderer] Refreshing directory: ${currentPath}`);
+                                window.fileExplorer.loadFiles(currentPath);
+                            }
+                        }, 500);
+                        return;
+                    }
+                } catch (checkError) {
+                    console.log('Error checking file existence:', checkError);
                 }
                 
                 imageContainer.innerHTML = '';
