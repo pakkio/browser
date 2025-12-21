@@ -13,9 +13,13 @@ class ComicRenderer {
         this.fullscreenContainer = null;
         this.isTruncatedView = false;
         this.retryAttempts = new Map(); // Track retry attempts per page
+        this.isCleaningUp = false; // Flag to prevent operations during cleanup
     }
 
     cleanup() {
+        // Mark as cleaning up to prevent any new operations
+        this.isCleaningUp = true;
+        
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
@@ -30,6 +34,9 @@ class ComicRenderer {
             this.exitFullscreen();
         }
         
+        // Clear preload queue first to prevent new fetch attempts
+        this.preloadQueue = [];
+        
         if (this.abortController) {
             this.abortController.abort('cleanup');
             this.abortController = null;
@@ -39,13 +46,14 @@ class ComicRenderer {
             URL.revokeObjectURL(url);
         }
         this.pageCache.clear();
-        this.preloadQueue = [];
         this.currentFilePath = null;
+        this.retryAttempts.clear();
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
         try {
             this.cleanup();
+            this.isCleaningUp = false; // Reset cleanup flag for new render
             this.currentPage = 1;
             this.totalPages = null;
             this.currentFilePath = filePath; // Store the file path for later use
@@ -446,6 +454,12 @@ class ComicRenderer {
     }
 
     async loadPage(page) {
+        // Check if we're in cleanup state
+        if (this.isCleaningUp || !this.currentFilePath) {
+            console.log(`[ComicRenderer] Skipping loadPage(${page}) - renderer is cleaning up or no file path`);
+            return;
+        }
+        
         if (page < 1) page = 1;
         if (this.totalPages && page > this.totalPages) {
             page = this.totalPages;
@@ -455,6 +469,12 @@ class ComicRenderer {
         const pageImg1 = document.getElementById('page-left');
         const pageImg2 = document.getElementById('page-right');
         const statusElement = document.querySelector('#comic-status');
+        
+        // Check if DOM elements exist (they may have been removed during cleanup)
+        if (!pageImg1 || !pageImg2) {
+            console.log(`[ComicRenderer] Skipping loadPage(${page}) - page elements not found`);
+            return;
+        }
         
         const leftPage = page;
         const rightPage = page + 1;
@@ -472,6 +492,12 @@ class ComicRenderer {
             const leftUrl = this.pageCache.has(leftPage) ? 
                 this.pageCache.get(leftPage) : 
                 await this.fetchAndCachePage(leftPage);
+            
+            // Check if we're still valid after async operation
+            if (this.isCleaningUp || !this.currentFilePath) {
+                console.log(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during fetch`);
+                return;
+            }
             
             if (leftUrl) {
                 pageImg1.onload = () => {
@@ -493,6 +519,12 @@ class ComicRenderer {
                 const rightUrl = this.pageCache.has(rightPage) ? 
                     this.pageCache.get(rightPage) : 
                     await this.fetchAndCachePage(rightPage);
+                
+                // Check if we're still valid after async operation
+                if (this.isCleaningUp || !this.currentFilePath) {
+                    console.log(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during right page fetch`);
+                    return;
+                }
                 
                 if (rightUrl) {
                     pageImg2.onload = () => {
@@ -524,8 +556,14 @@ class ComicRenderer {
             }
             
         } catch (error) {
+            // Don't show error if we're cleaning up
+            if (this.isCleaningUp) {
+                console.log(`[ComicRenderer] loadPage(${page}) error suppressed during cleanup`);
+                return;
+            }
+            
             console.error('Error loading page:', error);
-            if (statusElement) statusElement.textContent = `Error loading page: ${error.message}`;
+            if (statusElement) statusElement.textContent = `Error loading page: ${error?.message || 'Unknown error'}`;
             
             // Hide loading popup on error
             if (window.debugConsole && page > 1) {
@@ -537,12 +575,17 @@ class ComicRenderer {
     async fetchAndCachePage(page) {
         try {
             // Check if we've been cleaned up before starting
-            if (!this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
+            if (this.isCleaningUp || !this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
                 console.log(`[ComicRenderer] Skipping fetch for page ${page} - renderer was cleaned up`);
                 return null;
             }
             
             const filePath = this.getCurrentFilePath();
+            if (!filePath) {
+                console.log(`[ComicRenderer] Skipping fetch for page ${page} - no file path`);
+                return null;
+            }
+            
             console.log(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
             
             const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
@@ -560,6 +603,9 @@ class ComicRenderer {
                 let errorMessage;
                 if (response.status === 404) {
                     errorMessage = `Page ${page} not found in comic archive`;
+                } else if (response.status === 429) {
+                    const retryAfter = response.headers.get('Retry-After');
+                    errorMessage = `Too many requests while extracting page ${page}. Please wait${retryAfter ? ` ~${retryAfter}s` : ''} and try again.`;
                 } else if (response.status === 500) {
                     errorMessage = `Server error extracting page ${page} - file may be corrupted`;
                 } else if (response.status === 403) {
@@ -595,23 +641,38 @@ class ComicRenderer {
                 return null;
             }
             
+            // Check if we're cleaning up - if so, don't treat this as an error
+            if (this.isCleaningUp) {
+                console.log(`[ComicRenderer] Page ${page} fetch cancelled during cleanup`);
+                return null;
+            }
+            
+            // Ensure we have a valid error message
+            const errorMessage = error?.message || error?.toString?.() || 'Unknown error occurred';
+            
             // Enhanced error logging
             console.error(`[ComicRenderer] Error fetching page ${page} from ${this.fileName || 'unknown file'}:`, {
-                error: error.message,
+                error: errorMessage,
                 page: page,
                 filePath: this.getCurrentFilePath(),
                 timestamp: new Date().toISOString()
             });
             
             // Automatic retry for timeout errors (up to 2 retries)
-            const isTimeoutError = error.message && (
-                error.message.includes('timeout') || 
-                error.message.includes('network') ||
-                error.message.includes('fetch')
+            const isTimeoutError = errorMessage && (
+                errorMessage.includes('timeout') || 
+                errorMessage.includes('network') ||
+                errorMessage.includes('fetch')
             );
             
-            if (isTimeoutError) {
-                const retryKey = `${this.getCurrentFilePath()}:${page}`;
+            if (isTimeoutError && !this.isCleaningUp) {
+                const currentFilePath = this.getCurrentFilePath();
+                if (!currentFilePath) {
+                    console.log(`[ComicRenderer] Skipping retry for page ${page} - no file path`);
+                    return null;
+                }
+                
+                const retryKey = `${currentFilePath}:${page}`;
                 const currentRetries = this.retryAttempts.get(retryKey) || 0;
                 
                 if (currentRetries < 2) {
@@ -621,6 +682,11 @@ class ComicRenderer {
                     // Wait briefly before retry
                     await new Promise(resolve => setTimeout(resolve, 1000 * (currentRetries + 1)));
                     
+                    // Check again if we're still valid before retry
+                    if (this.isCleaningUp || !this.currentFilePath) {
+                        return null;
+                    }
+                    
                     // Recursive retry
                     return this.fetchAndCachePage(page);
                 } else {
@@ -629,7 +695,7 @@ class ComicRenderer {
                 }
             }
             
-            throw new Error(`Failed to load page ${page}: ${error.message}`);
+            throw new Error(`Failed to load page ${page}: ${errorMessage}`);
         }
     }
 
@@ -639,6 +705,11 @@ class ComicRenderer {
     }
 
     preloadAdjacentPages(currentPage) {
+        // Don't preload if cleaning up
+        if (this.isCleaningUp || !this.currentFilePath) {
+            return;
+        }
+        
         const pagesToPreload = [currentPage - 2, currentPage - 1, currentPage + 2, currentPage + 3];
         
         for (const page of pagesToPreload) {
@@ -652,7 +723,7 @@ class ComicRenderer {
 
     async processPreloadQueue() {
         // Stop processing if we've been cleaned up
-        if (!this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
+        if (this.isCleaningUp || !this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
             this.preloadQueue = [];
             return;
         }
@@ -660,14 +731,26 @@ class ComicRenderer {
         if (this.preloadQueue.length === 0) return;
         
         const page = this.preloadQueue.shift();
+        
+        // Double-check before processing
+        if (this.isCleaningUp || !this.currentFilePath) {
+            this.preloadQueue = [];
+            return;
+        }
+        
         try {
             await this.fetchAndCachePage(page);
         } catch (error) {
-            console.warn(`Preload failed for page ${page}:`, error);
+            // Only log warning if we're not cleaning up
+            if (!this.isCleaningUp) {
+                console.warn(`Preload failed for page ${page}:`, error?.message || error);
+            }
         }
         
-        // Continue processing queue
-        setTimeout(() => this.processPreloadQueue(), 100);
+        // Continue processing queue only if not cleaned up
+        if (!this.isCleaningUp && this.currentFilePath && this.preloadQueue.length > 0) {
+            setTimeout(() => this.processPreloadQueue(), 100);
+        }
     }
 
     previousPage() {
