@@ -222,6 +222,36 @@ class FileRenderer {
     }
 
     showErrorMessage(contentContainer, fileName, error, filePath) {
+        // Check if this is a "file not found" error - trigger auto-refresh
+        if (this.isFileNotFoundError(error)) {
+            this.handleFileNotFound(fileName);
+            // Still show a minimal message while refreshing
+            const refreshDiv = document.createElement('div');
+            refreshDiv.style.cssText = `
+                padding: 20px;
+                margin: 20px;
+                background: rgba(33, 150, 243, 0.1);
+                border: 1px solid rgba(33, 150, 243, 0.3);
+                border-radius: 8px;
+                color: #64b5f6;
+                font-family: monospace;
+                text-align: center;
+            `;
+            refreshDiv.innerHTML = `
+                <h3 style="color: #64b5f6; margin: 0 0 15px 0;">🔄 File Changed</h3>
+                <p style="margin: 10px 0; font-size: 14px;">
+                    <strong>${fileName}</strong> was not found.
+                </p>
+                <p style="margin: 10px 0; font-size: 12px; opacity: 0.8;">
+                    The file may have been renamed, moved, or deleted. Refreshing directory...
+                </p>
+            `;
+            contentContainer.innerHTML = '';
+            contentContainer.appendChild(refreshDiv);
+            contentContainer.style.display = 'block';
+            return;
+        }
+
         const errorDiv = document.createElement('div');
         errorDiv.style.cssText = `
             padding: 20px;
@@ -278,6 +308,33 @@ class FileRenderer {
             'unsupported', 'cannot read', 'invalid signature', 'header error'
         ];
         return corruptionIndicators.some(indicator => errorMessage.includes(indicator));
+    }
+
+    isFileNotFoundError(error) {
+        const errorMessage = (error.message || error.toString()).toLowerCase();
+        const notFoundIndicators = [
+            'not found', '404', 'enoent', 'no such file', 'does not exist',
+            'file not found', 'inaccessible'
+        ];
+        return notFoundIndicators.some(indicator => errorMessage.includes(indicator));
+    }
+
+    async handleFileNotFound(fileName) {
+        console.log(`[FileRenderer] File not found: ${fileName}, triggering directory refresh`);
+        
+        // Show toast notification
+        if (typeof showToast === 'function') {
+            showToast(`File "${fileName}" not found. The file may have been renamed, moved, or deleted. Refreshing...`, 'info');
+        }
+        
+        // Trigger directory refresh after a brief delay
+        setTimeout(() => {
+            if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                const currentPath = window.fileExplorer.currentPath();
+                console.log(`[FileRenderer] Refreshing directory: ${currentPath}`);
+                window.fileExplorer.loadFiles(currentPath);
+            }
+        }, 500);
     }
 
     async testRender(fileType, testFilePath, testFileName) {
