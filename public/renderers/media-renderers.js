@@ -21,6 +21,7 @@ class VideoRenderer {
     constructor() {
         this.handleKeyDown = null;
         this.handleWheel = null;
+        this.bookmarks = []; // Store bookmarks for current video
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
@@ -101,9 +102,12 @@ class VideoRenderer {
             
             // Try to auto-detect and load subtitle files
             await this.loadSubtitles(video, filePath, fileName);
-            
+
             // Discover all available subtitle files in the directory
             await this.discoverSubtitles(filePath, fileName);
+
+            // Load bookmarks for this video
+            await this.loadBookmarks();
         }
         
         // Error handling
@@ -441,7 +445,13 @@ class VideoRenderer {
             } else if (e.key === 's' || e.key === 'S') {
                 e.preventDefault();
                 this.showSubtitleSearchDialog();
-            } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'b' || e.key === 'c' || 
+            } else if (e.key === 'm' || e.key === 'M') {
+                e.preventDefault();
+                this.createBookmarkDialog(video);
+            } else if (e.key === 'b' || e.key === 'B') {
+                e.preventDefault();
+                this.showBookmarksDialog();
+            } else if (e.key === 'r' || e.key === 'g' || e.key === 'y' || e.key === 'c' ||
                        (e.key >= '1' && e.key <= '5')) {
                 e.preventDefault();
                 this.handleAnnotationShortcut(e.key);
@@ -1489,5 +1499,245 @@ class VideoRenderer {
             4: 'MEDIA_ERR_SRC_NOT_SUPPORTED - Video format not supported'
         };
         return errors[errorCode] || 'Unknown video error';
+    }
+
+    async loadBookmarks() {
+        try {
+            const response = await fetch(`/bookmarks?path=${encodeURIComponent(this.currentFilePath)}`);
+            if (response.ok) {
+                this.bookmarks = await response.json();
+            } else {
+                this.bookmarks = [];
+            }
+        } catch (error) {
+            console.error('Error loading bookmarks:', error);
+            this.bookmarks = [];
+        }
+    }
+
+    async saveBookmark(name, position) {
+        try {
+            const response = await fetch('/bookmarks', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filePath: this.currentFilePath,
+                    name,
+                    position
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.bookmarks = data.bookmarks || [];
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error saving bookmark:', error);
+            return false;
+        }
+    }
+
+    async deleteBookmark(name) {
+        try {
+            const response = await fetch('/bookmarks', {
+                method: 'DELETE',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    filePath: this.currentFilePath,
+                    name
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.bookmarks = data.bookmarks || [];
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error deleting bookmark:', error);
+            return false;
+        }
+    }
+
+    getDialogContainer() {
+        // In fullscreen, append to fullscreen element; otherwise to body
+        const fullscreenEl = document.fullscreenElement || document.webkitFullscreenElement;
+        return fullscreenEl || document.body;
+    }
+
+    createBookmarkDialog(video) {
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(30, 30, 30, 0.95); color: white;
+            padding: 20px; border-radius: 8px; z-index: 10000;
+            min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        `;
+
+        const currentTime = video.currentTime;
+        const formattedTime = this.formatTime(currentTime);
+
+        dialog.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <p style="margin: 0 0 10px 0; color: #aaa;">Create bookmark at: <strong>${formattedTime}</strong></p>
+                <input type="text" id="bookmark-name" placeholder="Bookmark name"
+                    style="width: 100%; padding: 8px; box-sizing: border-box; background: rgba(255,255,255,0.1);
+                    border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;"
+                    autofocus>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="bookmark-cancel" style="padding: 8px 16px; background: rgba(255,255,255,0.1);
+                    color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer;">
+                    Cancel
+                </button>
+                <button id="bookmark-save" style="padding: 8px 16px; background: #4CAF50;
+                    color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Save
+                </button>
+            </div>
+        `;
+
+        this.getDialogContainer().appendChild(dialog);
+
+        const input = dialog.querySelector('#bookmark-name');
+        input.focus();
+
+        const handleSave = async () => {
+            const name = input.value.trim();
+            if (!name) {
+                input.focus();
+                return;
+            }
+
+            if (await this.saveBookmark(name, currentTime)) {
+                this.showToast(`📍 Bookmark "${name}" saved`, 'success');
+            }
+            dialog.remove();
+        };
+
+        const handleCancel = () => dialog.remove();
+
+        dialog.querySelector('#bookmark-save').addEventListener('click', handleSave);
+        dialog.querySelector('#bookmark-cancel').addEventListener('click', handleCancel);
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSave();
+            if (e.key === 'Escape') handleCancel();
+        });
+    }
+
+    async showBookmarksDialog() {
+        await this.loadBookmarks();
+
+        if (this.bookmarks.length === 0) {
+            this.showToast('📍 No bookmarks yet. Press M to create one.', 'info');
+            return;
+        }
+
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(30, 30, 30, 0.95); color: white;
+            padding: 20px; border-radius: 8px; z-index: 10000;
+            min-width: 350px; max-height: 60vh; overflow-y: auto;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        `;
+
+        let listHTML = '<div style="margin-bottom: 15px;">📍 Bookmarks:</div>';
+        this.bookmarks.forEach((bookmark, index) => {
+            const time = this.formatTime(bookmark.position);
+            listHTML += `
+                <div style="display: flex; justify-content: space-between; align-items: center;
+                    padding: 8px; margin: 5px 0; background: rgba(255,255,255,0.05);
+                    border-radius: 4px; cursor: pointer;" class="bookmark-item" data-index="${index}">
+                    <div style="flex: 1;">
+                        <div style="font-weight: bold;">${bookmark.name}</div>
+                        <div style="color: #aaa; font-size: 12px;">${time}</div>
+                    </div>
+                    <button class="bookmark-delete" data-index="${index}"
+                        style="padding: 4px 8px; background: rgba(255,0,0,0.3); color: white;
+                        border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                        Delete
+                    </button>
+                </div>
+            `;
+        });
+
+        dialog.innerHTML = listHTML;
+
+        this.getDialogContainer().appendChild(dialog);
+
+        // Handle bookmark selection
+        dialog.querySelectorAll('.bookmark-item').forEach(item => {
+            item.addEventListener('click', (e) => {
+                if (!e.target.closest('.bookmark-delete')) {
+                    const index = parseInt(item.getAttribute('data-index'));
+                    const video = this.currentVideo;
+                    if (video) {
+                        video.currentTime = this.bookmarks[index].position;
+                        this.showToast(`⏩ Jump to: ${this.bookmarks[index].name}`, 'info');
+                    }
+                    dialog.remove();
+                }
+            });
+        });
+
+        // Handle bookmark deletion
+        dialog.querySelectorAll('.bookmark-delete').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const index = parseInt(btn.getAttribute('data-index'));
+                const bookmarkName = this.bookmarks[index].name;
+                if (await this.deleteBookmark(bookmarkName)) {
+                    this.showToast(`🗑️ Deleted: ${bookmarkName}`, 'warning');
+                    dialog.remove();
+                    this.showBookmarksDialog();
+                }
+            });
+        });
+
+        // Close dialog on outside click or Escape
+        const handleClose = (e) => {
+            if (e.target === dialog || e.key === 'Escape') {
+                dialog.remove();
+                document.removeEventListener('keydown', handleClose);
+            }
+        };
+
+        dialog.addEventListener('click', handleClose);
+        document.addEventListener('keydown', handleClose);
+    }
+
+    showToast(text, type = 'info') {
+        const colors = {
+            success: 'rgba(76, 175, 80, 0.9)',
+            info: 'rgba(33, 150, 243, 0.9)',
+            warning: 'rgba(255, 87, 34, 0.9)',
+            error: 'rgba(244, 67, 54, 0.9)'
+        };
+        const message = document.createElement('div');
+        message.textContent = text;
+        message.style.cssText = `
+            position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            background: ${colors[type] || colors.info}; color: white; padding: 10px 20px;
+            border-radius: 20px; z-index: 10001; font-weight: bold;
+        `;
+        this.getDialogContainer().appendChild(message);
+        setTimeout(() => message.remove(), 2000);
+    }
+
+    formatTime(seconds) {
+        if (!seconds || isNaN(seconds)) return '0:00';
+        const hours = Math.floor(seconds / 3600);
+        const minutes = Math.floor((seconds % 3600) / 60);
+        const secs = Math.floor(seconds % 60);
+
+        if (hours > 0) {
+            return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+        return `${minutes}:${secs.toString().padStart(2, '0')}`;
     }
 }

@@ -24,7 +24,7 @@ const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-check
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
-const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations } = require('./lib/annotation-handlers');
+const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, deleteBookmarkApi } = require('./lib/annotation-handlers');
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
 const AIFileAnalyzer = require('./lib/ai-file-analyzer');
@@ -213,6 +213,11 @@ app.get('/api/annotations', requireAuth, getAnnotations);
 app.post('/api/annotations', requireAuth, postAnnotations);
 app.delete('/api/annotations', requireAuth, deleteAnnotations);
 app.get('/api/search-annotations', requireAuth, searchAnnotations);
+
+// Bookmark routes
+app.get('/bookmarks', requireAuth, getBookmarksApi);
+app.post('/bookmarks', requireAuth, postBookmarkApi);
+app.delete('/bookmarks', requireAuth, deleteBookmarkApi);
 
 // Cache management routes
 app.get('/api/cache/stats', requireAuth, (req, res) => getCacheStats(req, res, cache));
