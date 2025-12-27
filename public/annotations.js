@@ -183,6 +183,20 @@ class AnnotationManager {
                     annotationsDiv.appendChild(commentIcon);
                 }
 
+                // Bookmarks indicator (for videos with timestamped bookmarks)
+                if (annotation.bookmarks && annotation.bookmarks.length > 0) {
+                    const bookmarkIcon = document.createElement('span');
+                    bookmarkIcon.className = 'bookmarks-indicator';
+                    bookmarkIcon.textContent = '🔖';
+                    bookmarkIcon.style.cssText = `
+                        font-size: 10px;
+                        line-height: 1;
+                    `;
+                    const bookmarkNames = annotation.bookmarks.map(b => b.name).join(', ');
+                    bookmarkIcon.title = `${annotation.bookmarks.length} bookmark${annotation.bookmarks.length > 1 ? 's' : ''}: ${bookmarkNames.substring(0, 100)}${bookmarkNames.length > 100 ? '...' : ''}`;
+                    annotationsDiv.appendChild(bookmarkIcon);
+                }
+
                 item.appendChild(annotationsDiv);
             }
         });
@@ -422,6 +436,7 @@ class AnnotationManager {
             if (filters.hasComment) params.append('hasComment', 'true');
             if (filters.hasStars) params.append('hasStars', 'true');
             if (filters.hasColor) params.append('hasColor', 'true');
+            if (filters.hasBookmarks) params.append('hasBookmarks', 'true');
             if (filters.color) params.append('color', filters.color);
             if (filters.fileType) params.append('fileType', filters.fileType);
 
@@ -501,12 +516,13 @@ class AnnotationManager {
                         <option value="ebook">📖 E-books</option>
                         <option value="archive">📦 Archives</option>
                     </select>
-                    <select id="bookmarks-filter" style="background: #333333; border: 1px solid #555555; 
+                    <select id="bookmarks-filter" style="background: #333333; border: 1px solid #555555;
                             border-radius: 4px; color: #d4d4d4; padding: 6px 10px; font-size: 0.9rem;">
                         <option value="">All Annotations</option>
                         <option value="comment">With Comments</option>
                         <option value="stars">With Stars</option>
                         <option value="color">With Colors</option>
+                        <option value="bookmarks">With Video Bookmarks</option>
                         ${this.colors.map(c => `<option value="color-${c.name}">Color: ${c.label}</option>`).join('')}
                     </select>
                     <button id="refresh-bookmarks" style="background: #444444; border: 1px solid #666666; 
@@ -555,12 +571,14 @@ class AnnotationManager {
                          style="border: 1px solid #444444; border-radius: 4px; padding: 8px 12px; margin-bottom: 4px; 
                                 background: #333333; transition: all 0.2s; display: flex; align-items: center; gap: 10px;">
                         <div class="bookmark-indicators" style="display: flex; align-items: center; gap: 6px; flex-shrink: 0;">
-                            ${annotation.color ? `<span style="width: 12px; height: 12px; border-radius: 50%; 
-                                background-color: ${this.colors.find(c => c.name === annotation.color)?.hex}; 
+                            ${annotation.color ? `<span style="width: 12px; height: 12px; border-radius: 50%;
+                                background-color: ${this.colors.find(c => c.name === annotation.color)?.hex};
                                 display: inline-block;"></span>` : ''}
                             ${annotation.stars ? `<span style="color: #ffeb3b; font-size: 12px;">
                                 ${'⭐'.repeat(annotation.stars)}</span>` : ''}
                             ${annotation.comment ? `<span style="color: #2196f3; font-size: 12px;">💬</span>` : ''}
+                            ${annotation.bookmarks && annotation.bookmarks.length > 0 ? `<span style="color: #ff9800; font-size: 12px;"
+                                title="${annotation.bookmarks.length} video bookmark${annotation.bookmarks.length > 1 ? 's' : ''}">🔖</span>` : ''}
                         </div>
                         <div class="bookmark-info" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;">
                             <span class="bookmark-filename" data-path="${annotation.filePath}" data-file-type="${fileType}"
@@ -658,6 +676,7 @@ class AnnotationManager {
             if (filterValue === 'comment') filters.hasComment = true;
             else if (filterValue === 'stars') filters.hasStars = true;
             else if (filterValue === 'color') filters.hasColor = true;
+            else if (filterValue === 'bookmarks') filters.hasBookmarks = true;
             else if (filterValue.startsWith('color-')) {
                 filters.color = filterValue.replace('color-', '');
             }
