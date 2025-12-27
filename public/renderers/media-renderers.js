@@ -21,10 +21,14 @@ class VideoRenderer {
     constructor() {
         this.handleKeyDown = null;
         this.handleWheel = null;
+        this.handleFullscreenChange = null;
         this.bookmarks = []; // Store bookmarks for current video
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
+        // Clean up old event listeners before setting up new ones
+        this.cleanup();
+
         // Store current file info for annotations
         this.currentFilePath = filePath;
         this.currentFileName = fileName;
@@ -38,7 +42,13 @@ class VideoRenderer {
         video.style.maxWidth = '100%';
         video.style.height = 'auto';
         video.crossOrigin = 'anonymous'; // Allow loading subtitles from same server
-        
+
+        // Enable autoplay when navigating via keyboard (PageUp/PageDown)
+        if (options.autoPlay) {
+            video.autoplay = true;
+            video.muted = false; // Keep sound on (browser may require muted for autoplay)
+        }
+
         // Add a custom attribute to track our click handling
         video.setAttribute('data-custom-click', 'true');
         
@@ -317,6 +327,9 @@ class VideoRenderer {
                 video.play().then(() => {
                     // Enter fullscreen after play starts
                     return video.requestFullscreen();
+                }).then(() => {
+                    // Focus video for keyboard events in fullscreen
+                    video.focus();
                 }).catch(err => {
                     console.log('Auto-play/fullscreen error (may be due to browser policy):', err);
                 });
@@ -432,22 +445,28 @@ class VideoRenderer {
         
         // Add keyboard handler for spacebar fullscreen toggle and play/pause
         this.handleKeyDown = (e) => {
+            console.log('Video keydown event:', e.code, e.key);
+
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                 return;
             }
-            
+
             if (e.code === 'Space') {
                 e.preventDefault();
-                this.togglePlayAndFullscreen(video);
-            } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'PageUp' || e.code === 'PageDown') {
+                this.togglePlayAndFullscreen(this.currentVideo);
+            } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'PageUp' || e.code === 'PageDown' ||
+                       e.key === 'PageUp' || e.key === 'PageDown') {
                 e.preventDefault();
-                this.navigateToAdjacentFile(e.code);
+                // Use e.key for navigation since numpad keys have different codes (Numpad9/Numpad3)
+                const navKey = (e.key === 'PageUp' || e.code === 'PageUp' || e.code === 'ArrowUp') ? 'PageUp' :
+                               (e.key === 'PageDown' || e.code === 'PageDown' || e.code === 'ArrowDown') ? 'PageDown' : e.code;
+                this.navigateToAdjacentFile(navKey);
             } else if (e.key === 's' || e.key === 'S') {
                 e.preventDefault();
                 this.showSubtitleSearchDialog();
             } else if (e.key === 'm' || e.key === 'M') {
                 e.preventDefault();
-                this.createBookmarkDialog(video);
+                this.createBookmarkDialog(this.currentVideo);
             } else if (e.key === 'b' || e.key === 'B') {
                 e.preventDefault();
                 this.showBookmarksDialog();
@@ -459,7 +478,19 @@ class VideoRenderer {
         };
         
         document.addEventListener('keydown', this.handleKeyDown);
-        
+
+        // Also add to video element for fullscreen mode (events don't bubble to document in fullscreen)
+        video.addEventListener('keydown', this.handleKeyDown);
+        video.tabIndex = 0; // Make video focusable for keyboard events
+
+        // Focus video when entering fullscreen (from any source like double-click or native controls)
+        this.handleFullscreenChange = () => {
+            if (document.fullscreenElement === this.currentVideo) {
+                this.currentVideo.focus();
+            }
+        };
+        document.addEventListener('fullscreenchange', this.handleFullscreenChange);
+
         // Add mouse wheel handler for fast forward/backward
         let wheelTimeout;
         this.handleWheel = (e) => {
@@ -596,6 +627,8 @@ class VideoRenderer {
     }
     
     navigateToAdjacentFile(keyCode) {
+        console.log('navigateToAdjacentFile called with keyCode:', keyCode);
+
         // Check if file explorer is available
         if (!window.fileExplorer || !window.fileExplorer.filteredFiles || !window.fileExplorer.selectFile) {
             console.log('File explorer not available for navigation');
@@ -662,9 +695,20 @@ class VideoRenderer {
     }
     
     getCurrentFileIndex(filteredFiles) {
-        if (!this.currentFileName) return -1;
-        
-        return filteredFiles.findIndex(file => file.name === this.currentFileName);
+        if (!this.currentFileName) {
+            console.log('getCurrentFileIndex: No currentFileName set');
+            return -1;
+        }
+
+        console.log('getCurrentFileIndex: Looking for', JSON.stringify(this.currentFileName));
+        console.log('getCurrentFileIndex: filteredFiles count:', filteredFiles.length);
+        if (filteredFiles.length > 0) {
+            console.log('getCurrentFileIndex: First few file names:', filteredFiles.slice(0, 3).map(f => f.name));
+        }
+
+        const index = filteredFiles.findIndex(file => file.name === this.currentFileName);
+        console.log('getCurrentFileIndex: Found index:', index);
+        return index;
     }
     
     findNextVideoFile(filteredFiles, startIndex) {
@@ -988,6 +1032,8 @@ class VideoRenderer {
     }
     
     togglePlayAndFullscreen(video) {
+        if (!video) return;
+
         // Toggle play/pause
         if (video.paused) {
             video.play().catch(err => {
@@ -999,7 +1045,10 @@ class VideoRenderer {
         
         // Toggle fullscreen
         if (!document.fullscreenElement) {
-            video.requestFullscreen().catch(err => {
+            video.requestFullscreen().then(() => {
+                // Focus video for keyboard events in fullscreen
+                video.focus();
+            }).catch(err => {
                 console.error('Error attempting to enable fullscreen:', err);
             });
         } else {
@@ -1469,7 +1518,15 @@ class VideoRenderer {
     cleanup() {
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
+            // Also remove from video element if it exists
+            if (this.currentVideo) {
+                this.currentVideo.removeEventListener('keydown', this.handleKeyDown);
+            }
             this.handleKeyDown = null;
+        }
+        if (this.handleFullscreenChange) {
+            document.removeEventListener('fullscreenchange', this.handleFullscreenChange);
+            this.handleFullscreenChange = null;
         }
         if (this.handleWheel) {
             // Note: wheel event listener is attached to video element, not document
@@ -1567,6 +1624,8 @@ class VideoRenderer {
     }
 
     createBookmarkDialog(video) {
+        if (!video) return;
+
         const dialog = document.createElement('div');
         dialog.style.cssText = `
             position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -1657,11 +1716,18 @@ class VideoRenderer {
                         <div style="font-weight: bold;">${bookmark.name}</div>
                         <div style="color: #aaa; font-size: 12px;">${time}</div>
                     </div>
-                    <button class="bookmark-delete" data-index="${index}"
-                        style="padding: 4px 8px; background: rgba(255,0,0,0.3); color: white;
-                        border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
-                        Delete
-                    </button>
+                    <div style="display: flex; gap: 5px;">
+                        <button class="bookmark-rename" data-index="${index}"
+                            style="padding: 4px 8px; background: rgba(33,150,243,0.3); color: white;
+                            border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                            Rename
+                        </button>
+                        <button class="bookmark-delete" data-index="${index}"
+                            style="padding: 4px 8px; background: rgba(255,0,0,0.3); color: white;
+                            border: none; border-radius: 3px; cursor: pointer; font-size: 12px;">
+                            Delete
+                        </button>
+                    </div>
                 </div>
             `;
         });
@@ -1673,7 +1739,7 @@ class VideoRenderer {
         // Handle bookmark selection
         dialog.querySelectorAll('.bookmark-item').forEach(item => {
             item.addEventListener('click', (e) => {
-                if (!e.target.closest('.bookmark-delete')) {
+                if (!e.target.closest('.bookmark-delete') && !e.target.closest('.bookmark-rename')) {
                     const index = parseInt(item.getAttribute('data-index'));
                     const video = this.currentVideo;
                     if (video) {
@@ -1682,6 +1748,17 @@ class VideoRenderer {
                     }
                     dialog.remove();
                 }
+            });
+        });
+
+        // Handle bookmark rename
+        dialog.querySelectorAll('.bookmark-rename').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const index = parseInt(btn.getAttribute('data-index'));
+                const bookmark = this.bookmarks[index];
+                dialog.remove();
+                this.showRenameBookmarkDialog(bookmark.name, bookmark.position);
             });
         });
 
@@ -1709,6 +1786,97 @@ class VideoRenderer {
 
         dialog.addEventListener('click', handleClose);
         document.addEventListener('keydown', handleClose);
+    }
+
+    showRenameBookmarkDialog(oldName, position) {
+        const dialog = document.createElement('div');
+        dialog.style.cssText = `
+            position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+            background: rgba(30, 30, 30, 0.95); color: white;
+            padding: 20px; border-radius: 8px; z-index: 10000;
+            min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
+            border: 1px solid rgba(255,255,255,0.1);
+        `;
+
+        const formattedTime = this.formatTime(position);
+
+        dialog.innerHTML = `
+            <div style="margin-bottom: 15px;">
+                <p style="margin: 0 0 10px 0; color: #aaa;">Rename bookmark at: <strong>${formattedTime}</strong></p>
+                <input type="text" id="bookmark-rename-input" value="${oldName}"
+                    style="width: 100%; padding: 8px; box-sizing: border-box; background: rgba(255,255,255,0.1);
+                    border: 1px solid rgba(255,255,255,0.2); color: white; border-radius: 4px;"
+                    autofocus>
+            </div>
+            <div style="display: flex; gap: 10px; justify-content: flex-end;">
+                <button id="bookmark-rename-cancel" style="padding: 8px 16px; background: rgba(255,255,255,0.1);
+                    color: white; border: 1px solid rgba(255,255,255,0.2); border-radius: 4px; cursor: pointer;">
+                    Cancel
+                </button>
+                <button id="bookmark-rename-save" style="padding: 8px 16px; background: #2196F3;
+                    color: white; border: none; border-radius: 4px; cursor: pointer;">
+                    Rename
+                </button>
+            </div>
+        `;
+
+        this.getDialogContainer().appendChild(dialog);
+
+        const input = dialog.querySelector('#bookmark-rename-input');
+        input.focus();
+        input.select();
+
+        const handleSave = async () => {
+            const newName = input.value.trim();
+            if (newName && newName !== oldName) {
+                if (await this.renameBookmark(oldName, newName)) {
+                    this.showToast(`✏️ Renamed: ${oldName} → ${newName}`, 'success');
+                    dialog.remove();
+                    this.showBookmarksDialog();
+                } else {
+                    this.showToast('Failed to rename bookmark', 'error');
+                }
+            } else if (newName === oldName) {
+                dialog.remove();
+                this.showBookmarksDialog();
+            }
+        };
+
+        const handleCancel = () => {
+            dialog.remove();
+            this.showBookmarksDialog();
+        };
+
+        dialog.querySelector('#bookmark-rename-save').addEventListener('click', handleSave);
+        dialog.querySelector('#bookmark-rename-cancel').addEventListener('click', handleCancel);
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') handleSave();
+            if (e.key === 'Escape') handleCancel();
+        });
+    }
+
+    async renameBookmark(oldName, newName) {
+        try {
+            const response = await fetch('/bookmarks', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    path: this.currentFilePath,
+                    oldName,
+                    newName
+                })
+            });
+            if (response.ok) {
+                const data = await response.json();
+                this.bookmarks = data.bookmarks || [];
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Error renaming bookmark:', error);
+            return false;
+        }
     }
 
     showToast(text, type = 'info') {
