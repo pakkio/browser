@@ -1418,17 +1418,14 @@ class VideoRenderer {
             bufferingOverlay.remove();
         }
 
-        // Stop and remove all video elements to prevent stacking
-        const videos = document.querySelectorAll('#content-other video');
-        videos.forEach(video => {
-            video.pause();
-            video.src = ''; // Release the source
-            video.load(); // Reset the video element
-        });
-
         // Clear all content from content-other to prevent stacking
         const contentOther = document.getElementById('content-other');
         if (contentOther) {
+            // Pause any playing videos before clearing
+            const videos = contentOther.querySelectorAll('video');
+            videos.forEach(video => video.pause());
+
+            // Clear everything
             contentOther.innerHTML = '';
             contentOther.style.display = 'none';
         }
