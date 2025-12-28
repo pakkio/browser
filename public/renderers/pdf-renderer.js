@@ -9,7 +9,7 @@ class PDFRenderer {
         this.uiManager = new PDFUIManager();
         this.filePath = null;
         this.zoomLevel = 1.0; // Default zoom level
-        this.fitToWidth = true; // Default to fit-to-width mode
+        this.fitToWidth = true; // Default to fit-to-width mode (shows entire page)
         this.isFullscreen = false;
         this.originalParent = null;
         this.fullscreenContainer = null;
@@ -813,10 +813,10 @@ class PDFRenderer {
     handleModeChange(mode) {
         if (mode === 'zoom-out') {
             this.fitToWidth = false;
-            this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.10);
+            this.zoomLevel = Math.max(0.5, this.zoomLevel - 0.20);
         } else if (mode === 'zoom-in') {
             this.fitToWidth = false;
-            this.zoomLevel = Math.min(3.0, this.zoomLevel + 0.10);
+            this.zoomLevel = Math.min(3.0, this.zoomLevel + 0.20);
         } else if (mode === 'fit-width') {
             this.fitToWidth = !this.fitToWidth;
             if (!this.fitToWidth && this.zoomLevel === 1.0) {
@@ -879,31 +879,55 @@ class PDFRenderer {
         // Set initial view mode to 100% (non-truncated)
         this.isTruncatedView = false;
 
-        // Update controls for fullscreen
+        // Update controls for fullscreen - float them as overlay
         const controls = pdfContainer.querySelector('.pdf-controls');
         if (controls) {
+            // Reset position or use saved position
+            if (!this.controlsPosition) {
+                this.controlsPosition = { bottom: 10, left: '50%', transform: 'translateX(-50%)', top: 'auto' };
+            }
+
+            const topPos = this.controlsPosition.top !== 'auto' && this.controlsPosition.top !== undefined
+                ? `${this.controlsPosition.top}px` : 'auto';
+            const bottomPos = this.controlsPosition.bottom !== 'auto' && this.controlsPosition.bottom !== undefined
+                ? `${this.controlsPosition.bottom}px` : 'auto';
+
             controls.style.cssText = `
-                position: static;
-                bottom: auto;
-                left: auto;
-                right: auto;
+                position: fixed;
+                top: ${topPos};
+                bottom: ${bottomPos};
+                left: ${this.controlsPosition.left};
+                transform: ${this.controlsPosition.transform};
                 display: flex;
                 align-items: center;
                 justify-content: center;
                 padding: 15px 20px;
-                background: rgba(0, 0, 0, 0.8);
+                background: rgba(0, 0, 0, 0.85);
                 backdrop-filter: blur(10px);
-                border-top: 1px solid rgba(255, 255, 255, 0.2);
-                flex-shrink: 0;
-                opacity: 1;
-                transition: opacity 0.3s ease-in-out;
-                order: -1;
-                margin-bottom: 10px;
+                border: 1px solid rgba(255, 255, 255, 0.2);
                 border-radius: 10px;
+                opacity: 0.9;
+                transition: opacity 0.3s ease-in-out;
                 flex-wrap: wrap;
                 gap: 10px;
                 color: white;
+                z-index: 10001;
+                pointer-events: auto;
+                max-width: 90vw;
+                cursor: move;
+                user-select: none;
             `;
+
+            // Add hover effect to make controls more visible when needed
+            controls.addEventListener('mouseenter', () => {
+                controls.style.opacity = '1';
+            });
+            controls.addEventListener('mouseleave', () => {
+                controls.style.opacity = '0.9';
+            });
+
+            // Make controls draggable
+            this.makeDraggable(controls);
         }
 
         // Update fullscreen button
@@ -991,6 +1015,7 @@ class PDFRenderer {
         this.originalParent = null;
         this.isFullscreen = false;
         this.isTruncatedView = false;
+        this.controlsPosition = null; // Reset controls position for next time
         console.log('PDF exited fullscreen mode');
         
         // Refresh current page to fit new container
@@ -1044,6 +1069,84 @@ class PDFRenderer {
                 `;
             }
         }
+    }
+
+    makeDraggable(element) {
+        let isDragging = false;
+        let currentX;
+        let currentY;
+        let initialX;
+        let initialY;
+
+        const dragStart = (e) => {
+            // Don't drag if clicking on a button or input
+            if (e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') {
+                return;
+            }
+
+            if (e.type === 'mousedown') {
+                initialX = e.clientX;
+                initialY = e.clientY;
+            }
+
+            // Get current position
+            const rect = element.getBoundingClientRect();
+            currentX = rect.left;
+            currentY = rect.top;
+
+            isDragging = true;
+            element.style.cursor = 'grabbing';
+        };
+
+        const drag = (e) => {
+            if (!isDragging) return;
+
+            e.preventDefault();
+
+            let clientX, clientY;
+            if (e.type === 'mousemove') {
+                clientX = e.clientX;
+                clientY = e.clientY;
+            }
+
+            const deltaX = clientX - initialX;
+            const deltaY = clientY - initialY;
+
+            const newX = currentX + deltaX;
+            const newY = currentY + deltaY;
+
+            // Update element position
+            element.style.left = `${newX}px`;
+            element.style.top = `${newY}px`;
+            element.style.bottom = 'auto';
+            element.style.transform = 'none';
+
+            // Save position
+            this.controlsPosition = {
+                left: `${newX}px`,
+                top: newY,
+                bottom: 'auto',
+                transform: 'none'
+            };
+        };
+
+        const dragEnd = () => {
+            if (!isDragging) return;
+
+            isDragging = false;
+            element.style.cursor = 'move';
+        };
+
+        // Mouse events
+        element.addEventListener('mousedown', dragStart);
+        document.addEventListener('mousemove', drag);
+        document.addEventListener('mouseup', dragEnd);
+
+        // Clean up on exit fullscreen
+        element.addEventListener('remove', () => {
+            document.removeEventListener('mousemove', drag);
+            document.removeEventListener('mouseup', dragEnd);
+        });
     }
 
     async loadOutline() {
