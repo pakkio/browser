@@ -24,7 +24,7 @@ const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-check
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
-const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi } = require('./lib/annotation-handlers');
+const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi, renameAnnotation } = require('./lib/annotation-handlers');
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
 const AIFileAnalyzer = require('./lib/ai-file-analyzer');
@@ -303,12 +303,141 @@ app.post('/api/file/rename', requireAuth, async (req, res) => {
         
         await fs.rename(fullOldPath, fullNewPath);
         
+        // Preserve annotations: rename the annotation from old path to new path
+        const oldRelativePath = path.relative(baseDir, fullOldPath);
+        const newRelativePath = path.relative(baseDir, fullNewPath);
+        renameAnnotation(oldRelativePath, newRelativePath);
+        
         res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(baseDir, fullNewPath) });
         
     } catch (error) {
         console.error('Error renaming file:', error);
         res.status(500).json({ 
             error: 'Failed to rename file', 
+            message: error.message 
+        });
+    }
+});
+
+// Move file to another directory
+app.post('/api/file/move', requireAuth, async (req, res) => {
+    try {
+        const { sourcePath, targetDir } = req.body;
+        
+        if (!sourcePath || targetDir === undefined) {
+            return res.status(400).json({ error: 'Source path and target directory are required' });
+        }
+
+        // Resolve the full paths based on the baseDir
+        const normalizedSourcePath = sourcePath.startsWith('/') ? sourcePath.slice(1) : sourcePath;
+        const normalizedTargetDir = targetDir.startsWith('/') ? targetDir.slice(1) : targetDir;
+        
+        const fullSourcePath = path.resolve(baseDir, normalizedSourcePath);
+        const fullTargetDir = path.resolve(baseDir, normalizedTargetDir);
+        
+        // Security check - ensure paths are within baseDir
+        if (!fullSourcePath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Source path outside allowed directory' });
+        }
+        if (!fullTargetDir.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Target path outside allowed directory' });
+        }
+
+        const fs = require('fs').promises;
+        
+        // Check if source exists
+        try {
+            await fs.access(fullSourcePath);
+        } catch (err) {
+            return res.status(404).json({ error: 'Source file not found' });
+        }
+        
+        // Check if target directory exists
+        try {
+            const stat = await fs.stat(fullTargetDir);
+            if (!stat.isDirectory()) {
+                return res.status(400).json({ error: 'Target is not a directory' });
+            }
+        } catch (err) {
+            return res.status(404).json({ error: 'Target directory not found' });
+        }
+
+        // Calculate new path
+        const fileName = path.basename(fullSourcePath);
+        const fullNewPath = path.join(fullTargetDir, fileName);
+        
+        // Check if file already exists in target
+        try {
+            await fs.access(fullNewPath);
+            return res.status(409).json({ error: 'File with that name already exists in target directory' });
+        } catch (err) {
+            // File doesn't exist, which is what we want
+        }
+        
+        // Move the file
+        await fs.rename(fullSourcePath, fullNewPath);
+        
+        // Preserve annotations: move annotation from old path to new path
+        const oldRelativePath = path.relative(baseDir, fullSourcePath);
+        const newRelativePath = path.relative(baseDir, fullNewPath);
+        renameAnnotation(oldRelativePath, newRelativePath);
+        
+        res.json({ 
+            success: true, 
+            message: 'File moved successfully', 
+            newPath: path.relative(baseDir, fullNewPath) 
+        });
+        
+    } catch (error) {
+        console.error('Error moving file:', error);
+        res.status(500).json({ 
+            error: 'Failed to move file', 
+            message: error.message 
+        });
+    }
+});
+
+// List directories for folder picker
+app.get('/api/directories', requireAuth, async (req, res) => {
+    try {
+        const currentDir = req.query.path || '';
+        const normalizedDir = currentDir.startsWith('/') ? currentDir.slice(1) : currentDir;
+        const fullDir = path.resolve(baseDir, normalizedDir);
+        
+        // Security check
+        if (!fullDir.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
+        }
+
+        const fs = require('fs').promises;
+        const entries = await fs.readdir(fullDir, { withFileTypes: true });
+        
+        const directories = entries
+            .filter(entry => entry.isDirectory())
+            .map(entry => ({
+                name: entry.name,
+                path: normalizedDir ? `${normalizedDir}/${entry.name}` : entry.name
+            }))
+            .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+
+        // Build response with parent directory info
+        const result = {
+            currentPath: normalizedDir,
+            parentPath: normalizedDir ? path.dirname(normalizedDir) : null,
+            directories
+        };
+        
+        // If parent path is ".", set it to empty string (root)
+        if (result.parentPath === '.') {
+            result.parentPath = '';
+        }
+        
+        res.json(result);
+        
+    } catch (error) {
+        console.error('Error listing directories:', error);
+        res.status(500).json({ 
+            error: 'Failed to list directories', 
             message: error.message 
         });
     }
