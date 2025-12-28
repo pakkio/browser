@@ -1618,9 +1618,9 @@ class VideoRenderer {
     }
 
     getDialogContainer() {
-        // In fullscreen, append to fullscreen element; otherwise to body
-        const fullscreenEl = document.fullscreenElement || document.webkitFullscreenElement;
-        return fullscreenEl || document.body;
+        // Always append dialogs to body, they will overlay correctly due to fixed positioning
+        // and high z-index, even in fullscreen mode
+        return document.body;
     }
 
     createBookmarkDialog(video) {
