@@ -492,9 +492,6 @@ class VideoRenderer {
 
         // Single click to toggle play/pause
         video.addEventListener('click', (e) => {
-            // Don't interfere with native controls
-            if (e.target !== video) return;
-
             this.togglePlayAndFullscreen(video);
         });
     }
@@ -1415,18 +1412,27 @@ class VideoRenderer {
             bufferingOverlay.remove();
         }
 
-        // Stop any playing videos and clear content areas
+        // Stop and remove all video elements to prevent stacking
         const videos = document.querySelectorAll('#content-other video');
         videos.forEach(video => {
             video.pause();
             video.src = ''; // Release the source
             video.load(); // Reset the video element
+            video.remove(); // Remove from DOM
         });
 
-        // Clear the content area to prevent stacking
+        // Remove any video-related UI elements
         const contentOther = document.getElementById('content-other');
         if (contentOther) {
-            contentOther.innerHTML = '';
+            // Remove subtitle controls, error divs, and annotation overlays
+            const subtitleControls = contentOther.querySelectorAll('div');
+            subtitleControls.forEach(el => {
+                if (el.textContent.includes('Subtitles') ||
+                    el.style.color === 'red' ||
+                    el.textContent.includes('Loading annotations')) {
+                    el.remove();
+                }
+            });
         }
 
         // Reset current video reference
