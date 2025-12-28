@@ -66,7 +66,14 @@ class FileRenderer {
     }
 
     async getFileType(fileName, filePath) {
-        const extension = fileName.split('.').pop().toLowerCase();
+        // Handle .btpart files (BitTorrent partial downloads)
+        // Try to detect the actual file type from the name before .btpart
+        let actualFileName = fileName;
+        if (fileName.toLowerCase().endsWith('.btpart')) {
+            actualFileName = fileName.substring(0, fileName.length - 7); // Remove '.btpart'
+        }
+
+        const extension = actualFileName.split('.').pop().toLowerCase();
         // Treat .doc as .docx
         if (extension === 'doc') return 'docx';
 
@@ -77,16 +84,22 @@ class FileRenderer {
         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(extension)) {
             const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
             const files = await response.json();
-            const imageFiles = files.filter(file => ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(file.name.split('.').pop().toLowerCase()));
+            const imageFiles = files.filter(file => {
+                // Strip .btpart from filename if present
+                const name = file.name.toLowerCase().endsWith('.btpart')
+                    ? file.name.substring(0, file.name.length - 7)
+                    : file.name;
+                return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
+            });
             return imageFiles.length > 1 ? 'image-pair' : 'image';
         } else if (extension === 'pdf') {
             return 'pdf';
         } else if (['cbz', 'cbr'].includes(extension)) {
             return 'comic';
-        } else if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) {
-            return 'audio';
         } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) {
             return 'video';
+        } else if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) {
+            return 'audio';
         } else if (extension === 'docx') {
             return 'docx';
         } else if (extension === 'xlsx') {
@@ -170,7 +183,13 @@ class FileRenderer {
             if (fileType === 'image-pair') {
                 const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
                 const files = await response.json();
-                options.images = files.filter(file => ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(file.name.split('.').pop().toLowerCase()));
+                options.images = files.filter(file => {
+                    // Strip .btpart from filename if present
+                    const name = file.name.toLowerCase().endsWith('.btpart')
+                        ? file.name.substring(0, file.name.length - 7)
+                        : file.name;
+                    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
+                });
             }
 
             console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);

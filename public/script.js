@@ -437,8 +437,13 @@ function initializeFileExplorer() {
                 if (file.isDirectory) {
                     typeMatches = selectedFilter === 'directory';
                 } else {
-                    const extension = file.name.split('.').pop().toLowerCase();
-                    const fileType = getFileTypeFromExtension(extension, file.name);
+                    // Handle .btpart files - strip the extension to get actual file type
+                    let actualFileName = file.name;
+                    if (file.name.toLowerCase().endsWith('.btpart')) {
+                        actualFileName = file.name.substring(0, file.name.length - 7);
+                    }
+                    const extension = actualFileName.split('.').pop().toLowerCase();
+                    const fileType = getFileTypeFromExtension(extension, actualFileName);
                     typeMatches = fileType === selectedFilter;
                 }
             }
@@ -501,7 +506,12 @@ function initializeFileExplorer() {
                             showContextMenu(e.pageX, e.pageY, filePath, file.name, file.isDirectory);
                         });
                     } else {
-                        const extension = file.name.split('.').pop().toLowerCase();
+                        // Handle .btpart files - strip the extension to get actual file type
+                        let actualFileName = file.name;
+                        if (file.name.toLowerCase().endsWith('.btpart')) {
+                            actualFileName = file.name.substring(0, file.name.length - 7);
+                        }
+                        const extension = actualFileName.split('.').pop().toLowerCase();
                         
                         if (extension === 'pdf') {
                             li.setAttribute('data-type', 'pdf');
@@ -681,8 +691,13 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             fileDetails.innerHTML = '<p>Select a file to view details</p>';
             return;
         }
-        
-        const extension = file.name.split('.').pop().toLowerCase();
+
+        // Handle .btpart files - strip the extension to get actual file type
+        let actualFileName = file.name;
+        if (file.name.toLowerCase().endsWith('.btpart')) {
+            actualFileName = file.name.substring(0, file.name.length - 7);
+        }
+        const extension = actualFileName.split('.').pop().toLowerCase();
         const fileType = getFileTypeDescription(extension);
         
         fileDetails.innerHTML = `
