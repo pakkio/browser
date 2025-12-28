@@ -86,7 +86,45 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
         color: #e0e0e0;
     `;
 
-    const menuItems = [
+    // Check if file is a media file (video or audio)
+    const extension = fileName.split('.').pop().toLowerCase();
+    const isMediaFile = !isDirectory && (
+        ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts',
+         'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)
+    );
+
+    const menuItems = [];
+
+    // Add "Open with native player" for media files
+    if (isMediaFile) {
+        menuItems.push({
+            text: 'Open with Native Player',
+            icon: '▶️',
+            action: () => {
+                window.authManager.authenticatedFetch('/api/open-file', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ filePath })
+                })
+                .then(response => {
+                    if (!response) return;
+                    if (!response.ok) {
+                        return response.text().then(text => {
+                            throw new Error(text || 'Failed to open file');
+                        });
+                    }
+                    console.log('Opened file with native player:', fileName);
+                })
+                .catch(error => {
+                    console.error('Error opening file:', error);
+                    alert('Failed to open file: ' + error.message);
+                });
+            }
+        });
+    }
+
+    // Always add rename and delete
+    menuItems.push(
         {
             text: `Rename ${isDirectory ? 'Folder' : 'File'}`,
             icon: '✏️',
@@ -97,7 +135,7 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
             icon: '🗑️',
             action: () => deleteFile(filePath, fileName, isDirectory)
         }
-    ];
+    );
 
     menuItems.forEach((item, index) => {
         const menuItem = document.createElement('div');
