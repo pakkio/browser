@@ -913,6 +913,9 @@ function initializeFileExplorer() {
     function loadFiles(path) {
         console.log('Loading files for path:', path);
         
+        // Stop any playing media before loading new content
+        clearContentView();
+        
         // Track browsed folder for quick move access
         addRecentBrowsedFolder(path);
         
@@ -1358,7 +1361,14 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         
         // Create breadcrumb navigation
         const pathParts = fullPath ? fullPath.split('/') : [];
-        let breadcrumbs = `<button class="path-home" onclick="console.log('Home button clicked'); window.fileExplorer.loadFiles('')" title="Go to Root Directory (${serverRootDir})">🏠</button>`;
+        
+        // Parent folder button (only show if not at root)
+        let breadcrumbs = '';
+        if (fullPath && fullPath !== '') {
+            breadcrumbs += `<button class="path-parent" onclick="window.fileExplorer.goToParent()" title="Go to Parent Folder">⬆️</button> `;
+        }
+        
+        breadcrumbs += `<button class="path-home" onclick="window.fileExplorer.loadFiles('')" title="Go to Root Directory (${serverRootDir})">🏠</button>`;
         
         if (pathParts.length > 0) {
             breadcrumbs += ' / ';
@@ -1453,14 +1463,6 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                     } else {
                         showContent(currentPath, file.name, { autoPlay: true, keyboardNavigation: true });
                     }
-                }
-                return;
-            case 'Backspace':
-                event.preventDefault();
-                if (currentPath !== '') {
-                    currentPath = currentPath.substring(0, currentPath.lastIndexOf('/'));
-                    loadFiles(currentPath);
-                    updateDetails(null);
                 }
                 return;
             case '/':
@@ -1832,6 +1834,20 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             fileRenderer.stopAllMedia();
         }
     }
+    
+    // Go to parent folder
+    function goToParent() {
+        if (currentPath === '') return;
+        
+        const lastSlashIndex = currentPath.lastIndexOf('/');
+        if (lastSlashIndex > 0) {
+            currentPath = currentPath.substring(0, lastSlashIndex);
+        } else {
+            currentPath = '';
+        }
+        clearContentView();
+        loadFiles(currentPath);
+    }
 
     // Expose file explorer state for keyboard navigation
     window.fileExplorer = {
@@ -1844,7 +1860,8 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         showContent: showContent,
         quickAnnotate: quickAnnotate,
         autoDisplayFolderContents: autoDisplayFolderContents,
-        clearContentView: clearContentView
+        clearContentView: clearContentView,
+        goToParent: goToParent
     };
 }
 

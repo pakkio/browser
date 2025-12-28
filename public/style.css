@@ -180,7 +180,8 @@ body {
 }
 
 .path-home,
-.path-segment {
+.path-segment,
+.path-parent {
     background: transparent;
     border: 1px solid #555;
     color: #d4d4d4;
@@ -192,15 +193,22 @@ body {
 }
 
 .path-home:hover,
-.path-segment:hover {
+.path-segment:hover,
+.path-parent:hover {
     background: #3c3c3c;
     border-color: #00aacc;
     color: #00aacc;
 }
 
-.path-home {
+.path-home,
+.path-parent {
     font-size: 14px;
     padding: 4px 6px;
+}
+
+.path-parent {
+    background: #2a3a2a;
+    border-color: #4a4;
 }
 
 .item-count {
