@@ -958,10 +958,10 @@ class VideoRenderer {
             const subtitleFileName = subtitlePath.split('/').pop();
 
             try {
-                // Use HEAD request to check existence without downloading
-                const response = await fetch(`/subtitle?path=${encodeURIComponent(subtitlePath)}`, {
-                    method: 'HEAD'
-                });
+                // Try to fetch the subtitle file to see if it exists
+                const response = await window.authManager.authenticatedFetch(
+                    `/subtitle?path=${encodeURIComponent(subtitlePath)}`
+                );
 
                 if (response.ok) {
                     // Create a track element
