@@ -131,6 +131,11 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
             action: () => renameFile(filePath, fileName)
         },
         {
+            text: `Move ${isDirectory ? 'Folder' : 'File'}`,
+            icon: '📁',
+            action: () => moveFile(filePath, fileName, isDirectory)
+        },
+        {
             text: `Delete ${isDirectory ? 'Folder' : 'File'}`,
             icon: '🗑️',
             action: () => deleteFile(filePath, fileName, isDirectory)
@@ -210,6 +215,12 @@ async function renameFile(filePath, currentName) {
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
             }
+            
+            // Refresh annotations cache
+            if (window.annotationManager && window.annotationManager.loadAnnotations) {
+                window.annotationManager.loadAnnotations();
+            }
+            
             showToast(`Successfully renamed to "${newName}"`, 'success');
         } else {
             showToast(`Failed to rename: ${result.error}`, 'error');
@@ -244,6 +255,12 @@ async function deleteFile(filePath, fileName, isDirectory) {
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
             }
+            
+            // Refresh annotations cache
+            if (window.annotationManager && window.annotationManager.loadAnnotations) {
+                window.annotationManager.loadAnnotations();
+            }
+            
             showToast(`Successfully deleted "${fileName}"`, 'success');
         } else {
             showToast(`Failed to delete: ${result.error}`, 'error');
@@ -252,6 +269,529 @@ async function deleteFile(filePath, fileName, isDirectory) {
         console.error('Error deleting file:', error);
         showToast(`Error deleting file: ${error.message}`, 'error');
     }
+}
+
+// Recent folders management
+const RECENT_FOLDERS_KEY = 'browser_recent_move_folders';
+const RECENT_BROWSED_KEY = 'browser_recent_browsed_folders';
+const MAX_RECENT_FOLDERS = 10;
+const MAX_QUICK_FOLDERS = 5;
+
+function getRecentFolders() {
+    try {
+        const stored = localStorage.getItem(RECENT_FOLDERS_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function addRecentFolder(folderPath) {
+    let recent = getRecentFolders();
+    // Remove if already exists
+    recent = recent.filter(f => f !== folderPath);
+    // Add to front
+    recent.unshift(folderPath);
+    // Keep only last N
+    recent = recent.slice(0, MAX_RECENT_FOLDERS);
+    localStorage.setItem(RECENT_FOLDERS_KEY, JSON.stringify(recent));
+}
+
+// Browsed folders tracking (folders user has navigated to in file explorer)
+function getRecentBrowsedFolders() {
+    try {
+        const stored = localStorage.getItem(RECENT_BROWSED_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function addRecentBrowsedFolder(folderPath) {
+    let recent = getRecentBrowsedFolders();
+    // Remove if already exists
+    recent = recent.filter(f => f !== folderPath);
+    // Add to front
+    recent.unshift(folderPath);
+    // Keep only last N
+    recent = recent.slice(0, MAX_RECENT_FOLDERS);
+    localStorage.setItem(RECENT_BROWSED_KEY, JSON.stringify(recent));
+}
+
+// Move file function with folder picker dialog
+async function moveFile(filePath, fileName, isDirectory) {
+    const fileType = isDirectory ? 'folder' : 'file';
+    const currentDir = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
+    
+    // Create modal backdrop
+    const backdrop = document.createElement('div');
+    backdrop.className = 'move-modal-backdrop';
+    backdrop.style.cssText = `
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        background: rgba(0,0,0,0.6);
+        z-index: 2000;
+        display: flex; align-items: center; justify-content: center;
+    `;
+    
+    const modal = document.createElement('div');
+    modal.className = 'move-modal';
+    modal.style.cssText = `
+        background: #23272e;
+        color: #d4d4d4;
+        border-radius: 10px;
+        box-shadow: 0 4px 24px rgba(0,0,0,0.4);
+        padding: 20px;
+        min-width: 400px;
+        max-width: 600px;
+        max-height: 80vh;
+        display: flex;
+        flex-direction: column;
+        border: 1px solid #444;
+    `;
+    
+    modal.innerHTML = `
+        <h3 style="margin: 0 0 15px 0; color: #00aacc;">Move "${fileName}"</h3>
+        
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 12px; color: #888;">Current location:</label>
+            <div style="font-size: 13px; color: #aaa; padding: 5px; background: #1a1a1a; border-radius: 4px;">
+                ${currentDir || '/ (root)'}
+            </div>
+        </div>
+        
+        <div id="quick-folders-section" style="margin-bottom: 12px;">
+            <label style="font-size: 12px; color: #888;">Quick move to:</label>
+            <div id="quick-folders-list" style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 5px;"></div>
+        </div>
+        
+        <div style="margin-bottom: 10px;">
+            <label style="font-size: 12px; color: #888;">Search folders:</label>
+            <input type="text" id="folder-search-input" placeholder="Type to search folders..." style="
+                width: 100%;
+                padding: 8px;
+                background: #1a1a1a;
+                border: 1px solid #444;
+                border-radius: 4px;
+                color: #d4d4d4;
+                font-size: 14px;
+                box-sizing: border-box;
+            ">
+        </div>
+        
+        <div id="recent-folders-section" style="margin-bottom: 10px; display: none;">
+            <label style="font-size: 12px; color: #888;">Recent move targets:</label>
+            <div id="recent-folders-list" style="max-height: 80px; overflow-y: auto;"></div>
+        </div>
+        
+        <div style="margin-bottom: 10px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 5px;">
+                <label style="font-size: 12px; color: #888;">Browse folders:</label>
+                <span id="browse-path" style="font-size: 11px; color: #666;"></span>
+            </div>
+            <div id="folder-browser" style="
+                height: 200px;
+                overflow-y: auto;
+                background: #1a1a1a;
+                border: 1px solid #444;
+                border-radius: 4px;
+                padding: 5px;
+            "></div>
+        </div>
+        
+        <div style="margin-bottom: 15px;">
+            <label style="font-size: 12px; color: #888;">Target folder:</label>
+            <div id="selected-target" style="
+                padding: 8px;
+                background: #2a4a2a;
+                border: 1px solid #4a4;
+                border-radius: 4px;
+                font-size: 13px;
+                min-height: 20px;
+            ">/ (root)</div>
+        </div>
+        
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <button id="move-cancel-btn" style="
+                padding: 8px 16px;
+                background: rgba(255,255,255,0.1);
+                border: 1px solid #555;
+                color: #d4d4d4;
+                border-radius: 4px;
+                cursor: pointer;
+            ">Cancel</button>
+            <button id="move-confirm-btn" style="
+                padding: 8px 16px;
+                background: #2196F3;
+                border: none;
+                color: white;
+                border-radius: 4px;
+                cursor: pointer;
+            ">Move Here</button>
+        </div>
+    `;
+    
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    
+    let selectedPath = '';
+    let browsePath = currentDir;
+    
+    const folderBrowser = modal.querySelector('#folder-browser');
+    const selectedTarget = modal.querySelector('#selected-target');
+    const browsPathDisplay = modal.querySelector('#browse-path');
+    const searchInput = modal.querySelector('#folder-search-input');
+    const recentSection = modal.querySelector('#recent-folders-section');
+    const recentList = modal.querySelector('#recent-folders-list');
+    const quickFoldersList = modal.querySelector('#quick-folders-list');
+    
+    // Render quick access folders (last 5 browsed folders)
+    function renderQuickFolders() {
+        const browsed = getRecentBrowsedFolders().slice(0, MAX_QUICK_FOLDERS);
+        const moveTargets = getRecentFolders().slice(0, 3);
+        
+        // Combine and deduplicate, prioritizing browsed folders
+        const allFolders = [...browsed];
+        moveTargets.forEach(f => {
+            if (!allFolders.includes(f)) allFolders.push(f);
+        });
+        const quickFolders = allFolders.slice(0, MAX_QUICK_FOLDERS);
+        
+        if (quickFolders.length === 0) {
+            quickFoldersList.innerHTML = '<span style="color: #666; font-size: 12px;">No recent folders yet</span>';
+            return;
+        }
+        
+        quickFoldersList.innerHTML = quickFolders.map(folder => {
+            const displayName = folder ? folder.split('/').pop() : 'root';
+            const fullPath = folder || '/ (root)';
+            return `
+                <button class="quick-folder-btn" data-path="${folder}" title="${fullPath}" style="
+                    padding: 6px 12px;
+                    background: #3a3a4a;
+                    border: 1px solid #555;
+                    border-radius: 4px;
+                    color: #d4d4d4;
+                    cursor: pointer;
+                    font-size: 12px;
+                    display: flex;
+                    align-items: center;
+                    gap: 4px;
+                    transition: all 0.2s;
+                ">
+                    <span style="color: #ffcc00;">📁</span>
+                    <span>${displayName}</span>
+                </button>
+            `;
+        }).join('');
+        
+        quickFoldersList.querySelectorAll('.quick-folder-btn').forEach(btn => {
+            btn.addEventListener('mouseenter', () => {
+                btn.style.background = '#4a4a5a';
+                btn.style.borderColor = '#2196F3';
+            });
+            btn.addEventListener('mouseleave', () => {
+                btn.style.background = '#3a3a4a';
+                btn.style.borderColor = '#555';
+            });
+            btn.addEventListener('click', () => {
+                selectedPath = btn.dataset.path;
+                selectedTarget.textContent = selectedPath || '/ (root)';
+                browsePath = selectedPath;
+                loadFolders(browsePath);
+            });
+        });
+    }
+    
+    // Render recent folders (previous move targets)
+    function renderRecentFolders() {
+        const recent = getRecentFolders();
+        if (recent.length === 0) {
+            recentSection.style.display = 'none';
+            return;
+        }
+        
+        recentSection.style.display = 'block';
+        recentList.innerHTML = recent.map(folder => `
+            <div class="recent-folder-item" data-path="${folder}" style="
+                padding: 6px 10px;
+                cursor: pointer;
+                border-radius: 4px;
+                font-size: 13px;
+                display: flex;
+                align-items: center;
+                gap: 8px;
+            ">
+                <span style="color: #ffcc00;">📁</span>
+                <span>${folder || '/ (root)'}</span>
+            </div>
+        `).join('');
+        
+        recentList.querySelectorAll('.recent-folder-item').forEach(item => {
+            item.addEventListener('mouseenter', () => item.style.background = '#333');
+            item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+            item.addEventListener('click', () => {
+                selectedPath = item.dataset.path;
+                selectedTarget.textContent = selectedPath || '/ (root)';
+                browsePath = selectedPath;
+                loadFolders(browsePath);
+            });
+        });
+    }
+    
+    // Load folders for browser
+    async function loadFolders(path) {
+        try {
+            const response = await window.authManager.authenticatedFetch(`/api/directories?path=${encodeURIComponent(path)}`);
+            const data = await response.json();
+            
+            browsPathDisplay.textContent = path || '/ (root)';
+            
+            let html = '';
+            
+            // Parent directory option
+            if (data.parentPath !== null) {
+                html += `
+                    <div class="folder-item folder-parent" data-path="${data.parentPath}" data-action="navigate" style="
+                        padding: 8px 10px;
+                        cursor: pointer;
+                        border-radius: 4px;
+                        font-size: 13px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                        color: #888;
+                    ">
+                        <span>⬆️</span>
+                        <span>.. (parent folder)</span>
+                    </div>
+                `;
+            }
+            
+            // Current directory (select this folder)
+            html += `
+                <div class="folder-item folder-current" data-path="${path}" data-action="select" style="
+                    padding: 8px 10px;
+                    cursor: pointer;
+                    border-radius: 4px;
+                    font-size: 13px;
+                    display: flex;
+                    align-items: center;
+                    gap: 8px;
+                    background: ${selectedPath === path ? '#2a4a2a' : 'transparent'};
+                    border: 1px solid ${selectedPath === path ? '#4a4' : 'transparent'};
+                ">
+                    <span style="color: #4CAF50;">✓</span>
+                    <span>Select this folder${path ? `: ${path.split('/').pop()}` : ': / (root)'}</span>
+                </div>
+            `;
+            
+            // Child directories
+            data.directories.forEach(dir => {
+                // Skip current file's directory if it's the same name (can't move into itself)
+                if (isDirectory && dir.path === filePath) return;
+                
+                html += `
+                    <div class="folder-item" data-path="${dir.path}" data-action="navigate" style="
+                        padding: 8px 10px;
+                        cursor: pointer;
+                        border-radius: 4px;
+                        font-size: 13px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    ">
+                        <span style="color: #ffcc00;">📁</span>
+                        <span>${dir.name}</span>
+                        <span style="margin-left: auto; color: #666;">→</span>
+                    </div>
+                `;
+            });
+            
+            if (data.directories.length === 0 && data.parentPath === null) {
+                html += `<div style="padding: 20px; text-align: center; color: #666;">No subfolders</div>`;
+            }
+            
+            folderBrowser.innerHTML = html;
+            
+            // Add event listeners
+            folderBrowser.querySelectorAll('.folder-item').forEach(item => {
+                item.addEventListener('mouseenter', () => {
+                    if (!item.classList.contains('folder-current') || selectedPath !== item.dataset.path) {
+                        item.style.background = '#333';
+                    }
+                });
+                item.addEventListener('mouseleave', () => {
+                    if (item.classList.contains('folder-current') && selectedPath === item.dataset.path) {
+                        item.style.background = '#2a4a2a';
+                    } else {
+                        item.style.background = 'transparent';
+                    }
+                });
+                item.addEventListener('click', () => {
+                    const action = item.dataset.action;
+                    const path = item.dataset.path;
+                    
+                    if (action === 'navigate') {
+                        browsePath = path;
+                        loadFolders(path);
+                    } else if (action === 'select') {
+                        selectedPath = path;
+                        selectedTarget.textContent = path || '/ (root)';
+                        // Refresh to update selection styling
+                        loadFolders(browsePath);
+                    }
+                });
+                
+                // Double-click to navigate into folder
+                if (!item.classList.contains('folder-current') && !item.classList.contains('folder-parent')) {
+                    item.addEventListener('dblclick', () => {
+                        const path = item.dataset.path;
+                        browsePath = path;
+                        loadFolders(path);
+                    });
+                }
+            });
+            
+        } catch (error) {
+            console.error('Error loading folders:', error);
+            folderBrowser.innerHTML = `<div style="padding: 20px; text-align: center; color: #f44;">Error loading folders</div>`;
+        }
+    }
+    
+    // Search functionality
+    let searchTimeout;
+    searchInput.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(async () => {
+            const query = searchInput.value.trim().toLowerCase();
+            if (!query) {
+                loadFolders(browsePath);
+                return;
+            }
+            
+            // Search through all directories recursively (simplified - just show matching from current view)
+            try {
+                const response = await window.authManager.authenticatedFetch(`/api/directories?path=`);
+                const data = await response.json();
+                
+                // Filter directories that match
+                const matches = data.directories.filter(dir => 
+                    dir.name.toLowerCase().includes(query) ||
+                    dir.path.toLowerCase().includes(query)
+                );
+                
+                let html = matches.map(dir => `
+                    <div class="folder-item" data-path="${dir.path}" data-action="select" style="
+                        padding: 8px 10px;
+                        cursor: pointer;
+                        border-radius: 4px;
+                        font-size: 13px;
+                        display: flex;
+                        align-items: center;
+                        gap: 8px;
+                    ">
+                        <span style="color: #ffcc00;">📁</span>
+                        <span>${dir.path}</span>
+                    </div>
+                `).join('');
+                
+                if (matches.length === 0) {
+                    html = `<div style="padding: 20px; text-align: center; color: #666;">No folders match "${query}"</div>`;
+                }
+                
+                folderBrowser.innerHTML = html;
+                
+                folderBrowser.querySelectorAll('.folder-item').forEach(item => {
+                    item.addEventListener('mouseenter', () => item.style.background = '#333');
+                    item.addEventListener('mouseleave', () => item.style.background = 'transparent');
+                    item.addEventListener('click', () => {
+                        selectedPath = item.dataset.path;
+                        selectedTarget.textContent = selectedPath || '/ (root)';
+                        searchInput.value = '';
+                        browsePath = selectedPath;
+                        loadFolders(browsePath);
+                    });
+                });
+                
+            } catch (error) {
+                console.error('Error searching folders:', error);
+            }
+        }, 300);
+    });
+    
+    // Initialize
+    renderQuickFolders();
+    renderRecentFolders();
+    loadFolders(currentDir);
+    
+    // Close handlers
+    function closeModal() {
+        backdrop.remove();
+    }
+    
+    backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) closeModal();
+    });
+    
+    modal.querySelector('#move-cancel-btn').addEventListener('click', closeModal);
+    
+    document.addEventListener('keydown', function escHandler(e) {
+        if (e.key === 'Escape') {
+            closeModal();
+            document.removeEventListener('keydown', escHandler);
+        }
+    });
+    
+    // Move confirmation
+    modal.querySelector('#move-confirm-btn').addEventListener('click', async () => {
+        // Check if moving to same directory
+        if (selectedPath === currentDir) {
+            showToast('File is already in this directory', 'info');
+            return;
+        }
+        
+        try {
+            const response = await window.authManager.authenticatedFetch('/api/file/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sourcePath: filePath,
+                    targetDir: selectedPath
+                })
+            });
+            
+            const result = await response.json();
+            if (result.success) {
+                // Add to recent folders
+                addRecentFolder(selectedPath);
+                
+                closeModal();
+                
+                // Clear content view
+                if (window.fileExplorer && window.fileExplorer.clearContentView) {
+                    window.fileExplorer.clearContentView();
+                }
+                
+                // Refresh the file list
+                if (window.fileExplorer && window.fileExplorer.loadFiles) {
+                    window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+                }
+                
+                // Refresh annotations cache
+                if (window.annotationManager && window.annotationManager.loadAnnotations) {
+                    window.annotationManager.loadAnnotations();
+                }
+                
+                showToast(`Successfully moved "${fileName}" to ${selectedPath || 'root'}`, 'success');
+            } else {
+                showToast(`Failed to move: ${result.error}`, 'error');
+            }
+        } catch (error) {
+            console.error('Error moving file:', error);
+            showToast(`Error moving file: ${error.message}`, 'error');
+        }
+    });
 }
 
 // Toast notification function
@@ -372,6 +912,9 @@ function initializeFileExplorer() {
 
     function loadFiles(path) {
         console.log('Loading files for path:', path);
+        
+        // Track browsed folder for quick move access
+        addRecentBrowsedFolder(path);
         
         // Save current path to session
         fetch('/api/current-path', {
