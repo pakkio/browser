@@ -338,78 +338,8 @@ class VideoRenderer {
             // Add click handlers after video is ready to play
             this.setupVideoClickHandlers(video, fileName);
         });
-        
-        // Try multiple event approaches for maximum compatibility
-        console.log('Adding ALL click handlers for:', fileName);
-        
-        // Approach 1: Direct click with various phases
-        video.addEventListener('click', (e) => {
-            console.log('CLICK: Video click detected on', fileName);
-            e.stopPropagation();
-            setTimeout(() => {
-                console.log('CLICK: Executing video action');
-                this.togglePlayAndFullscreen(video);
-            }, 200);
-        }, false);
-        
-        // Approach 2: Pointer events (modern approach)
-        video.addEventListener('pointerup', (e) => {
-            if (e.button === 0) { // Left click
-                console.log('POINTER: Video pointer up on', fileName);
-                setTimeout(() => {
-                    console.log('POINTER: Executing video action');
-                    this.togglePlayAndFullscreen(video);
-                }, 150);
-            }
-        });
-        
-        // Approach 3: Touch events for mobile
-        video.addEventListener('touchend', (e) => {
-            console.log('TOUCH: Video touch end on', fileName);
-            e.preventDefault();
-            setTimeout(() => {
-                console.log('TOUCH: Executing video action');
-                this.togglePlayAndFullscreen(video);
-            }, 100);
-        });
-        
-        // Create simple clickable overlay for video
-        const videoWrapper = document.createElement('div');
-        videoWrapper.style.position = 'relative';
-        videoWrapper.style.display = 'inline-block';
-        videoWrapper.style.width = '100%';
-        
-        const clickOverlay = document.createElement('div');
-        clickOverlay.style.cssText = `
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            z-index: 2;
-            cursor: pointer;
-            background: transparent;
-        `;
-        
-        clickOverlay.addEventListener('click', (e) => {
-            console.log('OVERLAY CLICK: Simulating spacebar press');
-            
-            // Create and dispatch a fake spacebar keydown event
-            const spaceEvent = new KeyboardEvent('keydown', {
-                code: 'Space',
-                key: ' ',
-                keyCode: 32,
-                which: 32,
-                bubbles: true,
-                cancelable: true
-            });
-            
-            document.dispatchEvent(spaceEvent);
-        });
-        
-        videoWrapper.appendChild(video);
-        videoWrapper.appendChild(clickOverlay);
-        contentOther.appendChild(videoWrapper);
+
+        contentOther.appendChild(video);
         contentOther.appendChild(errorDiv);
         
         // Add subtitle selector UI
@@ -559,42 +489,12 @@ class VideoRenderer {
             return;
         }
         video.setAttribute('data-click-handlers-added', 'true');
-        
-        console.log('Adding video click handlers for:', fileName);
-        
-        // Try a timeout-based approach to let the browser handle its stuff first
-        let clickTimeout = null;
-        
+
+        // Single click to toggle play/pause
         video.addEventListener('click', (e) => {
-            console.log('Video click detected');
-            
-            // Clear any existing timeout
-            if (clickTimeout) {
-                clearTimeout(clickTimeout);
-            }
-            
-            // Set a small delay to let browser controls handle first
-            clickTimeout = setTimeout(() => {
-                console.log('Executing delayed video click action');
-                this.togglePlayAndFullscreen(video);
-            }, 50); // Very short delay
-        });
-        
-        // Also try the mousedown approach 
-        video.addEventListener('mousedown', (e) => {
-            if (e.button === 0) { // Left mouse button
-                console.log('Video mousedown - will toggle in 100ms');
-                setTimeout(() => {
-                    console.log('Executing mousedown video action');
-                    this.togglePlayAndFullscreen(video);
-                }, 100);
-            }
-        });
-        
-        // Keep double-click as reliable backup
-        video.addEventListener('dblclick', (e) => {
-            console.log('Video double-click triggered');
-            e.preventDefault();
+            // Don't interfere with native controls
+            if (e.target !== video) return;
+
             this.togglePlayAndFullscreen(video);
         });
     }
@@ -1034,7 +934,8 @@ class VideoRenderer {
     togglePlayAndFullscreen(video) {
         if (!video) return;
 
-        // Toggle play/pause
+        // Only toggle play/pause, don't auto-enter fullscreen
+        // User can double-click video controls or press F for fullscreen
         if (video.paused) {
             video.play().catch(err => {
                 console.error('Error attempting to play video:', err);
@@ -1042,76 +943,50 @@ class VideoRenderer {
         } else {
             video.pause();
         }
-        
-        // Toggle fullscreen
-        if (!document.fullscreenElement) {
-            video.requestFullscreen().then(() => {
-                // Focus video for keyboard events in fullscreen
-                video.focus();
-            }).catch(err => {
-                console.error('Error attempting to enable fullscreen:', err);
-            });
-        } else {
-            document.exitFullscreen().catch(err => {
-                console.error('Error attempting to exit fullscreen:', err);
-            });
-        }
     }
     
     async loadSubtitles(video, videoPath, videoFileName) {
         // Get base path without file extension
         const basePath = videoPath.substring(0, videoPath.lastIndexOf('.'));
-        const baseFileName = videoFileName.substring(0, videoFileName.lastIndexOf('.'));
-        
-        // Try common subtitle naming patterns
-        const subtitleExtensions = ['.srt', '.vtt'];
+
+        // Try only the most common subtitle patterns to reduce 404 spam
+        // Users can press 'S' to manually select from all available subtitles
         const subtitlePatterns = [
-            basePath,  // same name as video
-            `${basePath}.en`,  // with language code
-            `${basePath}.eng`,
-            `${basePath}.english`
+            `${basePath}.srt`,     // same name, .srt
+            `${basePath}.vtt`,     // same name, .vtt
+            `${basePath}.en.srt`,  // with English language code
         ];
-        
-        for (const pattern of subtitlePatterns) {
-            for (const ext of subtitleExtensions) {
-                const subtitlePath = pattern + ext;
-                const subtitleFileName = subtitlePath.split('/').pop();
-                
-                try {
-                    // Try to fetch the subtitle file to see if it exists
-                    const response = await window.authManager.authenticatedFetch(
-                        `/subtitle?path=${encodeURIComponent(subtitlePath)}`
-                    );
-                    
-                    if (response.ok) {
-                        console.log(`Found subtitle file: ${subtitleFileName}`);
-                        
-                        // Create a track element
-                        const track = document.createElement('track');
-                        track.kind = 'subtitles';
-                        track.label = this.getSubtitleLabel(subtitleFileName);
-                        track.srclang = this.detectLanguage(subtitleFileName);
-                        track.src = `/subtitle?path=${encodeURIComponent(subtitlePath)}`;
-                        track.default = true; // Make this the default subtitle track
-                        
-                        video.appendChild(track);
-                        
-                        console.log(`Added subtitle track: ${subtitleFileName} (${track.srclang})`);
-                        
-                        // Show a subtle notification
-                        this.showSubtitleNotification(`Subtitles loaded: ${subtitleFileName}`);
-                        
-                        // Stop after finding the first subtitle file
-                        return;
-                    }
-                } catch (error) {
-                    // File doesn't exist or error fetching, continue trying other patterns
-                    console.debug(`Subtitle not found: ${subtitleFileName}`);
+
+        for (const subtitlePath of subtitlePatterns) {
+            const subtitleFileName = subtitlePath.split('/').pop();
+
+            try {
+                // Use HEAD request to check existence without downloading
+                const response = await fetch(`/subtitle?path=${encodeURIComponent(subtitlePath)}`, {
+                    method: 'HEAD'
+                });
+
+                if (response.ok) {
+                    // Create a track element
+                    const track = document.createElement('track');
+                    track.kind = 'subtitles';
+                    track.label = this.getSubtitleLabel(subtitleFileName);
+                    track.srclang = this.detectLanguage(subtitleFileName);
+                    track.src = `/subtitle?path=${encodeURIComponent(subtitlePath)}`;
+                    track.default = true;
+
+                    video.appendChild(track);
+
+                    // Show a subtle notification
+                    this.showSubtitleNotification(`Subtitles loaded: ${subtitleFileName}`);
+
+                    // Stop after finding the first subtitle file
+                    return;
                 }
+            } catch (error) {
+                // Silently continue to next pattern
             }
         }
-        
-        console.log('No subtitle files found for video');
     }
     
     async discoverSubtitles(videoPath, videoFileName) {
@@ -1533,19 +1408,29 @@ class VideoRenderer {
             // It will be automatically cleaned up when video element is removed
             this.handleWheel = null;
         }
-        
+
         // Remove any buffering overlay
         const bufferingOverlay = document.getElementById('video-buffering-overlay');
         if (bufferingOverlay) {
             bufferingOverlay.remove();
         }
-        
-        // Stop any playing videos in content areas
+
+        // Stop any playing videos and clear content areas
         const videos = document.querySelectorAll('#content-other video');
         videos.forEach(video => {
             video.pause();
-            video.currentTime = 0;
+            video.src = ''; // Release the source
+            video.load(); // Reset the video element
         });
+
+        // Clear the content area to prevent stacking
+        const contentOther = document.getElementById('content-other');
+        if (contentOther) {
+            contentOther.innerHTML = '';
+        }
+
+        // Reset current video reference
+        this.currentVideo = null;
     }
     
     getErrorMessage(errorCode) {
