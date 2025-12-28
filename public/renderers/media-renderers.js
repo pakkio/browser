@@ -1424,21 +1424,13 @@ class VideoRenderer {
             video.pause();
             video.src = ''; // Release the source
             video.load(); // Reset the video element
-            video.remove(); // Remove from DOM
         });
 
-        // Remove any video-related UI elements
+        // Clear all content from content-other to prevent stacking
         const contentOther = document.getElementById('content-other');
         if (contentOther) {
-            // Remove subtitle controls, error divs, and annotation overlays
-            const subtitleControls = contentOther.querySelectorAll('div');
-            subtitleControls.forEach(el => {
-                if (el.textContent.includes('Subtitles') ||
-                    el.style.color === 'red' ||
-                    el.textContent.includes('Loading annotations')) {
-                    el.remove();
-                }
-            });
+            contentOther.innerHTML = '';
+            contentOther.style.display = 'none';
         }
 
         // Reset current video reference
