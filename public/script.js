@@ -1396,8 +1396,11 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             return;
         }
         
-        // Don't interfere when annotation modal is open
-        if (document.querySelector('.annotation-modal-backdrop') || document.querySelector('.bookmarks-modal-backdrop')) {
+        // Don't interfere when any modal is open
+        if (document.querySelector('.annotation-modal-backdrop') || 
+            document.querySelector('.bookmarks-modal-backdrop') ||
+            document.querySelector('.move-modal-backdrop') ||
+            document.querySelector('.bookmark-detail-backdrop')) {
             return;
         }
         

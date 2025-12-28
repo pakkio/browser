@@ -427,6 +427,17 @@ class AnnotationManager {
         setTimeout(() => {
             modal.querySelector('#annotation-comment').focus();
         }, 100);
+        
+        // Prevent keyboard shortcuts from interfering with typing
+        modal.addEventListener('keydown', (e) => {
+            // Allow Escape to close modal
+            if (e.key === 'Escape') {
+                closeModal();
+                return;
+            }
+            // Stop propagation for all other keys to prevent file browser shortcuts
+            e.stopPropagation();
+        });
     }
 
     async searchAnnotations(query, filters = {}) {
