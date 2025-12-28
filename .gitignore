@@ -154,3 +154,5 @@ sample.*
 !test-files/
 !test-files/**
 .aider*
+session.json
+sesssion
