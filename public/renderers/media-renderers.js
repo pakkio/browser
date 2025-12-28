@@ -110,14 +110,20 @@ class VideoRenderer {
                 video.src = `/files?path=${encodeURIComponent(filePath)}`;
             }
             
-            // Try to auto-detect and load subtitle files
-            await this.loadSubtitles(video, filePath, fileName);
+            // Try to auto-detect and load subtitle files (non-blocking)
+            this.loadSubtitles(video, filePath, fileName).catch(err => {
+                console.debug('Subtitle loading failed:', err);
+            });
 
-            // Discover all available subtitle files in the directory
-            await this.discoverSubtitles(filePath, fileName);
+            // Discover all available subtitle files in the directory (non-blocking)
+            this.discoverSubtitles(filePath, fileName).catch(err => {
+                console.debug('Subtitle discovery failed:', err);
+            });
 
-            // Load bookmarks for this video
-            await this.loadBookmarks();
+            // Load bookmarks for this video (non-blocking)
+            this.loadBookmarks().catch(err => {
+                console.debug('Bookmark loading failed:', err);
+            });
         }
         
         // Error handling
