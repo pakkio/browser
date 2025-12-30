@@ -651,6 +651,23 @@ pre {
     line-height: 1.5;
 }
 
+/* Fix text selection alignment in syntax-highlighted code */
+pre code,
+pre code * {
+    line-height: inherit;
+    padding: 0;
+    margin: 0;
+    vertical-align: baseline;
+}
+
+pre code .hljs,
+pre code .hljs * {
+    line-height: inherit;
+    padding: 0;
+    margin: 0;
+    vertical-align: baseline;
+}
+
 #content-code {
     white-space: pre-wrap;
     word-wrap: break-word;
