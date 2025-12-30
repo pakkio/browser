@@ -227,7 +227,7 @@ class TextRenderer {
             color: #f8f8f2;
             border-radius: 8px;
             font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', 'Liberation Mono', monospace;
-            line-height: 1.6;
+            line-height: 1.5;
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-word;
@@ -245,7 +245,7 @@ class TextRenderer {
             color: #f8f8f2;
             border-radius: 8px;
             font-family: 'Fira Mono', 'Consolas', 'Menlo', 'Monaco', 'Liberation Mono', monospace;
-            line-height: 1.6;
+            line-height: 1.5;
             overflow-y: auto;
             white-space: pre-wrap;
             word-break: break-word;
