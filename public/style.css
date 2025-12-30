@@ -653,19 +653,22 @@ pre {
 
 /* Fix text selection alignment in syntax-highlighted code */
 pre code,
-pre code * {
-    line-height: inherit;
-    padding: 0;
-    margin: 0;
-    vertical-align: baseline;
+pre code *,
+pre code .hljs,
+pre code .hljs *,
+.hljs,
+.hljs * {
+    line-height: inherit !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    vertical-align: baseline !important;
+    display: inline !important;
 }
 
-pre code .hljs,
-pre code .hljs * {
-    line-height: inherit;
-    padding: 0;
-    margin: 0;
-    vertical-align: baseline;
+/* Ensure proper text rendering */
+pre code {
+    font-variant-ligatures: none !important;
+    text-rendering: optimizeLegibility !important;
 }
 
 #content-code {
