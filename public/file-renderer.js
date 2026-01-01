@@ -119,7 +119,16 @@ class FileRenderer {
     async stopAllMedia(options = {}) {
         // Track if we were in fullscreen (to restore it later if needed)
         const wasFullscreen = !!document.fullscreenElement;
-        const preserveFullscreen = options.preserveFullscreen || false;
+        
+        // Exit fullscreen FIRST - this must happen before we remove the video element
+        // otherwise the browser may not properly clean up the fullscreen state
+        if (document.fullscreenElement) {
+            try {
+                await document.exitFullscreen();
+            } catch (err) {
+                console.log('Error exiting fullscreen:', err);
+            }
+        }
         
         // Stop all video elements
         const videos = document.querySelectorAll('video');
@@ -128,18 +137,27 @@ class FileRenderer {
         videos.forEach(video => {
             // Create a promise that resolves when the video is fully stopped
             const stopPromise = new Promise(resolve => {
+                // Mute immediately to stop audio
+                video.muted = true;
+                video.volume = 0;
                 video.pause();
-                // Remove all event listeners by cloning the element
+                // Remove all event listeners
                 video.onloadstart = null;
                 video.oncanplay = null;
                 video.onerror = null;
                 video.onplay = null;
                 video.onplaying = null;
-                // Clear the src to stop any loading
+                video.onended = null;
+                video.ontimeupdate = null;
+                // Clear the src to stop any loading/playback completely
                 video.removeAttribute('src');
+                // Remove all source children too
+                while (video.firstChild) {
+                    video.removeChild(video.firstChild);
+                }
                 video.load();
-                // Wait a tick for the video to process the stop
-                setTimeout(resolve, 10);
+                // Wait a bit for the video to process the stop
+                setTimeout(resolve, 50);
             });
             stopVideoPromises.push(stopPromise);
         });
@@ -147,20 +165,12 @@ class FileRenderer {
         // Stop all audio elements
         const audios = document.querySelectorAll('audio');
         audios.forEach(audio => {
+            audio.muted = true;
             audio.pause();
             audio.currentTime = 0;
             audio.removeAttribute('src');
             audio.load();
         });
-
-        // Exit fullscreen if active (unless we want to preserve it for seamless navigation)
-        if (document.fullscreenElement && !preserveFullscreen) {
-            try {
-                await document.exitFullscreen();
-            } catch (err) {
-                console.log('Error exiting fullscreen:', err);
-            }
-        }
 
         // Wait for all videos to stop
         await Promise.all(stopVideoPromises);
@@ -171,16 +181,13 @@ class FileRenderer {
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
         try {
-            // Check if we should preserve fullscreen state during navigation
-            const preserveFullscreen = options.keyboardNavigation || false;
-            
             // Stop all media playback before switching files (await to ensure cleanup completes)
-            // Preserve fullscreen state if navigating via keyboard
-            const { wasFullscreen } = await this.stopAllMedia({ preserveFullscreen });
+            const { wasFullscreen } = await this.stopAllMedia();
             
             // Pass fullscreen state to the new renderer so it can restore it
             if (wasFullscreen && options.keyboardNavigation) {
                 options.restoreFullscreen = true;
+                console.log('FileRenderer: Will restore fullscreen for', fileName);
             }
 
             // Cleanup previous renderer's specific event listeners or states
