@@ -328,8 +328,9 @@ class VideoRenderer {
         video.addEventListener('canplay', () => {
             console.log('Video can play:', fileName);
             
-            // Auto-play and auto-fullscreen if opened via keyboard navigation
-            if (options.autoPlay && options.keyboardNavigation) {
+            // Auto-play and auto-fullscreen if opened via keyboard navigation or restoring fullscreen
+            const shouldAutoFullscreen = (options.autoPlay && options.keyboardNavigation) || options.restoreFullscreen;
+            if (shouldAutoFullscreen) {
                 video.play().then(() => {
                     // Enter fullscreen after play starts
                     return video.requestFullscreen();

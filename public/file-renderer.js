@@ -116,7 +116,11 @@ class FileRenderer {
         return 'unsupported';
     }
 
-    async stopAllMedia() {
+    async stopAllMedia(options = {}) {
+        // Track if we were in fullscreen (to restore it later if needed)
+        const wasFullscreen = !!document.fullscreenElement;
+        const preserveFullscreen = options.preserveFullscreen || false;
+        
         // Stop all video elements
         const videos = document.querySelectorAll('video');
         const stopVideoPromises = [];
@@ -149,8 +153,8 @@ class FileRenderer {
             audio.load();
         });
 
-        // Exit fullscreen if active
-        if (document.fullscreenElement) {
+        // Exit fullscreen if active (unless we want to preserve it for seamless navigation)
+        if (document.fullscreenElement && !preserveFullscreen) {
             try {
                 await document.exitFullscreen();
             } catch (err) {
@@ -160,12 +164,24 @@ class FileRenderer {
 
         // Wait for all videos to stop
         await Promise.all(stopVideoPromises);
+        
+        // Return whether we were in fullscreen (useful for restoring state)
+        return { wasFullscreen };
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
         try {
+            // Check if we should preserve fullscreen state during navigation
+            const preserveFullscreen = options.keyboardNavigation || false;
+            
             // Stop all media playback before switching files (await to ensure cleanup completes)
-            await this.stopAllMedia();
+            // Preserve fullscreen state if navigating via keyboard
+            const { wasFullscreen } = await this.stopAllMedia({ preserveFullscreen });
+            
+            // Pass fullscreen state to the new renderer so it can restore it
+            if (wasFullscreen && options.keyboardNavigation) {
+                options.restoreFullscreen = true;
+            }
 
             // Cleanup previous renderer's specific event listeners or states
             if (this.currentHandler && typeof this.currentHandler.cleanup === 'function') {
