@@ -325,16 +325,29 @@ class VideoRenderer {
             }
         });
         
+        // Flag to prevent multiple fullscreen attempts (canplay can fire multiple times)
+        let fullscreenAttempted = false;
+        
         video.addEventListener('canplay', () => {
-            console.log('Video can play:', fileName);
+            console.log('Video can play:', fileName, 'options:', JSON.stringify({
+                autoPlay: options.autoPlay,
+                keyboardNavigation: options.keyboardNavigation,
+                restoreFullscreen: options.restoreFullscreen
+            }));
             
             // Auto-play and auto-fullscreen if opened via keyboard navigation or restoring fullscreen
             const shouldAutoFullscreen = (options.autoPlay && options.keyboardNavigation) || options.restoreFullscreen;
-            if (shouldAutoFullscreen) {
+            console.log('shouldAutoFullscreen:', shouldAutoFullscreen, 'fullscreenAttempted:', fullscreenAttempted);
+            
+            if (shouldAutoFullscreen && !fullscreenAttempted) {
+                fullscreenAttempted = true;
+                console.log('Attempting auto-play and fullscreen for:', fileName);
                 video.play().then(() => {
+                    console.log('Play started, requesting fullscreen');
                     // Enter fullscreen after play starts
                     return video.requestFullscreen();
                 }).then(() => {
+                    console.log('Fullscreen entered successfully');
                     // Focus video for keyboard events in fullscreen
                     video.focus();
                 }).catch(err => {
