@@ -959,6 +959,13 @@ function initializeFileExplorer() {
                 displayFiles(data.files, path);
                 updateCurrentPathDisplay(data.currentPath, data.files.length);
                 
+                // Update annotation manager with current directory
+                if (window.annotationManager && window.annotationManager.setCurrentDirectory) {
+                    // Build full path for annotation filtering
+                    const fullPath = data.currentPath || path || '';
+                    window.annotationManager.setCurrentDirectory(fullPath);
+                }
+                
                 // Auto-display folder contents after loading
                 autoDisplayFolderContents(data.files, path);
                 
@@ -1362,41 +1369,67 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         // Create breadcrumb navigation
         const pathParts = fullPath ? fullPath.split('/') : [];
         
+        // Clear and rebuild with proper event listeners (CSP compliant)
+        pathDisplay.innerHTML = '';
+        
         // Parent folder button (only show if not at root)
-        let breadcrumbs = '';
         if (fullPath && fullPath !== '') {
-            breadcrumbs += `<button class="path-parent" onclick="window.fileExplorer.goToParent()" title="Go to Parent Folder">⬆️</button> `;
+            const parentBtn = document.createElement('button');
+            parentBtn.className = 'path-parent';
+            parentBtn.title = 'Go to Parent Folder';
+            parentBtn.textContent = '⬆️';
+            parentBtn.addEventListener('click', () => window.fileExplorer.goToParent());
+            pathDisplay.appendChild(parentBtn);
+            pathDisplay.appendChild(document.createTextNode(' '));
         }
         
-        breadcrumbs += `<button class="path-home" onclick="window.fileExplorer.loadFiles('')" title="Go to Root Directory (${serverRootDir})">🏠</button>`;
+        // Home button
+        const homeBtn = document.createElement('button');
+        homeBtn.className = 'path-home';
+        homeBtn.title = `Go to Root Directory (${serverRootDir})`;
+        homeBtn.textContent = '🏠';
+        homeBtn.addEventListener('click', () => window.fileExplorer.loadFiles(''));
+        pathDisplay.appendChild(homeBtn);
         
         if (pathParts.length > 0) {
-            breadcrumbs += ' / ';
+            pathDisplay.appendChild(document.createTextNode(' / '));
             pathParts.forEach((part, index) => {
                 if (part) {
                     const pathToHere = pathParts.slice(0, index + 1).join('/');
-                    breadcrumbs += `<button class="path-segment" onclick="window.fileExplorer.loadFiles('${pathToHere}')" title="Navigate to ${pathToHere}">${part}</button>`;
+                    const segmentBtn = document.createElement('button');
+                    segmentBtn.className = 'path-segment';
+                    segmentBtn.title = `Navigate to ${pathToHere}`;
+                    segmentBtn.textContent = part;
+                    segmentBtn.addEventListener('click', () => window.fileExplorer.loadFiles(pathToHere));
+                    pathDisplay.appendChild(segmentBtn);
                     if (index < pathParts.length - 1) {
-                        breadcrumbs += ' / ';
+                        pathDisplay.appendChild(document.createTextNode(' / '));
                     }
                 }
             });
         }
         
-        breadcrumbs += ` <span class="item-count">(${fileCount} items)</span>`;
-        pathDisplay.innerHTML = breadcrumbs;
+        const countSpan = document.createElement('span');
+        countSpan.className = 'item-count';
+        countSpan.textContent = ` (${fileCount} items)`;
+        pathDisplay.appendChild(countSpan);
     }
     
     function selectFile(index, filePath, fileName, options = {}) {
         const items = document.querySelectorAll('.file-item');
         items.forEach(item => item.classList.remove('selected'));
 
-        if (index >= 0 && index < filteredFiles.length) {
+        // Check both filteredFiles length AND that DOM element exists (race condition protection)
+        if (index >= 0 && index < filteredFiles.length && items[index]) {
             selectedIndex = index;
             items[index].classList.add('selected');
             
             // Scroll into view if needed
             items[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else if (index >= 0 && index < filteredFiles.length) {
+            // DOM not ready yet, just update the index - the display will catch up
+            selectedIndex = index;
+            console.log(`selectFile: DOM element not ready for index ${index}, updating selectedIndex only`);
         }
     }
     
@@ -1843,6 +1876,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         if (lastSlashIndex > 0) {
             currentPath = currentPath.substring(0, lastSlashIndex);
         } else {
+            // No slash or slash at position 0 means we're one level deep, go to root
             currentPath = '';
         }
         clearContentView();
@@ -1854,6 +1888,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         currentPath: () => currentPath,
         currentFiles: () => currentFiles,
         filteredFiles: () => filteredFiles,
+        serverRootDir: () => serverRootDir,
         loadFiles: loadFiles,
         updateDetails: updateDetails,
         selectFile: selectFile,

@@ -1,6 +1,7 @@
 require('dotenv').config();
 
 const express = require('express');
+const fs = require('fs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 const path = require('path');
@@ -24,7 +25,7 @@ const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-check
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
-const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi, renameAnnotation } = require('./lib/annotation-handlers');
+const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi, renameAnnotation, migrateToSparseApi } = require('./lib/annotation-handlers');
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
 const AIFileAnalyzer = require('./lib/ai-file-analyzer');
@@ -213,6 +214,7 @@ app.get('/api/annotations', requireAuth, getAnnotations);
 app.post('/api/annotations', requireAuth, postAnnotations);
 app.delete('/api/annotations', requireAuth, deleteAnnotations);
 app.get('/api/search-annotations', requireAuth, searchAnnotations);
+app.post('/api/annotations/migrate-sparse', requireAuth, migrateToSparseApi);
 
 // Bookmark routes
 app.get('/bookmarks', requireAuth, getBookmarksApi);
@@ -511,9 +513,38 @@ app.get('/images/:filename', requireAuth, async (req, res) => {
     res.status(404).json({ error: 'Image endpoint not fully implemented yet' });
 });
 
-// Session-based current path persistence
+// Session-based current path persistence with .latest file backup
+const latestPathFile = path.join(__dirname, '.latest');
+
+// Helper to read the latest path from file
+function readLatestPath() {
+    try {
+        if (fs.existsSync(latestPathFile)) {
+            const content = fs.readFileSync(latestPathFile, 'utf-8').trim();
+            // Validate that the path exists within baseDir
+            const fullPath = path.resolve(baseDir, content);
+            if (content && fullPath.startsWith(path.resolve(baseDir)) && fs.existsSync(fullPath)) {
+                return content;
+            }
+        }
+    } catch (err) {
+        console.warn('Failed to read .latest file:', err.message);
+    }
+    return '';
+}
+
+// Helper to save the latest path to file
+function saveLatestPath(pathToSave) {
+    try {
+        fs.writeFileSync(latestPathFile, pathToSave || '', 'utf-8');
+    } catch (err) {
+        console.warn('Failed to save .latest file:', err.message);
+    }
+}
+
 app.get('/api/current-path', (req, res) => {
-    const currentPath = req.session.currentPath || '';
+    // Try session first, then .latest file
+    const currentPath = req.session.currentPath || readLatestPath();
     res.json({ currentPath });
 });
 
@@ -521,14 +552,18 @@ app.post('/api/current-path', (req, res) => {
     const { path: newPath } = req.body;
     req.session.currentPath = newPath || '';
     req.session.lastBrowsedPath = newPath || '';  // Sync both session keys
+    // Also save to .latest file for persistence across restarts
+    saveLatestPath(newPath || '');
     res.json({ success: true, currentPath: req.session.currentPath });
 });
 
 // Endpoint to get server root info
 app.get('/api/server-info', (req, res) => {
+    // Try session first, then .latest file
+    const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
     res.json({ 
         rootDir: baseDir,
-        currentPath: req.session.currentPath || req.session.lastBrowsedPath || ''
+        currentPath: currentPath
     });
 });
 
