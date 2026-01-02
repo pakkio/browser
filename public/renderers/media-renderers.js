@@ -1,19 +1,92 @@
 class AudioRenderer {
+    constructor() {
+        this.handleKeyDown = null;
+        this.currentAudio = null;
+    }
+    
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
+        // Clean up previous instance
+        this.cleanup();
+        
         const audio = document.createElement('audio');
+        this.currentAudio = audio;
         audio.controls = true;
         audio.src = `/files?path=${encodeURIComponent(filePath)}`;
         contentOther.appendChild(audio);
         contentOther.style.display = 'block';
+        
+        // Add keyboard handler for escape key
+        this.handleKeyDown = (e) => {
+            if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
+                return;
+            }
+            
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                this.stopAndCleanupMedia();
+            }
+        };
+        
+        document.addEventListener('keydown', this.handleKeyDown);
     }
     
     cleanup() {
-        // Stop any playing audio in content areas
+        // Remove keyboard listener
+        if (this.handleKeyDown) {
+            document.removeEventListener('keydown', this.handleKeyDown);
+            this.handleKeyDown = null;
+        }
+        
+        // Stop any playing audio in content areas - pause and mute
         const audios = document.querySelectorAll('#content-other audio');
         audios.forEach(audio => {
             audio.pause();
+            audio.muted = true;
             audio.currentTime = 0;
         });
+        
+        this.currentAudio = null;
+    }
+    
+    stopAndCleanupMedia() {
+        // Stop current audio: pause, mute, and reset
+        if (this.currentAudio) {
+            this.currentAudio.pause();
+            this.currentAudio.muted = true;
+            this.currentAudio.currentTime = 0;
+            this.currentAudio.src = '';
+            this.currentAudio.load();
+        }
+        
+        // Clear content area
+        const contentOther = document.getElementById('content-other');
+        if (contentOther) {
+            contentOther.innerHTML = '';
+            contentOther.style.display = 'none';
+        }
+        
+        // Show feedback
+        this.showToast('Audio stopped', 'info');
+        
+        this.currentAudio = null;
+    }
+    
+    showToast(text, type = 'info') {
+        const colors = {
+            success: 'rgba(76, 175, 80, 0.9)',
+            info: 'rgba(33, 150, 243, 0.9)',
+            warning: 'rgba(255, 87, 34, 0.9)',
+            error: 'rgba(244, 67, 54, 0.9)'
+        };
+        const message = document.createElement('div');
+        message.textContent = text;
+        message.style.cssText = `
+            position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            background: ${colors[type] || colors.info}; color: white; padding: 10px 20px;
+            border-radius: 20px; z-index: 10001; font-weight: bold;
+        `;
+        document.body.appendChild(message);
+        setTimeout(() => message.remove(), 2000);
     }
 }
 
@@ -394,7 +467,13 @@ class VideoRenderer {
         this.loadCurrentAnnotations();
         
         // Add keyboard handler for spacebar fullscreen toggle and play/pause
+        // We use a single handler attached to document, but check if video is the target
+        // to ensure user gestures are properly recognized for fullscreen API
         this.handleKeyDown = (e) => {
+            // Prevent duplicate handling - only process once per event
+            if (e._videoHandled) return;
+            e._videoHandled = true;
+            
             console.log('Video keydown event:', e.code, e.key);
 
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
@@ -404,6 +483,15 @@ class VideoRenderer {
             if (e.code === 'Space') {
                 e.preventDefault();
                 this.togglePlayAndFullscreen(this.currentVideo);
+            } else if (e.key === 'f' || e.key === 'F') {
+                // Toggle fullscreen with 'f' key
+                e.preventDefault();
+                e.stopPropagation();
+                this.toggleFullscreen(this.currentVideo);
+            } else if (e.key === 'Escape') {
+                // Exit fullscreen and/or stop media
+                e.preventDefault();
+                this.handleEscapeKey();
             } else if (e.code === 'ArrowUp' || e.code === 'ArrowDown' || e.code === 'PageUp' || e.code === 'PageDown' ||
                        e.key === 'PageUp' || e.key === 'PageDown') {
                 e.preventDefault();
@@ -427,11 +515,13 @@ class VideoRenderer {
             }
         };
         
-        document.addEventListener('keydown', this.handleKeyDown);
-
-        // Also add to video element for fullscreen mode (events don't bubble to document in fullscreen)
+        // Attach to video element directly for proper user gesture recognition
+        // This is especially important for fullscreen API in Chrome
         video.addEventListener('keydown', this.handleKeyDown);
         video.tabIndex = 0; // Make video focusable for keyboard events
+        
+        // Also attach to document for when video isn't focused
+        document.addEventListener('keydown', this.handleKeyDown);
 
         // Focus video when entering fullscreen (from any source like double-click or native controls)
         this.handleFullscreenChange = () => {
@@ -962,47 +1052,110 @@ class VideoRenderer {
         }
     }
     
+    toggleFullscreen(video) {
+        if (!video) return;
+        
+        // Check if ANY element is in fullscreen (not just the video)
+        if (document.fullscreenElement) {
+            // Exit fullscreen
+            document.exitFullscreen().catch(err => {
+                console.log('Error exiting fullscreen:', err);
+            });
+        } else {
+            // Enter fullscreen
+            video.requestFullscreen().then(() => {
+                video.focus(); // Focus video for keyboard events
+            }).catch(err => {
+                console.log('Error entering fullscreen:', err);
+            });
+        }
+    }
+    
+    handleEscapeKey() {
+        // If in fullscreen, exit fullscreen first
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(err => {
+                console.log('Error exiting fullscreen:', err);
+            });
+            return;
+        }
+        
+        // Otherwise, stop and clean up media
+        this.stopAndCleanupMedia();
+    }
+    
+    stopAndCleanupMedia() {
+        // Stop current video: pause, mute, and reset
+        if (this.currentVideo) {
+            // Remove error handler temporarily to avoid triggering error on src clear
+            const video = this.currentVideo;
+            const originalOnerror = video.onerror;
+            video.onerror = null;
+            
+            video.pause();
+            video.muted = true;
+            video.currentTime = 0;
+            
+            // Remove source to fully stop buffering/loading
+            video.removeAttribute('src');
+            video.load();
+            
+            // Restore error handler after a tick
+            setTimeout(() => {
+                if (video) video.onerror = originalOnerror;
+            }, 100);
+        }
+        
+        // Also stop any audio elements
+        const audios = document.querySelectorAll('#content-other audio');
+        audios.forEach(audio => {
+            audio.pause();
+            audio.muted = true;
+            audio.currentTime = 0;
+            audio.removeAttribute('src');
+            audio.load();
+        });
+        
+        // Clear content area
+        const contentOther = document.getElementById('content-other');
+        if (contentOther) {
+            contentOther.innerHTML = '';
+            contentOther.style.display = 'none';
+        }
+        
+        // Show feedback
+        this.showToast('Media stopped', 'info');
+        
+        // Reset video reference
+        this.currentVideo = null;
+    }
+    
     async loadSubtitles(video, videoPath, videoFileName) {
-        // Get base path without file extension
-        const basePath = videoPath.substring(0, videoPath.lastIndexOf('.'));
-
-        // Try only the most common subtitle patterns to reduce 404 spam
-        // Users can press 'S' to manually select from all available subtitles
-        const subtitlePatterns = [
-            `${basePath}.srt`,     // same name, .srt
-            `${basePath}.vtt`,     // same name, .vtt
-            `${basePath}.en.srt`,  // with English language code
-        ];
-
-        for (const subtitlePath of subtitlePatterns) {
-            const subtitleFileName = subtitlePath.split('/').pop();
-
-            try {
-                // Try to fetch the subtitle file to see if it exists
-                const response = await window.authManager.authenticatedFetch(
-                    `/subtitle?path=${encodeURIComponent(subtitlePath)}`
-                );
-
-                if (response.ok) {
-                    // Create a track element
-                    const track = document.createElement('track');
-                    track.kind = 'subtitles';
-                    track.label = this.getSubtitleLabel(subtitleFileName);
-                    track.srclang = this.detectLanguage(subtitleFileName);
-                    track.src = `/subtitle?path=${encodeURIComponent(subtitlePath)}`;
-                    track.default = true;
-
-                    video.appendChild(track);
-
-                    // Show a subtle notification
-                    this.showSubtitleNotification(`Subtitles loaded: ${subtitleFileName}`);
-
-                    // Stop after finding the first subtitle file
-                    return;
-                }
-            } catch (error) {
-                // Silently continue to next pattern
-            }
+        // Wait for subtitle discovery to complete first
+        // The discoverSubtitles method populates this.availableSubtitles
+        // We'll wait a short time for it to finish
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        if (!this.availableSubtitles || this.availableSubtitles.length === 0) {
+            // No subtitles discovered in directory
+            return;
+        }
+        
+        // Get base name without extension for matching
+        const videoBaseName = videoFileName.substring(0, videoFileName.lastIndexOf('.')).toLowerCase();
+        
+        // Try to find a matching subtitle file
+        // Priority: exact match, then language-suffixed match, then any subtitle
+        const exactMatch = this.availableSubtitles.find(sub => {
+            const subBaseName = sub.name.substring(0, sub.name.lastIndexOf('.')).toLowerCase();
+            // Remove language suffix if present (e.g., "video.en" -> "video")
+            const subBaseWithoutLang = subBaseName.replace(/\.(en|eng|it|ita|es|spa|fr|fra|de|ger)$/i, '');
+            return subBaseName === videoBaseName || subBaseWithoutLang === videoBaseName;
+        });
+        
+        if (exactMatch) {
+            // Load the matching subtitle
+            await this.loadSubtitleFile(exactMatch.path, exactMatch.name);
         }
     }
     
@@ -1435,9 +1588,21 @@ class VideoRenderer {
         // Clear all content from content-other to prevent stacking
         const contentOther = document.getElementById('content-other');
         if (contentOther) {
-            // Pause any playing videos before clearing
+            // Pause and mute any playing videos before clearing
             const videos = contentOther.querySelectorAll('video');
-            videos.forEach(video => video.pause());
+            videos.forEach(video => {
+                video.pause();
+                video.muted = true;
+                video.currentTime = 0;
+            });
+            
+            // Pause and mute any playing audios before clearing
+            const audios = contentOther.querySelectorAll('audio');
+            audios.forEach(audio => {
+                audio.pause();
+                audio.muted = true;
+                audio.currentTime = 0;
+            });
 
             // Clear everything
             contentOther.innerHTML = '';
@@ -1518,13 +1683,53 @@ class VideoRenderer {
     }
 
     getDialogContainer() {
-        // Always append dialogs to body, they will overlay correctly due to fixed positioning
-        // and high z-index, even in fullscreen mode
+        // When in fullscreen mode with a video element, we can't append children to video
+        // So we need to temporarily exit fullscreen to show dialogs
+        // The dialog will be shown on document.body
+        if (document.fullscreenElement) {
+            // Check if the fullscreen element is a video - videos can't have children
+            if (document.fullscreenElement.tagName === 'VIDEO') {
+                // Exit fullscreen first, dialog will be shown on body
+                // Store flag to restore fullscreen after dialog closes
+                this._wasFullscreen = true;
+                document.exitFullscreen().catch(err => {
+                    console.log('Error exiting fullscreen for dialog:', err);
+                });
+            } else {
+                // For non-video fullscreen elements (like divs), we can add an overlay
+                let overlay = document.fullscreenElement.querySelector('.video-dialog-overlay');
+                if (!overlay) {
+                    overlay = document.createElement('div');
+                    overlay.className = 'video-dialog-overlay';
+                    overlay.style.cssText = `
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        pointer-events: none;
+                        z-index: 999999;
+                    `;
+                    document.fullscreenElement.appendChild(overlay);
+                }
+                return overlay;
+            }
+        }
         return document.body;
     }
 
-    createBookmarkDialog(video) {
+    async createBookmarkDialog(video) {
         if (!video) return;
+        
+        // If in fullscreen with a video, exit first and wait
+        if (document.fullscreenElement && document.fullscreenElement.tagName === 'VIDEO') {
+            this._wasFullscreen = true;
+            await document.exitFullscreen().catch(err => {
+                console.log('Error exiting fullscreen for dialog:', err);
+            });
+            // Small delay to let fullscreen exit complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
 
         const dialog = document.createElement('div');
         dialog.style.cssText = `
@@ -1533,6 +1738,7 @@ class VideoRenderer {
             padding: 20px; border-radius: 8px; z-index: 10000;
             min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: auto;
         `;
 
         const currentTime = video.currentTime;
@@ -1588,6 +1794,16 @@ class VideoRenderer {
     }
 
     async showBookmarksDialog() {
+        // If in fullscreen with a video, exit first and wait
+        if (document.fullscreenElement && document.fullscreenElement.tagName === 'VIDEO') {
+            this._wasFullscreen = true;
+            await document.exitFullscreen().catch(err => {
+                console.log('Error exiting fullscreen for dialog:', err);
+            });
+            // Small delay to let fullscreen exit complete
+            await new Promise(resolve => setTimeout(resolve, 100));
+        }
+        
         await this.loadBookmarks();
 
         if (this.bookmarks.length === 0) {
@@ -1603,6 +1819,7 @@ class VideoRenderer {
             min-width: 350px; max-height: 60vh; overflow-y: auto;
             box-shadow: 0 4px 20px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: auto;
         `;
 
         let listHTML = '<div style="margin-bottom: 15px;">📍 Bookmarks:</div>';
@@ -1696,6 +1913,7 @@ class VideoRenderer {
             padding: 20px; border-radius: 8px; z-index: 10000;
             min-width: 300px; box-shadow: 0 4px 20px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.1);
+            pointer-events: auto;
         `;
 
         const formattedTime = this.formatTime(position);
@@ -1792,6 +2010,7 @@ class VideoRenderer {
             position: fixed; top: 20%; left: 50%; transform: translate(-50%, -50%);
             background: ${colors[type] || colors.info}; color: white; padding: 10px 20px;
             border-radius: 20px; z-index: 10001; font-weight: bold;
+            pointer-events: auto;
         `;
         this.getDialogContainer().appendChild(message);
         setTimeout(() => message.remove(), 2000);
