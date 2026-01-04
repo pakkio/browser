@@ -1,6 +1,7 @@
 class AnnotationManager {
     constructor() {
         this.annotations = {};
+        this.currentDirectory = null; // Track current browsing directory
         this.colors = [
             { name: 'red', hex: '#f44336', label: 'Red' },
             { name: 'orange', hex: '#ff9800', label: 'Orange' },
@@ -12,6 +13,11 @@ class AnnotationManager {
             { name: 'teal', hex: '#009688', label: 'Teal' }
         ];
         this.loadAnnotations();
+    }
+
+    // Set the current directory (called when navigating)
+    setCurrentDirectory(directory) {
+        this.currentDirectory = directory;
     }
 
     getFileTypeFromExtension(extension, fileName = '') {
@@ -450,6 +456,8 @@ class AnnotationManager {
             if (filters.hasBookmarks) params.append('hasBookmarks', 'true');
             if (filters.color) params.append('color', filters.color);
             if (filters.fileType) params.append('fileType', filters.fileType);
+            if (filters.directory) params.append('directory', filters.directory);
+            if (filters.exactDir) params.append('exactDir', 'true');
 
             // Use direct fetch if authManager is not available or auth is disabled
             const fetchFn = window.authManager?.authenticatedFetch || fetch;
@@ -536,10 +544,16 @@ class AnnotationManager {
                         <option value="bookmarks">With Video Bookmarks</option>
                         ${this.colors.map(c => `<option value="color-${c.name}">Color: ${c.label}</option>`).join('')}
                     </select>
+                    <label style="display: flex; align-items: center; gap: 5px; color: #d4d4d4; font-size: 0.85rem; cursor: pointer;">
+                        <input type="checkbox" id="current-folder-only" style="cursor: pointer;">
+                        📁 Current folder only
+                    </label>
                     <button id="refresh-bookmarks" style="background: #444444; border: 1px solid #666666; 
                             color: #d4d4d4; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🔄 Refresh</button>
                     <button id="migrate-bookmarks" style="background: #ff9800; border: 1px solid #f57c00; 
-                            color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🔧 Migrate</button>
+                            color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">🔧 Fix Paths</button>
+                    <button id="migrate-sparse" style="background: #2196f3; border: 1px solid #1976d2; 
+                            color: white; padding: 6px 12px; border-radius: 4px; cursor: pointer;">📦 To Sparse</button>
                 </div>
             </div>
             
@@ -676,11 +690,13 @@ class AnnotationManager {
         const searchInput = modal.querySelector('#bookmarks-search');
         const fileTypeSelect = modal.querySelector('#bookmarks-file-type');
         const filterSelect = modal.querySelector('#bookmarks-filter');
+        const currentFolderCheckbox = modal.querySelector('#current-folder-only');
 
         const filterBookmarks = async () => {
             const searchQuery = searchInput.value.trim();
             const fileTypeValue = fileTypeSelect.value;
             const filterValue = filterSelect.value;
+            const currentFolderOnly = currentFolderCheckbox.checked;
             
             let filters = {};
             
@@ -696,6 +712,12 @@ class AnnotationManager {
                 filters.fileType = fileTypeValue;
             }
             
+            // Add current folder filter if checked
+            if (currentFolderOnly && this.currentDirectory) {
+                filters.directory = this.currentDirectory;
+                filters.exactDir = true;
+            }
+            
             const filteredAnnotations = await this.searchAnnotations(searchQuery || undefined, filters);
             renderBookmarks(filteredAnnotations);
         };
@@ -703,6 +725,7 @@ class AnnotationManager {
         searchInput.addEventListener('input', filterBookmarks);
         fileTypeSelect.addEventListener('change', filterBookmarks);
         filterSelect.addEventListener('change', filterBookmarks);
+        currentFolderCheckbox.addEventListener('change', filterBookmarks);
 
         // Refresh button
         modal.querySelector('#refresh-bookmarks').addEventListener('click', async () => {
@@ -714,10 +737,20 @@ class AnnotationManager {
             filterSelect.value = '';
         });
 
-        // Migration button
+        // Migration button (fix paths)
         modal.querySelector('#migrate-bookmarks').addEventListener('click', async () => {
             if (confirm('This will attempt to fix bookmark paths. Continue?')) {
                 await this.migrateBookmarks();
+                // Refresh the bookmarks list
+                const refreshedAnnotations = await this.searchAnnotations();
+                renderBookmarks(refreshedAnnotations);
+            }
+        });
+
+        // Migrate to sparse storage button
+        modal.querySelector('#migrate-sparse').addEventListener('click', async () => {
+            if (confirm('This will convert all annotations to sparse storage (one .browser.json file per annotated file). Continue?')) {
+                await this.migrateToSparseStorage();
                 // Refresh the bookmarks list
                 const refreshedAnnotations = await this.searchAnnotations();
                 renderBookmarks(refreshedAnnotations);
@@ -924,11 +957,22 @@ class AnnotationManager {
             closeModalCallback();
         }
         
-        // Navigate to the directory containing the file and select it
-        const directory = filePath.includes('/') ? filePath.substring(0, filePath.lastIndexOf('/')) : '';
-        const fileName = filePath.split('/').pop();
+        // Strip the server root directory from the path if present
+        let relativePath = filePath;
+        const serverRoot = window.fileExplorer?.serverRootDir?.() || '';
+        if (serverRoot && relativePath.startsWith(serverRoot)) {
+            relativePath = relativePath.substring(serverRoot.length);
+            // Remove leading slash if present
+            if (relativePath.startsWith('/')) {
+                relativePath = relativePath.substring(1);
+            }
+        }
         
-        console.log('Navigating to file:', { filePath, directory, fileName });
+        // Navigate to the directory containing the file and select it
+        const directory = relativePath.includes('/') ? relativePath.substring(0, relativePath.lastIndexOf('/')) : '';
+        const fileName = relativePath.split('/').pop();
+        
+        console.log('Navigating to file:', { originalPath: filePath, relativePath, directory, fileName, serverRoot });
         
         // Use the existing file explorer to navigate
         if (window.fileExplorer && window.fileExplorer.loadFiles) {
@@ -939,28 +983,32 @@ class AnnotationManager {
             // Load the directory first
             window.fileExplorer.loadFiles(targetDirectory);
             
-            // Wait for files to load and then select the target file
+            // Wait for files to load and DOM to be ready, then select the target file
             const attemptToSelectFile = (attempts = 0) => {
                 const filteredFiles = window.fileExplorer.filteredFiles();
-                console.log('Attempt', attempts, 'filteredFiles:', filteredFiles.map(f => f.name));
+                const domItems = document.querySelectorAll('.file-item');
+                console.log('Attempt', attempts, 'filteredFiles:', filteredFiles.length, 'DOM items:', domItems.length);
                 
                 const fileIndex = filteredFiles.findIndex(file => file.name === fileName);
                 console.log('Found file at index:', fileIndex);
                 
-                if (fileIndex >= 0) {
+                // Check both that we found the file AND the DOM is ready with enough elements
+                if (fileIndex >= 0 && domItems.length > fileIndex) {
                     // Use the exposed selectFile function to properly select and display the file
                     console.log('Selecting file:', fileName);
-                    window.fileExplorer.selectFile(fileIndex, filePath, fileName);
-                } else if (attempts < 10) {
-                    // Retry if files haven't loaded yet
+                    window.fileExplorer.selectFile(fileIndex, relativePath, fileName);
+                    // Also display the file content
+                    window.fileExplorer.showContent(targetDirectory, fileName);
+                } else if (attempts < 15) {
+                    // Retry if files haven't loaded yet or DOM isn't ready
                     setTimeout(() => attemptToSelectFile(attempts + 1), 200);
                 } else {
-                    console.error('Could not find file:', fileName, 'in directory:', directory);
+                    console.error('Could not find file:', fileName, 'in directory:', directory, '(fileIndex:', fileIndex, 'domItems:', domItems.length, ')');
                 }
             };
             
-            // Start attempting to select the file
-            setTimeout(() => attemptToSelectFile(), 100);
+            // Start attempting to select the file - wait a bit longer for loadFiles to complete
+            setTimeout(() => attemptToSelectFile(), 300);
         }
     }
     // Migration utility to fix bookmark paths
@@ -1022,6 +1070,35 @@ class AnnotationManager {
             
         } catch (error) {
             console.error('Migration failed:', error);
+            alert('Migration failed: ' + error.message);
+        }
+    }
+
+    // Migrate to sparse storage (one .browser.json per file)
+    async migrateToSparseStorage() {
+        console.log('Starting migration to sparse storage...');
+        
+        try {
+            const fetchFn = window.authManager?.authenticatedFetch || fetch;
+            const response = await fetchFn('/api/annotations/migrate-sparse', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+            });
+            
+            if (!response?.ok) {
+                throw new Error('Failed to migrate to sparse storage');
+            }
+            
+            const result = await response.json();
+            console.log('Migration result:', result);
+            
+            alert(`Migration to sparse storage complete!\nMigrated: ${result.migrated}\nSkipped: ${result.skipped}\nFailed: ${result.failed}${result.errors?.length ? '\n\nErrors:\n' + result.errors.slice(0, 5).join('\n') : ''}`);
+            
+            // Reload annotations
+            await this.loadAnnotations();
+            
+        } catch (error) {
+            console.error('Migration to sparse storage failed:', error);
             alert('Migration failed: ' + error.message);
         }
     }

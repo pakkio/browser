@@ -1085,11 +1085,14 @@ function initializeFileExplorer() {
                     if (file.isDirectory) {
                         li.setAttribute('data-type', 'directory');
                         li.addEventListener('click', () => {
-                            currentPath = path ? `${path}/${file.name}` : file.name;
-                            loadFiles(currentPath);
-                            updateDetails(null);
+                            const dirPath = path ? `${path}/${file.name}` : file.name;
+                            // Show library view on the right panel instead of navigating
+                            // Use Enter key to navigate into the directory
+                            showLibraryView(dirPath, file.name);
+                            // Select this item for keyboard navigation
+                            selectFile(index, dirPath, file.name, {});
                         });
-                        
+
                         // Add context menu for directories
                         li.addEventListener('contextmenu', (e) => {
                             e.preventDefault();
@@ -1256,9 +1259,9 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
 
     function showContent(path, fileName, options = {}) {
         const filePath = path ? `${path}/${fileName}` : fileName;
-        
+
         fileRenderer.render(filePath, fileName, contentCode, contentOther, options);
-        
+
         // Dispatch file selection event for AI summary
         document.dispatchEvent(new CustomEvent('fileSelected', {
             detail: {
@@ -1268,7 +1271,41 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             }
         }));
     }
-    
+
+    // Show library view for a directory (displays files as visual book shelf)
+    async function showLibraryView(dirPath, dirName) {
+        // Clear the code panel and show library in the other panel
+        contentCode.innerHTML = '';
+        contentCode.parentElement.style.display = 'none';
+
+        // Render library view
+        if (window.libraryRenderer) {
+            await window.libraryRenderer.render(dirPath, contentOther);
+        } else {
+            contentOther.innerHTML = '<div class="library-error">Library renderer not loaded</div>';
+            contentOther.style.display = 'block';
+        }
+
+        // Update file details panel
+        fileDetails.innerHTML = `
+            <div class="detail-item">
+                <span class="detail-label">Directory:</span>
+                <span class="detail-value" title="${dirName}">${dirName}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">Path:</span>
+                <span class="detail-value" title="${dirPath}">${dirPath || '/'}</span>
+            </div>
+            <div class="detail-item">
+                <span class="detail-label">View:</span>
+                <span class="detail-value">Library View</span>
+            </div>
+            <p style="margin-top: 10px; font-size: 0.75rem; color: #888;">
+                Click an item to view it. Press Enter to navigate into this folder.
+            </p>
+        `;
+    }
+
     function formatFileSize(bytes) {
         if (bytes === 0) return '0 B';
         const k = 1024;
@@ -1898,6 +1935,30 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         clearContentView: clearContentView,
         goToParent: goToParent
     };
+
+    // Check for file parameter in URL to auto-open a file
+    const urlParams = new URLSearchParams(window.location.search);
+    const fileToOpen = urlParams.get('file');
+    if (fileToOpen) {
+        // Extract directory and filename
+        const lastSlash = fileToOpen.lastIndexOf('/');
+        const dirPath = lastSlash > 0 ? fileToOpen.substring(0, lastSlash) : '';
+        const fileName = lastSlash >= 0 ? fileToOpen.substring(lastSlash + 1) : fileToOpen;
+
+        console.log(`Auto-opening file from URL: ${fileToOpen}`);
+
+        // Load the directory first, then show the file
+        setTimeout(() => {
+            if (dirPath) {
+                currentPath = dirPath;
+                loadFiles(currentPath);
+            }
+            // Show the file content
+            setTimeout(() => {
+                showContent(dirPath, fileName, { autoPlay: true });
+            }, 500);
+        }, 100);
+    }
 }
 
 

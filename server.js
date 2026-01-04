@@ -19,7 +19,9 @@ const {
     servePdfPreview,
     serveVideoTranscode,
     serveSubtitle,
-    validatePdf
+    validatePdf,
+    serveVideoThumbnail,
+    serveDirectoryLibrary
 } = require('./lib/file-handlers');
 const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-checker');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
@@ -172,6 +174,10 @@ app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
 app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
 app.get('/subtitle', requireAuth, serveSubtitle);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
+
+// Video thumbnail and library view routes
+app.get('/video-thumbnail', requireAuth, previewLimiter, serveVideoThumbnail);
+app.get('/api/library', requireAuth, serveDirectoryLibrary);
 
 // Video codec check endpoint
 app.get('/api/video-codec-check', requireAuth, async (req, res) => {
