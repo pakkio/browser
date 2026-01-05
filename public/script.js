@@ -852,6 +852,7 @@ function initializeFileExplorer() {
     let serverRootDir = '';  // Will be fetched from server
     let sortField = 'name';  // name, date, size, type
     let sortAscending = true;  // true = ascending, false = descending
+    let skipAutoDisplay = false;  // Set to true when opening specific file from URL
     const fileRenderer = new FileRenderer();
 
     function matchesSearchTerms(filename, searchTerms) {
@@ -966,8 +967,10 @@ function initializeFileExplorer() {
                     window.annotationManager.setCurrentDirectory(fullPath);
                 }
                 
-                // Auto-display folder contents after loading
-                autoDisplayFolderContents(data.files, path);
+                // Auto-display folder contents after loading (skip if opening specific file from URL)
+                if (!skipAutoDisplay) {
+                    autoDisplayFolderContents(data.files, path);
+                }
                 
                 if (window.debugConsole) {
                     window.debugConsole.showProgress('Complete', 100);
@@ -1720,19 +1723,32 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         });
     }
 
+    // Check if we have a file parameter in URL - if so, skip path restoration
+    const urlParams = new URLSearchParams(window.location.search);
+    const hasFileParam = urlParams.has('file');
+    
     // Fetch server info and restore saved current path from session, then load files
     fetch('/api/server-info')
         .then(response => response.json())
         .then(data => {
             serverRootDir = data.rootDir || '';
-            currentPath = data.currentPath || '';
-            console.log('Server root directory:', serverRootDir);
-            console.log('Restored current path:', currentPath);
-            loadFiles(currentPath);
+            // Only restore saved path if there's no ?file= parameter in URL
+            // Otherwise the URL parameter handler will set the correct path
+            if (!hasFileParam) {
+                currentPath = data.currentPath || '';
+                console.log('Server root directory:', serverRootDir);
+                console.log('Restored current path:', currentPath);
+                loadFiles(currentPath);
+            } else {
+                console.log('Server root directory:', serverRootDir);
+                console.log('Skipping path restoration - file parameter in URL');
+            }
         })
         .catch(err => {
             console.warn('Failed to fetch server info, starting at root:', err);
-            loadFiles(currentPath);
+            if (!hasFileParam) {
+                loadFiles(currentPath);
+            }
         });
     
     // Quick annotation function for keyboard shortcuts
@@ -1937,7 +1953,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     };
 
     // Check for file parameter in URL to auto-open a file
-    const urlParams = new URLSearchParams(window.location.search);
+    // (urlParams and hasFileParam already declared above for server-info handling)
     const fileToOpen = urlParams.get('file');
     if (fileToOpen) {
         // Extract directory and filename
@@ -1946,6 +1962,9 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         const fileName = lastSlash >= 0 ? fileToOpen.substring(lastSlash + 1) : fileToOpen;
 
         console.log(`Auto-opening file from URL: ${fileToOpen}`);
+
+        // Set flag to prevent auto-display of first file in folder
+        skipAutoDisplay = true;
 
         // Load the directory first, then show the file
         setTimeout(() => {
@@ -1956,6 +1975,8 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             // Show the file content
             setTimeout(() => {
                 showContent(dirPath, fileName, { autoPlay: true });
+                // Reset flag after file is shown
+                skipAutoDisplay = false;
             }, 500);
         }, 100);
     }
