@@ -438,6 +438,7 @@ class LibraryRenderer {
              'pdf': '📄',
              'comic': '📚',
              'epub': '📖',
+             'docx': '📝',
              'generic': '📄'
          };
          return icons[type] || icons.generic;
@@ -506,6 +507,8 @@ class LibraryRenderer {
                     thumbnailUrl = `/comic-preview?path=${encodeURIComponent(filePath)}&index=0`;
                 } else if (type === 'epub') {
                     thumbnailUrl = `/epub-cover?path=${encodeURIComponent(filePath)}`;
+                } else if (type === 'docx') {
+                    thumbnailUrl = `/docx-preview?path=${encodeURIComponent(filePath)}`;
                 }
 
                 if (thumbnailUrl) {
