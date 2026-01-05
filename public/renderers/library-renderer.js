@@ -1,5 +1,46 @@
 // Library View Renderer - displays directory contents as a visual book shelf
 class LibraryRenderer {
+    sortFiles(sortField, sortAscending) {
+        const compareFn = (a, b) => {
+            // Directories first
+            if (a.isDirectory !== b.isDirectory) {
+                return a.isDirectory ? -1 : 1;
+            }
+
+            let comparison = 0;
+            switch (sortField) {
+                case 'name': {
+                    comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    break;
+                }
+                case 'date': {
+                    const dateA = a.modified ? new Date(a.modified).getTime() : 0;
+                    const dateB = b.modified ? new Date(b.modified).getTime() : 0;
+                    comparison = dateA - dateB;
+                    break;
+                }
+                case 'size': {
+                    const sizeA = a.size || 0;
+                    const sizeB = b.size || 0;
+                    comparison = sizeA - sizeB;
+                    break;
+                }
+                case 'type': {
+                    const extA = (a.extension || '').toLowerCase();
+                    const extB = (b.extension || '').toLowerCase();
+                    comparison = extA.localeCompare(extB);
+                    if (comparison === 0) {
+                        comparison = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    }
+                    break;
+                }
+            }
+
+            return sortAscending ? comparison : -comparison;
+        };
+
+        this.files.sort(compareFn);
+    }
     constructor() {
         this.currentPath = '';
         this.files = [];
@@ -51,21 +92,89 @@ class LibraryRenderer {
             }
         }
 
-        // Sort by name
-        this.files.sort((a, b) => a.name.localeCompare(b.name));
+        // Sort using saved preferences (same semantics as main file list)
+        const sortField = localStorage.getItem('librarySortField') || 'name';
+        const sortAscending = (localStorage.getItem('librarySortAsc') || 'true') === 'true';
+        this.sortFiles(sortField, sortAscending);
 
         // Create library container
         const container = document.createElement('div');
         container.className = 'library-container';
 
-        // Header
-        const header = document.createElement('div');
-        header.className = 'library-header';
-        header.innerHTML = `
-            <h2 class="library-title">${this.getDirectoryName(dirPath)}</h2>
-            <span class="library-count">${this.files.length} items</span>
-        `;
-        container.appendChild(header);
+         // Header
+         const header = document.createElement('div');
+         header.className = 'library-header';
+
+         const sortControls = document.createElement('div');
+         sortControls.className = 'library-sort-controls';
+
+         const sortFieldSelect = document.createElement('select');
+         sortFieldSelect.className = 'library-sort-field';
+         sortFieldSelect.innerHTML = `
+             <option value="name">Name</option>
+             <option value="date">Date</option>
+             <option value="size">Size</option>
+             <option value="type">Type</option>
+         `;
+
+         const sortDirectionBtn = document.createElement('button');
+         sortDirectionBtn.className = 'library-sort-direction';
+         sortDirectionBtn.type = 'button';
+
+         header.innerHTML = `
+             <div class="library-header-main">
+                 <h2 class="library-title">${this.getDirectoryName(dirPath)}</h2>
+                 <span class="library-count">${this.files.length} items</span>
+             </div>
+         `;
+
+         // Restore saved sort preferences
+         const savedField = localStorage.getItem('librarySortField') || 'name';
+         let savedAsc = (localStorage.getItem('librarySortAsc') || 'true') === 'true';
+         sortFieldSelect.value = savedField;
+         sortDirectionBtn.textContent = savedAsc ? '↑' : '↓';
+         sortDirectionBtn.title = savedAsc ? 'Sorted ascending (click for descending)' : 'Sorted descending (click for ascending)';
+
+         const renderShelf = () => {
+             // Rebuild shelf to reflect new ordering
+             shelf.innerHTML = '';
+             const maxSize = Math.max(...this.files.map(f => f.size || 0), 1);
+             for (const file of this.files) {
+                 shelf.appendChild(this.createBookItem(file, dirPath, maxSize));
+             }
+
+             // Thumbnails need reloading after rebuilding
+             const loadingEl = document.getElementById('library-loading');
+             if (loadingEl) {
+                 loadingEl.style.display = 'block';
+                 loadingEl.classList.remove('complete');
+             }
+             this.loadThumbnails(shelf, dirPath);
+         };
+
+         const applySort = () => {
+             this.sortFiles(sortFieldSelect.value, savedAsc);
+             localStorage.setItem('librarySortField', sortFieldSelect.value);
+             localStorage.setItem('librarySortAsc', String(savedAsc));
+             renderShelf();
+         };
+
+         sortFieldSelect.addEventListener('change', () => {
+             applySort();
+         });
+
+         sortDirectionBtn.addEventListener('click', () => {
+             savedAsc = !savedAsc;
+             sortDirectionBtn.textContent = savedAsc ? '↑' : '↓';
+             sortDirectionBtn.title = savedAsc ? 'Sorted ascending (click for descending)' : 'Sorted descending (click for ascending)';
+             applySort();
+         });
+
+         sortControls.appendChild(sortFieldSelect);
+         sortControls.appendChild(sortDirectionBtn);
+         header.appendChild(sortControls);
+
+         container.appendChild(header);
 
         // Bookshelf
         const shelf = document.createElement('div');
@@ -165,7 +274,7 @@ class LibraryRenderer {
         item.addEventListener('mousemove', (e) => this.moveTooltip(e));
         item.addEventListener('mouseleave', () => this.hideTooltip());
 
-        // Click handler - select and open in new tab
+        // Click handler - directories navigate, files open
         item.addEventListener('click', (e) => {
             e.preventDefault();
             const filePath = dirPath ? `${dirPath}/${file.name}` : file.name;
@@ -181,7 +290,13 @@ class LibraryRenderer {
             // Select this item
             item.classList.add('selected');
 
-            // Open in new tab
+            if (file.isDirectory) {
+                // Navigate into directory within library view
+                this.render(filePath, document.getElementById('content-other'));
+                return;
+            }
+
+            // Open file in new tab
             this.openInNewTab(filePath, file.name);
         });
 
@@ -259,9 +374,24 @@ class LibraryRenderer {
             }
 
             if (annotation.bookmark || annotation.bookmarks) {
-                const bookmarkInfo = annotation.bookmark || (annotation.bookmarks && annotation.bookmarks[0]);
-                if (bookmarkInfo) {
-                    html += `<div class="tooltip-bookmark">🔖 Bookmarked${bookmarkInfo.name ? ': ' + bookmarkInfo.name : ''}</div>`;
+                const bookmarkList = [];
+                
+                if (annotation.bookmark) {
+                    bookmarkList.push(annotation.bookmark);
+                }
+                if (Array.isArray(annotation.bookmarks)) {
+                    bookmarkList.push(...annotation.bookmarks);
+                }
+
+                const uniqueNames = [...new Set(bookmarkList
+                    .map(b => b && typeof b === 'object' ? b.name : null)
+                    .filter(Boolean)
+                )];
+
+                if (uniqueNames.length > 0) {
+                    html += `<div class="tooltip-bookmark">🔖 Bookmarks:<br>${uniqueNames.join('<br>')}</div>`;
+                } else if (bookmarkList.length > 0) {
+                    html += `<div class="tooltip-bookmark">🔖 Bookmarked (${bookmarkList.length})</div>`;
                 }
             }
 
@@ -300,17 +430,18 @@ class LibraryRenderer {
         }
     }
 
-    getTypeIcon(type, extension) {
-        const icons = {
-            'video': '🎬',
-            'image': '🖼️',
-            'pdf': '📄',
-            'comic': '📚',
-            'epub': '📖',
-            'generic': '📁'
-        };
-        return icons[type] || icons.generic;
-    }
+     getTypeIcon(type, extension) {
+         const icons = {
+             'directory': '📁',
+             'video': '🎬',
+             'image': '🖼️',
+             'pdf': '📄',
+             'comic': '📚',
+             'epub': '📖',
+             'generic': '📄'
+         };
+         return icons[type] || icons.generic;
+     }
 
     truncateName(name) {
         if (name.length > 25) {
@@ -408,8 +539,14 @@ class LibraryRenderer {
     }
 
     openInNewTab(filePath, fileName) {
-        // Open file in a new browser tab with the app (using hash to auto-load)
-        const url = `/?file=${encodeURIComponent(filePath)}`;
+        // Open file in a new browser tab with the app
+        // Note: URLSearchParams.get('file') returns a decoded value, so we must
+        // encode each segment to preserve slashes and special characters.
+        const encodedFilePath = filePath
+            .split('/')
+            .map(segment => encodeURIComponent(segment))
+            .join('/');
+        const url = `/?file=${encodedFilePath}`;
         window.open(url, '_blank');
     }
 }
