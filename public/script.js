@@ -1956,29 +1956,28 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     // (urlParams and hasFileParam already declared above for server-info handling)
     const fileToOpen = urlParams.get('file');
     if (fileToOpen) {
-        // Extract directory and filename
+        // URLSearchParams.get() returns a decoded value.
+        // We can render immediately without waiting for directory load.
         const lastSlash = fileToOpen.lastIndexOf('/');
         const dirPath = lastSlash > 0 ? fileToOpen.substring(0, lastSlash) : '';
         const fileName = lastSlash >= 0 ? fileToOpen.substring(lastSlash + 1) : fileToOpen;
 
-        console.log(`Auto-opening file from URL: ${fileToOpen}`);
+        console.log(`Auto-opening file from URL (fast path): ${fileToOpen}`);
 
-        // Set flag to prevent auto-display of first file in folder
+        // Prevent auto-display of folder contents while we open a specific file
         skipAutoDisplay = true;
 
-        // Load the directory first, then show the file
+        // Set currentPath for consistency (e.g. subtitles / relative lookups)
+        currentPath = dirPath;
+
+        // Render immediately (no directory listing dependency)
+        showContent(dirPath, fileName, { autoPlay: true, keyboardNavigation: true });
+
+        // Load directory in background (for file list / navigation)
         setTimeout(() => {
-            if (dirPath) {
-                currentPath = dirPath;
-                loadFiles(currentPath);
-            }
-            // Show the file content
-            setTimeout(() => {
-                showContent(dirPath, fileName, { autoPlay: true });
-                // Reset flag after file is shown
-                skipAutoDisplay = false;
-            }, 500);
-        }, 100);
+            loadFiles(currentPath);
+            skipAutoDisplay = false;
+        }, 0);
     }
 }
 

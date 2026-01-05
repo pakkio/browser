@@ -104,6 +104,19 @@ describe('File Browser Server', () => {
     });
   });
 
+  describe('GET /subtitle', () => {
+    test('should ignore leading slash in subtitle path', async () => {
+      jest.spyOn(fs, 'existsSync').mockImplementation((p) => String(p).endsWith('todo/my/sub.vtt'));
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValue('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi');
+
+      const response = await request(app)
+        .get('/subtitle?path=/todo/my/sub.vtt');
+
+      expect(response.status).toBe(200);
+      expect(response.headers['content-type']).toMatch(/text\/vtt/);
+    });
+  });
+
   describe('GET /api/pdf-info', () => {
     test('should return PDF page count', async () => {
       const { exec } = require('child_process');

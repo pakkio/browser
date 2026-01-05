@@ -27,4 +27,5 @@ fi
 
 # Run the server
 echo "Starting server..."
-node server.js /mnt/z
+echo "Base directory will be: /mnt/z"
+exec node server.js /mnt/z
