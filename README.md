@@ -55,7 +55,7 @@ A sleek, modern web-based file browser with support for multiple file types incl
 | **Pandoc** | DOCX text preview, EPUB to PDF | `pandoc` |
 | **ImageMagick** (`identify`) | EPUB image info | `imagemagick` |
 | **zip** | rebuilding EPUB files | `zip` |
-| **unrar** (optional) | faster `.cbr` extraction and videos inside `.cbr`; comic pages fall back to the built-in `node-unrar-js` when it is missing | `unrar` (non-free) |
+| **unrar** (optional, recommended) | fast `.cbr` listing and extraction, and videos inside `.cbr`; used whenever it is found (on `PATH`, or WinRAR's `UnRAR.exe`), otherwise comic pages fall back to the built-in `node-unrar-js` | `unrar` (non-free) |
 | **just** (optional) | `just run` / `just test` shortcuts | see [just](https://github.com/casey/just) |
 
 Plain images, text, Markdown, JSON, audio and video that browsers can play need nothing extra.
@@ -94,10 +94,43 @@ npm start
 
 ### Windows
 
-The server runs on Windows Node. Install the programs from the table above (for example with `winget`; check names with `winget search <name>`, e.g. `winget install oschwartz10612.Poppler` for `pdfinfo`) and make sure their folders are on `PATH`. Open a new terminal afterwards so the updated `PATH` is picked up.
+The server runs on Windows Node. Install the programs from the table above and make sure their folders are on `PATH`. Open a new terminal afterwards so the updated `PATH` is picked up.
+
+#### Quick install (PowerShell)
+
+Run these once. `D:\Tools` is only an example install folder; drop `--location` to use winget's default.
+
+```powershell
+New-Item -ItemType Directory -Force D:\Tools | Out-Null
+
+winget install JohnMacFarlane.Pandoc                                  # or use the portable zip from github.com/jgm/pandoc/releases
+winget install Gyan.FFmpeg                                            # ffmpeg, ffprobe
+winget install oschwartz10612.Poppler --location D:\Tools\Poppler    # pdfinfo, pdftoppm
+winget install ImageMagick.Q16 --custom '/MERGETASKS="install_devel,legacy_support"'   # identify (legacy utilities)
+winget install GnuWin32.Zip --location D:\Tools\GnuWin32Zip           # zip
+winget install Casey.Just                                             # optional: just run
+```
+
+Not available through winget, install them by hand:
+
+| Program | Where to get it | Notes |
+|---|---|---|
+| **Ghostscript** | `gs*w64.exe` from [ArtifexSoftware/ghostpdl-downloads](https://github.com/ArtifexSoftware/ghostpdl-downloads/releases) | Silent install: `gs10080w64.exe /S /D=D:\Tools\Ghostscript` (needs admin). It only ships `gswin64c.exe`; copy it to `gs.exe` in the same `bin` folder, because the server calls `gs`. |
+| **UnRAR** | `unrarw64.exe` from [rarlab.com/rar_add.htm](https://www.rarlab.com/rar_add.htm) | Self-extracting: `unrarw64.exe -s -d"D:\Tools\UnRAR"`. WinRAR's own `UnRAR.exe` also works and is found without being on `PATH`. |
+| **GraphicsMagick** (optional) | `GraphicsMagick-*-Q16-win64-dll.exe` from [SourceForge](https://sourceforge.net/projects/graphicsmagick/files/graphicsmagick-binaries/) | Silent install: `/VERYSILENT /DIR=D:\Tools\GraphicsMagick`. In PowerShell `gm` is an alias of `Get-Member`; the server is not affected. |
+
+Then add the install folders to your user `PATH`, for example:
+
+```powershell
+$dirs = 'D:\Tools\Poppler\poppler-25.07.0\Library\bin','D:\Tools\Ghostscript\bin','D:\Tools\GraphicsMagick','D:\Tools\GnuWin32Zip\bin','D:\Tools\UnRAR'
+$p = [Environment]::GetEnvironmentVariable('Path','User')
+foreach ($d in $dirs) { if ($p -notlike "*$d*") { $p = $p.TrimEnd(';') + ';' + $d } }
+[Environment]::SetEnvironmentVariable('Path', $p, 'User')
+```
 
 Notes:
-*   `.cbr` comic pages work without `unrar`: they are extracted in-process with `node-unrar-js`.
+*   Install a native `unrar` (or WinRAR) for fast `.cbr` handling. When one is found, the server lists and extracts `.cbr` files with it; without it, `.cbr` comic pages still work through the slower in-process `node-unrar-js`.
+*   Over a slow network drive (for example a cloud mount such as RaiDrive) `unrar` can still need a long time for the first page, because it reads the archive in many small pieces.
 *   On Windows `convert.exe` is a disk-conversion system tool, not ImageMagick, so ImageMagick's older `convert` / `identify` commands are not usable unless you install ImageMagick with the legacy utilities option.
 *   PDF page images and the page count only need Poppler (`pdftoppm`, `pdfinfo`). Ghostscript and GraphicsMagick are only a fallback; Ghostscript is still used for PDF validation.
 
