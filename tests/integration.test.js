@@ -14,8 +14,7 @@ describe('Integration Tests', () => {
   
   beforeAll(() => {
     process.env.AUTH = 'FALSE'; // Disable auth for integration tests
-    delete require.cache[require.resolve('../server.js')];
-    delete require.cache[require.resolve('../auth.js')];
+    jest.resetModules();
     app = require('../server');
   });
 
@@ -23,29 +22,29 @@ describe('Integration Tests', () => {
     jest.clearAllMocks();
   });
 
+  afterEach(() => {
+    // Spies on fs must not leak into later tests
+    jest.restoreAllMocks();
+  });
+
   describe('File Browser Workflow', () => {
     test('should browse directory and serve files', async () => {
       // Mock fs operations
-      jest.spyOn(fs, 'readdirSync').mockReturnValue([
+      // Content-Length comes from stat, so it must match the streamed body
+      const stat = {
+        size: 'test content'.length,
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
+      };
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false },
         { name: 'folder', isDirectory: () => true }
       ]);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue(stat);
+      jest.spyOn(fs, 'statSync').mockReturnValue(stat);
       
-      jest.spyOn(fs, 'statSync').mockReturnValue({
-        size: 1024,
-        mtime: new Date('2023-01-01')
-      });
-      
-      const mockStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-        }),
-        pipe: jest.fn((res) => {
-          res.end('test content');
-        })
-      };
-      
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
+      const { Readable } = require('stream');
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from(['test content']));
 
       // 1. Browse root directory
       const browseResponse = await request(app)
@@ -78,6 +77,7 @@ describe('Integration Tests', () => {
         base64: 'base64encodedimage'
       });
       pdf2pic.fromPath.mockReturnValue(mockConvert);
+      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, mtime: new Date('2023-01-01') });
 
       // 1. Get PDF info
       const infoResponse = await request(app)
@@ -126,6 +126,10 @@ describe('Integration Tests', () => {
         callback(null, mockZipfile);
       });
 
+      // Handlers check existence and the ZIP signature before extracting
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+
       // Test comic preview
       const response = await request(app)
         .get('/comic-preview?path=test.cbz&page=1');
@@ -172,6 +176,8 @@ describe('Integration Tests', () => {
         callback(null, mockZipfile);
       });
 
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
       // Test EPUB preview
       const response = await request(app)
         .get('/epub-preview?path=test.epub');
@@ -198,7 +204,7 @@ describe('Integration Tests', () => {
 
       const response1 = await request(app)
         .get('/files?path=nonexistent.txt');
-      expect(response1.status).toBe(500);
+      expect(response1.status).toBe(404);
 
       // 2. Invalid PDF
       const { exec } = require('child_process');
@@ -215,6 +221,8 @@ describe('Integration Tests', () => {
       yauzl.open.mockImplementation((path, options, callback) => {
         callback(new Error('Corrupted archive'));
       });
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
 
       await request(app)
         .get('/comic-preview?path=corrupted.cbz&page=1')
@@ -236,17 +244,17 @@ describe('Integration Tests', () => {
       // Test path that should fail with file not found
       const response3 = await request(app)
         .get('/files?path=/etc/passwd');
-      expect([403, 500]).toContain(response3.status); // Either forbidden or file not found
+      expect([403, 404, 500]).toContain(response3.status); // Forbidden or file not found
     });
   });
 
   describe('Performance Integration', () => {
     test('should handle concurrent requests', async () => {
       // Mock successful responses
-      jest.spyOn(fs, 'readdirSync').mockReturnValue([
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false }
       ]);
-      jest.spyOn(fs, 'statSync').mockReturnValue({
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({
         size: 1024,
         mtime: new Date()
       });

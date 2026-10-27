@@ -16,11 +16,9 @@ describe('Error Path Coverage Tests', () => {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       
       // Mock exec to simulate command not found
+      // The handler destructures exec at load time, so override the shared jest.fn
       const { exec } = require('child_process');
-      const originalExec = exec;
-      
-      // Mock exec for this test
-      require('child_process').exec = jest.fn((command, callback) => {
+      exec.mockImplementationOnce((command, callback) => {
         callback(new Error('Command not found'), '', 'pdfinfo: command not found');
       });
 
@@ -30,8 +28,6 @@ describe('Error Path Coverage Tests', () => {
       
       expect(response.text).toBe('Failed to get PDF info');
       
-      // Restore original functions
-      require('child_process').exec = originalExec;
       fs.existsSync.mockRestore();
     });
 
@@ -41,9 +37,7 @@ describe('Error Path Coverage Tests', () => {
       
       // Mock exec to return output without Pages field
       const { exec } = require('child_process');
-      const originalExec = exec;
-      
-      require('child_process').exec = jest.fn((command, callback) => {
+      exec.mockImplementationOnce((command, callback) => {
         callback(null, 'Title: Test PDF\nAuthor: Test Author', '');
       });
 
@@ -53,8 +47,6 @@ describe('Error Path Coverage Tests', () => {
       
       expect(response.text).toBe('Could not parse PDF info');
       
-      // Restore original functions
-      require('child_process').exec = originalExec;
       fs.existsSync.mockRestore();
     });
   });
@@ -107,6 +99,17 @@ describe('Error Path Coverage Tests', () => {
   });
 
   describe('Comic Archive Error Paths', () => {
+    beforeEach(() => {
+      // Handlers check existence and the ZIP signature before extracting
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+    });
+
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+      fs.readFileSync.mockRestore();
+    });
+
     test('should handle CBZ extraction errors', async () => {
       // Mock yauzl to simulate ZIP file error
       const yauzl = require('yauzl');
@@ -120,7 +123,7 @@ describe('Error Path Coverage Tests', () => {
         .get('/comic-preview?path=test.cbz&page=1')
         .expect(500);
       
-      expect(response.text).toContain('Comic extraction error');
+      expect(response.text).toContain('Comic extraction failed');
       
       // Restore original function
       yauzl.open = originalOpen;
@@ -149,7 +152,7 @@ describe('Error Path Coverage Tests', () => {
 
       const response = await request(app)
         .get('/comic-preview?path=test.cbz&page=1')
-        .expect(500);
+        .expect(404);
       
       expect(response.text).toContain('Page not found');
       
@@ -157,27 +160,15 @@ describe('Error Path Coverage Tests', () => {
       yauzl.open = originalOpen;
     });
 
-    test('should handle CBR unrar command failure', async () => {
-      // Mock exec for unrar command failure
-      const { exec } = require('child_process');
-      const originalExec = exec;
-      
-      require('child_process').exec = jest.fn((command, callback) => {
-        if (command.includes('unrar')) {
-          callback(new Error('unrar command failed'), '', 'Archive is corrupted');
-        } else {
-          originalExec.apply(this, arguments);
-        }
-      });
+    test('should report an unreadable CBR as a corrupted archive', async () => {
+      // Neither the CBR extractor nor the CBZ fallback can read the mocked file
+      require('node-unrar-js').createExtractorFromFile.mockRejectedValueOnce(new Error('File is not RAR archive'));
 
       const response = await request(app)
         .get('/comic-preview?path=test.cbr&page=1')
-        .expect(500);
+        .expect(422);
       
-      expect(response.text).toContain('Comic extraction error');
-      
-      // Restore original exec
-      require('child_process').exec = originalExec;
+      expect(response.text).toContain('Archive file is corrupted');
     });
   });
 
@@ -206,6 +197,15 @@ describe('Error Path Coverage Tests', () => {
   });
 
   describe('EPUB Error Edge Cases', () => {
+    beforeEach(() => {
+      // Handlers check existence before opening the archive
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+    });
+
     test('should handle EPUB with invalid container.xml format', async () => {
       const yauzl = require('yauzl');
       const originalOpen = yauzl.open;
@@ -223,7 +223,8 @@ describe('Error Path Coverage Tests', () => {
                 isDirectory: () => false 
               }), 10);
             } else if (event === 'end') {
-              setTimeout(() => handler(), 20);
+              // Fire after the entry's stream has finished so container.xml is read first
+              setTimeout(() => handler(), 100);
             }
           }),
           openReadStream: jest.fn((entry, callback) => {

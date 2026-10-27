@@ -155,10 +155,15 @@ describe('Cache System Tests', () => {
     });
 
     it('should not break existing comic endpoint behavior', async () => {
+      // Existence is checked before the extension
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
       await request(app)
         .get('/comic-preview?path=test.txt')
         .expect(400)
-        .expect(/Not a comic book archive/);
+        .expect(/Not a supported archive/);
+
+      jest.restoreAllMocks();
     });
   });
 });

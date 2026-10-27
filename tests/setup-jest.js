@@ -29,7 +29,11 @@ jest.mock('child_process', () => {
     return proc;
   }
 
-  function mockExec(cmd, cb) {
+  function mockExec(cmd, options, cb) {
+    // exec(cmd, cb) and exec(cmd, options, cb) are both used by the handlers
+    if (typeof options === 'function') {
+      cb = options;
+    }
     // Provide predictable output for pdfinfo calls used by getPdfInfo
     if (cmd && cmd.startsWith('pdfinfo')) {
       const stdout = 'Title: Mock PDF\nPages: 3\n';
@@ -39,6 +43,16 @@ jest.mock('child_process', () => {
     return cb && cb(null, '', '');
   }
 
-  return { spawn: mockSpawn, exec: mockExec };
+  // jest.fn wrappers keep the default behaviour but let tests override it
+  return { spawn: jest.fn(mockSpawn), exec: jest.fn(mockExec) };
 });
 
+
+// Stub OAuth/session config so server.js can load without real credentials
+process.env.GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || 'test-client-id';
+process.env.GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || 'test-client-secret';
+process.env.SESSION_SECRET = process.env.SESSION_SECRET || 'test-session-secret';
+
+// config.js derives baseDir from process.argv[2]; when running a single file
+// (`jest tests/x.test.js`) that would be the test path, so drop extra args
+process.argv = process.argv.slice(0, 2);

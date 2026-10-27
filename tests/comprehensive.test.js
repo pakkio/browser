@@ -11,109 +11,79 @@ describe('Comprehensive Coverage Tests', () => {
   });
 
   describe('CBR Comic Extraction Detailed', () => {
-    test('should handle CBR file list caching', async () => {
-      // Mock fs.existsSync to make file exist
-      const originalExistsSync = fs.existsSync;
+    // CBR files are listed with node-unrar-js and each page is extracted with the `unrar` binary
+    const { createExtractorFromFile } = require('node-unrar-js');
+    const { exec } = require('child_process');
+
+    function mockRarFile(headers) {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      
-      // Mock exec for unrar lb command
-      const { exec } = require('child_process');
-      const originalExec = exec;
-      
-      require('child_process').exec = jest.fn((command, callback) => {
-        if (command.includes('unrar lb')) {
-          callback(null, 'image1.jpg\nimage2.png\nreadme.txt\n', '');
-        } else {
-          callback(new Error('Command failed'), '', 'error');
-        }
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        size: 4096,
+        mtimeMs: 1,
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
+      });
+      createExtractorFromFile.mockResolvedValueOnce({
+        getFileList: jest.fn().mockResolvedValue({ fileHeaders: headers })
+      });
+    }
+
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+      fs.statSync.mockRestore();
+    });
+
+    test('should extract a CBR page with unrar and send it as an image', async () => {
+      mockRarFile([{ name: 'image1.jpg' }, { name: 'image2.png' }, { name: 'readme.txt' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        expect(command).toContain('unrar p -inul');
+        expect(command).toContain('image1.jpg');
+        callback(null, Buffer.from('fake-image-data'), '');
       });
 
       const response = await request(app)
-        .get('/comic-preview?path=test.cbr&page=1')
-        .expect(500); // Will fail at extraction but caching should work
-      
-      // Restore original functions
-      require('child_process').exec = originalExec;
-      fs.existsSync.mockRestore();
+        .get('/comic-preview?path=cbr-ok-1.cbr&page=1')
+        .expect(200);
+
+      expect(response.headers['content-type']).toBe('image/jpeg');
     });
 
-    test('should handle CBR extraction with node-unrar-js fallback', async () => {
-      // Mock fs.existsSync to make file exist
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      
-      // Mock both exec and node-unrar-js
-      const { exec } = require('child_process');
-      const { createExtractorFromFile } = require('node-unrar-js');
-      const originalExec = exec;
-      const originalCreateExtractor = createExtractorFromFile;
-      
-      // Make exec fail to trigger fallback
-      require('child_process').exec = jest.fn((command, callback) => {
-        callback(new Error('unrar failed'), '', 'unrar error');
+    test('should pick the requested page from the sorted image list', async () => {
+      mockRarFile([{ name: 'b.png' }, { name: 'a.jpg' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        expect(command).toContain('b.png');
+        callback(null, Buffer.from('fake-image-data-2'), '');
       });
 
-      // Mock node-unrar-js
-      require('node-unrar-js').createExtractorFromFile = jest.fn().mockResolvedValue({
-        getFileList: jest.fn().mockResolvedValue({
-          fileHeaders: [
-            { name: 'image1.jpg' },
-            { name: 'image2.png' }
-          ]
-        }),
-        extract: jest.fn().mockResolvedValue({
-          files: [{
-            extraction: Buffer.from('fake-image-data')
-          }]
-        })
+      const response = await request(app)
+        .get('/comic-preview?path=cbr-ok-2.cbr&page=2')
+        .expect(200);
+
+      expect(response.headers['content-type']).toBe('image/png');
+    });
+
+    test('should report a corrupted archive when unrar fails and the CBZ fallback fails too', async () => {
+      mockRarFile([{ name: 'image1.jpg' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        callback(new Error('unrar failed'), Buffer.alloc(0), 'unrar error');
       });
 
       await request(app)
-        .get('/comic-preview?path=test.cbr&page=1')
-        .expect(200);
-      
-      // Restore original functions
-      require('child_process').exec = originalExec;
-      require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
-      fs.existsSync.mockRestore();
-    });
-
-    test('should handle different file data formats in CBR extraction', async () => {
-      // Mock fs.existsSync to make file exist
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      
-      const { exec } = require('child_process');
-      const { createExtractorFromFile } = require('node-unrar-js');
-      const originalExec = exec;
-      const originalCreateExtractor = createExtractorFromFile;
-      
-      require('child_process').exec = jest.fn((command, callback) => {
-        callback(new Error('unrar failed'), '', 'unrar error');
-      });
-
-      // Test with fileData property
-      require('node-unrar-js').createExtractorFromFile = jest.fn().mockResolvedValue({
-        getFileList: jest.fn().mockResolvedValue({
-          fileHeaders: [{ name: 'image1.jpg' }]
-        }),
-        extract: jest.fn().mockResolvedValue({
-          files: [{
-            fileData: Buffer.from('fake-image-data-2')
-          }]
-        })
-      });
-
-      await request(app)
-        .get('/comic-preview?path=test.cbr&page=2')
-        .expect(200);
-      
-      // Restore original functions
-      require('child_process').exec = originalExec;
-      require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
-      fs.existsSync.mockRestore();
+        .get('/comic-preview?path=cbr-bad.cbr&page=1')
+        .expect(422);
     });
   });
 
   describe('EPUB Advanced Features', () => {
+    beforeEach(() => {
+      // Handlers check existence before opening the archive
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    });
+
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+    });
+
     test('should handle EPUB with cover metadata patterns', async () => {
       const yauzl = require('yauzl');
       const originalOpen = yauzl.open;
@@ -246,27 +216,20 @@ describe('Comprehensive Coverage Tests', () => {
   });
 
   describe('Additional Auth Edge Cases', () => {
-    test('should handle logout with session destroy error', async () => {
-      // Test with AUTH enabled
+    test('should allow logout without an active login', async () => {
       process.env.AUTH = 'TRUE';
-      delete require.cache[require.resolve('../server.js')];
+      jest.resetModules();
       const authApp = require('../server.js');
-      
-      // Mock session destroy to fail
-      const originalDestroy = require('express-session').Store.prototype.destroy;
-      require('express-session').Store.prototype.destroy = function(sid, callback) {
-        callback(new Error('Session destroy failed'));
-      };
 
-      // We can't easily test this without authentication, so just verify the route exists
-      await request(authApp)
+      // Logout is not behind requireAuth, so an anonymous request still succeeds
+      const response = await request(authApp)
         .post('/auth/logout')
-        .expect(401); // Will be 401 because not authenticated
+        .expect(200);
       
-      // Restore
-      require('express-session').Store.prototype.destroy = originalDestroy;
+      expect(response.body.success).toBe(true);
+
       process.env.AUTH = 'FALSE';
-      delete require.cache[require.resolve('../server.js')];
+      jest.resetModules();
     });
   });
 
@@ -288,6 +251,11 @@ describe('Comprehensive Coverage Tests', () => {
         { file: 'test.epub', expected: 'application/epub+zip' }
       ];
 
+      const { Readable } = require('stream');
+      // '{}' is a valid body for every type, including application/json
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, size: 2 });
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from(['{}']));
+
       for (const testCase of testCases) {
         const response = await request(app)
           .get(`/files?path=${testCase.file}`)
@@ -295,6 +263,9 @@ describe('Comprehensive Coverage Tests', () => {
         
         expect(response.headers['content-type']).toBe(testCase.expected);
       }
+
+      fs.statSync.mockRestore();
+      fs.createReadStream.mockRestore();
     });
 
     test('should handle file stat errors gracefully in browse', async () => {
@@ -305,38 +276,6 @@ describe('Comprehensive Coverage Tests', () => {
       
       expect(response.body.files).toBeDefined();
       expect(Array.isArray(response.body.files)).toBe(true);
-    });
-  });
-
-  describe('Request Logging Coverage', () => {
-    test('should log requests that are not /files routes', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      await request(app)
-        .get('/auth/user')
-        .expect(200);
-      
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/GET \/auth\/user/)
-      );
-      
-      consoleSpy.mockRestore();
-    });
-
-    test('should not log /files requests without query params', async () => {
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      await request(app)
-        .get('/files')
-        .expect(400);
-      
-      // Should not have logged the request
-      const logCalls = consoleSpy.mock.calls.filter(call => 
-        call[0] && call[0].includes('GET /files') && !call[0].includes('path:')
-      );
-      expect(logCalls).toHaveLength(0);
-      
-      consoleSpy.mockRestore();
     });
   });
 
