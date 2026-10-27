@@ -150,6 +150,32 @@ describe('File Browser Server', () => {
         .expect(200);
     });
 
+    test('should render PDF pages with pdftoppm when it is available', async () => {
+      const { spawn } = require('child_process');
+      const { EventEmitter } = require('events');
+      const pdf2pic = require('pdf2pic');
+      const fromPath = jest.spyOn(pdf2pic, 'fromPath');
+      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, mtime: new Date('2023-01-02') });
+
+      // Fake pdftoppm: writes <outBase>.png like the real tool, then exits 0
+      spawn.mockImplementationOnce((cmd, args) => {
+        expect(cmd).toBe('pdftoppm');
+        expect(args).toEqual(expect.arrayContaining(['-png', '-f', '2', '-l', '2']));
+        fs.writeFileSync(`${args[args.length - 1]}.png`, Buffer.from('poppler-png'));
+        const proc = new EventEmitter();
+        proc.stderr = new EventEmitter();
+        process.nextTick(() => proc.emit('close', 0));
+        return proc;
+      });
+
+      const response = await request(app)
+        .get('/pdf-preview?path=poppler.pdf&page=2')
+        .expect(200);
+
+      expect(response.body.toString()).toBe('poppler-png');
+      expect(fromPath).not.toHaveBeenCalledWith(expect.stringContaining('poppler.pdf'), expect.anything());
+    });
+
     test('should reject non-PDF files', async () => {
       await request(app)
         .get('/pdf-preview?path=test.txt&page=1')
