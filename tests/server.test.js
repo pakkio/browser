@@ -65,19 +65,10 @@ describe('File Browser Server', () => {
   describe('GET /files', () => {
     test('should serve files with correct content type', async () => {
       const testContent = 'test file content';
-      const mockStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-          if (event === 'data') callback(Buffer.from(testContent));
-          if (event === 'end') callback();
-        }),
-        pipe: jest.fn((res) => {
-          res.end(testContent);
-        })
-      };
+      const { Readable } = require('stream');
       
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from([testContent]));
       jest.spyOn(fs, 'statSync').mockReturnValue({
         isDirectory: () => false,
         size: testContent.length
