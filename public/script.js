@@ -46,6 +46,8 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">Arrow keys</td><td>Navigate file list</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Enter</td><td>Open selected file</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">/</td><td>Focus search</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">f</td><td>Toggle full screen</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">h</td><td>Hide/show side panels</td></tr>
         </table>
         <button id="close-shortcut-help" style="position:absolute;top:12px;right:16px;background:#444;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:1.1rem;">×</button>
         <div style="margin-top:18px;font-size:0.95rem;color:#aaa;">Press <b>Esc</b> or click outside to close</div>
@@ -1671,6 +1673,40 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         event.preventDefault();
         setWingsHidden(!document.body.classList.contains('wings-hidden'));
     }, true);
+
+    // Full screen: 'F' (or the corner button) toggles browser full screen for the whole page.
+    // Key presses inside an embedded viewer (e.g. a PDF iframe) never reach the page, so the
+    // button covers that case.
+    function toggleFullscreen() {
+        if (document.fullscreenElement) {
+            document.exitFullscreen().catch(() => { /* already leaving full screen */ });
+        } else if (document.documentElement.requestFullscreen) {
+            document.documentElement.requestFullscreen().catch((err) => {
+                window.logger.info('Could not enter full screen:', err);
+            });
+        }
+    }
+    const fullscreenBtn = document.createElement('button');
+    fullscreenBtn.id = 'fullscreen-toggle';
+    fullscreenBtn.className = 'wings-toggle fullscreen-toggle';
+    fullscreenBtn.textContent = '⛶';
+    fullscreenBtn.title = 'Toggle full screen (F)';
+    fullscreenBtn.addEventListener('click', (event) => {
+        toggleFullscreen();
+        event.currentTarget.blur(); // hand focus back to the page so F keeps working
+    });
+    document.body.appendChild(fullscreenBtn);
+
+    // Bubble phase on window: runs after viewer handlers on document, so a viewer that has its
+    // own 'f' (the comic reader's full screen) has already called preventDefault and wins
+    window.addEventListener('keydown', (event) => {
+        if (event.key !== 'f' && event.key !== 'F') return;
+        if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
+        const tag = event.target && event.target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (event.target && event.target.isContentEditable)) return;
+        event.preventDefault();
+        toggleFullscreen();
+    });
     
     fileTypeFilter.addEventListener('change', () => {
         // Show brief loading for filtering large directories
