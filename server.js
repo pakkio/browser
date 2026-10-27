@@ -636,21 +636,25 @@ if (require.main === module) {
     server.setTimeout(300000); // 5 minutes
 
     // Graceful shutdown handling (must be after server is created)
-    process.on('SIGTERM', () => {
-        console.log('🛑 SIGTERM received. Shutting down gracefully...');
+    // server.close() alone waits for open video streams and keep-alive sockets,
+    // so drop them and force-exit if closing still takes too long
+    let shuttingDown = false;
+    const shutdown = (signal) => {
+        if (shuttingDown) {
+            console.log('🛑 Forced exit');
+            process.exit(1);
+        }
+        shuttingDown = true;
+        console.log(`🛑 ${signal} received. Shutting down...`);
         server.close(() => {
             console.log('✅ Server closed successfully');
             process.exit(0);
         });
-    });
-
-    process.on('SIGINT', () => {
-        console.log('🛑 SIGINT received. Shutting down gracefully...');
-        server.close(() => {
-            console.log('✅ Server closed successfully');
-            process.exit(0);
-        });
-    });
+        server.closeAllConnections();
+        setTimeout(() => process.exit(0), 3000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;
