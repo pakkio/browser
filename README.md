@@ -189,6 +189,7 @@ Current coverage: **69% server coverage** with 22+ comprehensive tests
 - **EPUB Double-Chapter Mode** - **Side-by-side chapter viewing enabled by default** with cover mode and improved styling
 - **Text File Double-Page** - **Code and text viewing enabled by default** with syntax highlighting in dual panes and cover mode
 - **Keyboard Navigation** - Arrow keys for page navigation, 'd' for double-page toggle, 'c' for cover mode, 't' for text overlay
+- **Focus mode (no side panels)** - press **H** (or click the small button in the bottom-left corner) to hide the file list and details panel so the content fills the window; press it again to bring them back. The choice is remembered. If a PDF viewer inside the page has keyboard focus, click outside it first or use the button.
 - **Cover Mode** - Proper book-like layout treating first/last pages as covers in double-page view
 - **Responsive images** with hover zoom effects
 - **Professional typography** with modern fonts
