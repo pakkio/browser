@@ -30,6 +30,7 @@ const {
 } = require('./lib/file-handlers');
 const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-checker');
 const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
+const { detectComicPanels } = require('./lib/comic-panels');
 const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
 const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
 const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi, renameAnnotation, migrateToSparseApi } = require('./lib/annotation-handlers');
@@ -175,6 +176,7 @@ app.get('/api/browse', requireAuth, serveBrowseRequest);
 app.get('/api/pdf-info', requireAuth, getPdfInfo);
 app.get('/api/validate-pdf', requireAuth, validatePdf);
 app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cache));
+app.post('/api/comic-panels', requireAuth, express.raw({ type: 'image/jpeg', limit: '6mb' }), detectComicPanels);
 
 // File serving routes
 app.get('/files/list', requireAuth, serveFileList);
