@@ -2030,3 +2030,8 @@ body.wings-hidden .content-viewer {
 body.wings-hidden .wings-toggle {
     opacity: 0.9;
 }
+
+/* Full screen button sits next to the focus-mode button */
+.fullscreen-toggle {
+    left: 40px;
+}
