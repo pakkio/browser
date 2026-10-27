@@ -236,6 +236,16 @@ class LibraryRenderer {
         item.style.setProperty('--book-shadow-depth', `${shadowDepth}px`);
         item.style.setProperty('--book-shadow-blur', `${shadowBlur}px`);
 
+        // Collage look: a stable per-file tilt and placeholder height (same file, same look)
+        let hash = 0;
+        for (let i = 0; i < file.name.length; i++) {
+            hash = (hash * 31 + file.name.charCodeAt(i)) >>> 0;
+        }
+        const tilt = ((hash % 7) - 3) * 0.6; // -1.8deg .. +1.8deg
+        const placeholderRatio = 0.6 + ((hash >>> 3) % 8) * 0.12; // width / height
+        item.style.setProperty('--tilt', `${tilt}deg`);
+        item.style.setProperty('--thumb-ratio', placeholderRatio.toFixed(2));
+
         // Create thumbnail container
         const thumbContainer = document.createElement('div');
         thumbContainer.className = 'library-thumb-container';
@@ -522,6 +532,11 @@ class LibraryRenderer {
                         updateProgress();
                     };
                     img.onload = () => {
+                        // Tile takes the image's own shape so the shelf packs like a collage
+                        if (img.naturalWidth && img.naturalHeight) {
+                            const ratio = Math.min(1.8, Math.max(0.5, img.naturalWidth / img.naturalHeight));
+                            item.closest('.library-book').style.setProperty('--thumb-ratio', ratio.toFixed(3));
+                        }
                         item.querySelector('.library-placeholder-icon').style.display = 'none';
                         loaded++;
                         updateProgress();

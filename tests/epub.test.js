@@ -1,54 +1,73 @@
 const request = require('supertest');
 const fs = require('fs');
+const path = require('path');
 
 describe('EPUB Tests', () => {
   let app;
-
+  
   beforeAll(() => {
-    process.env.AUTH = 'FALSE';
+    process.env.AUTH = 'FALSE'; // Disable auth for testing
     app = require('../server.js');
   });
 
+  beforeEach(() => {
+    // Handlers check existence first; anything not named "nonexistent*" exists
+    const realExists = fs.existsSync;
+    jest.spyOn(fs, 'existsSync').mockImplementation((p) =>
+      String(p).includes('nonexistent') ? false : (String(p).endsWith('.epub') ? true : realExists(p)));
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   describe('GET /epub-cover', () => {
-    test('should require file path parameter', async () => {
+    test('should require a file path', async () => {
       const response = await request(app)
         .get('/epub-cover')
         .expect(400);
-
+      
       expect(response.body.error).toBe('Missing file path');
     });
 
-    test('should handle EPUB file opening errors', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    test('should return 404 when the EPUB does not exist', async () => {
+      const response = await request(app)
+        .get('/epub-cover?path=nonexistent.epub&cover=images/cover.jpg')
+        .expect(404);
+      
+      expect(response.body.error).toBe('File not found');
+    });
 
+    test('should handle EPUB file opening errors', async () => {
       const yauzl = require('yauzl');
-      yauzl.open = jest.fn((filePath, options, callback) => {
-        callback(new Error('Failed to open EPUB'));
-      });
+      const originalOpen = yauzl.open;
+      yauzl.open = jest.fn((filePath, options, callback) => callback(new Error('bad zip')));
 
       const response = await request(app)
         .get('/epub-cover?path=test.epub&cover=images/cover.jpg')
         .expect(500);
-
-      expect(response.body.error).toBeDefined();
+      
+      expect(response.body.error).toBe('bad zip');
+      yauzl.open = originalOpen;
     });
 
     test('should return 404 when cover image not found', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
+      // Mock yauzl to simulate EPUB without cover
       const yauzl = require('yauzl');
+      const originalOpen = yauzl.open;
+      
       yauzl.open = jest.fn((filePath, options, callback) => {
         const mockZipfile = {
           readEntry: jest.fn(),
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
-              setTimeout(() => handler({ fileName: 'content.opf' }));
-              setTimeout(() => handler({ fileName: 'chapter1.html' }));
+              // Simulate some entries but not the cover
+              setImmediate(() => handler({ fileName: 'content.opf' }));
+              setImmediate(() => handler({ fileName: 'chapter1.html' }));
             } else if (event === 'end') {
-              setTimeout(() => handler());
+              setImmediate(() => handler());
             }
-          }),
-          openReadStream: jest.fn()
+          })
         };
         callback(null, mockZipfile);
       });
@@ -56,162 +75,107 @@ describe('EPUB Tests', () => {
       const response = await request(app)
         .get('/epub-cover?path=test.epub&cover=images/cover.jpg')
         .expect(404);
-
+        
       expect(response.body.error).toBe('Cover image not found');
+      expect(response.body.requestedPath).toBe('images/cover.jpg');
+      
+      // Restore original function
+      yauzl.open = originalOpen;
     }, 10000);
   });
 
   describe('GET /images/:filename', () => {
-    test('should return 404 as images endpoint is a placeholder', async () => {
+    // The endpoint is still a placeholder; image serving goes through /epub-cover
+    test('should return 404 placeholder response', async () => {
       const response = await request(app)
-        .get('/images/cover.jpg')
+        .get('/images/cover.jpg?epub=test.epub')
         .expect(404);
-
+      
       expect(response.body.error).toBe('Image endpoint not fully implemented yet');
     });
   });
 
   describe('GET /cover.jpeg and /cover.jpg', () => {
-    test('should return 404 for cover.jpeg', async () => {
+    test.each(['/cover.jpeg', '/cover.jpg'])('%s should 404 and point to /epub-cover', async (url) => {
       const response = await request(app)
-        .get('/cover.jpeg')
+        .get(url)
+        .set('Referer', 'http://localhost:3000/epub-preview?path=test.epub')
         .expect(404);
-
-      expect(response.body.error).toContain('Cover image not found');
-    });
-
-    test('should return 404 for cover.jpg', async () => {
-      const response = await request(app)
-        .get('/cover.jpg')
-        .expect(404);
-
-      expect(response.body.error).toContain('Cover image not found');
+      
+      expect(response.body.error).toContain('/epub-cover');
     });
   });
 
   describe('EPUB Content Extraction Edge Cases', () => {
-    test('should handle EPUB with missing container.xml', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    const containerXml = (opf) =>
+      `<?xml version="1.0"?><container><rootfiles><rootfile full-path="${opf}"/></rootfiles></container>`;
 
+    // Minimal lazy-entries yauzl stand-in: each readEntry() emits the next entry or 'end'
+    function mockEpub(files) {
       const yauzl = require('yauzl');
+      const originalOpen = yauzl.open;
       yauzl.open = jest.fn((filePath, options, callback) => {
-        const mockZipfile = {
-          readEntry: jest.fn(),
-          on: jest.fn((event, handler) => {
-            if (event === 'entry') {
-              setTimeout(() => handler({ fileName: 'content.opf' }));
-            } else if (event === 'end') {
-              setTimeout(() => handler());
-            }
-          }),
-          openReadStream: jest.fn()
+        const names = Array.from(files.keys());
+        const handlers = {};
+        let index = 0;
+        const zipfile = {
+          on: (event, handler) => { handlers[event] = handler; },
+          readEntry: () => {
+            setImmediate(() => {
+              if (index < names.length) handlers.entry({ fileName: names[index++] });
+              else handlers.end();
+            });
+          },
+          openReadStream: (entry, cb) => {
+            const content = Buffer.from(files.get(entry.fileName));
+            const stream = {
+              on: (event, handler) => {
+                if (event === 'data') setImmediate(() => handler(content));
+                if (event === 'end') setImmediate(() => setImmediate(handler));
+              }
+            };
+            cb(null, stream);
+          }
         };
-        callback(null, mockZipfile);
+        callback(null, zipfile);
       });
+      return () => { yauzl.open = originalOpen; };
+    }
+
+    test('should handle EPUB with missing container.xml', async () => {
+      const restore = mockEpub(new Map([['content.opf', '<package/>']]));
 
       const response = await request(app)
         .get('/epub-preview?path=test.epub')
         .expect(500);
-
+      
       expect(response.body.error).toContain('Missing container.xml');
+      restore();
     }, 15000);
 
     test('should handle EPUB with missing OPF file', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
-      const yauzl = require('yauzl');
-      yauzl.open = jest.fn((filePath, options, callback) => {
-        const files = new Map();
-        files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="missing.opf"/></rootfiles></container>');
-
-        let entryIndex = 0;
-        const mockZipfile = {
-          readEntry: jest.fn(),
-          on: jest.fn((event, handler) => {
-            if (event === 'entry') {
-              setTimeout(() => {
-                entryIndex++;
-                handler({
-                  fileName: 'META-INF/container.xml',
-                  isDirectory: () => false
-                });
-              }, 5);
-            } else if (event === 'end') {
-              setTimeout(() => handler(), 100);
-            }
-            return mockZipfile;
-          }),
-          openReadStream: jest.fn((entry, callback) => {
-            const content = files.get(entry.fileName);
-            const mockStream = {
-              on: jest.fn((event, handler) => {
-                if (event === 'data') {
-                  setTimeout(() => handler(Buffer.from(content)), 1);
-                } else if (event === 'end') {
-                  setTimeout(() => handler(), 2);
-                }
-              })
-            };
-            callback(null, mockStream);
-          })
-        };
-        callback(null, mockZipfile);
-      });
+      const restore = mockEpub(new Map([['META-INF/container.xml', containerXml('missing.opf')]]));
 
       const response = await request(app)
         .get('/epub-preview?path=test.epub')
         .expect(500);
-
+      
       expect(response.body.error).toContain('Could not find OPF file');
+      restore();
     }, 15000);
 
     test('should handle EPUB with no readable chapters', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
-      const yauzl = require('yauzl');
-      yauzl.open = jest.fn((filePath, options, callback) => {
-        const files = new Map();
-        files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
-        files.set('content.opf', '<?xml version="1.0"?><package><metadata><dc:title>Test</dc:title></metadata><spine></spine><manifest></manifest></package>');
-
-        const fileNames = ['META-INF/container.xml', 'content.opf'];
-        const mockZipfile = {
-          readEntry: jest.fn(),
-          on: jest.fn((event, handler) => {
-            if (event === 'entry') {
-              fileNames.forEach((name, i) => {
-                setTimeout(() => handler({
-                  fileName: name,
-                  isDirectory: () => false
-                }), (i + 1) * 10);
-              });
-            } else if (event === 'end') {
-              setTimeout(() => handler(), 100);
-            }
-            return mockZipfile;
-          }),
-          openReadStream: jest.fn((entry, callback) => {
-            const content = files.get(entry.fileName);
-            const mockStream = {
-              on: jest.fn((event, handler) => {
-                if (event === 'data') {
-                  setTimeout(() => handler(Buffer.from(content)), 1);
-                } else if (event === 'end') {
-                  setTimeout(() => handler(), 2);
-                }
-              })
-            };
-            callback(null, mockStream);
-          })
-        };
-        callback(null, mockZipfile);
-      });
+      const restore = mockEpub(new Map([
+        ['META-INF/container.xml', containerXml('content.opf')],
+        ['content.opf', '<?xml version="1.0"?><package><metadata><dc:title>Test</dc:title></metadata><spine></spine><manifest></manifest></package>']
+      ]));
 
       const response = await request(app)
         .get('/epub-preview?path=test.epub')
         .expect(500);
-
+      
       expect(response.body.error).toContain('No readable chapters found');
+      restore();
     }, 15000);
   });
 });

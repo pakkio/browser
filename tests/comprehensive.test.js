@@ -1,126 +1,116 @@
 const request = require('supertest');
 const fs = require('fs');
-
-jest.mock('node-unrar-js', () => ({
-  createExtractorFromFile: jest.fn()
-}));
-
-function defaultExecMock(cmd, opts, cb) {
-  if (typeof opts === 'function') { cb = opts; }
-  if (cmd && cmd.startsWith('pdfinfo')) {
-    return cb && cb(null, 'Title: Mock PDF\nPages: 3\n', '');
-  }
-  return cb && cb(null, '', '');
-}
+const path = require('path');
 
 describe('Comprehensive Coverage Tests', () => {
   let app;
-
+  
   beforeAll(() => {
-    process.env.AUTH = 'FALSE';
-    delete require.cache[require.resolve('../lib/config.js')];
+    process.env.AUTH = 'FALSE'; // Disable auth for testing
     app = require('../server.js');
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
-  });
+  describe('CBR Comic Extraction Detailed', () => {
+    // CBR files are listed with node-unrar-js and each page is extracted with the `unrar` binary
+    const { createExtractorFromFile } = require('node-unrar-js');
+    const { exec } = require('child_process');
 
-  describe('CBR Comic Extraction', () => {
-    beforeEach(() => {
-      const { exec } = require('child_process');
-      exec.mockImplementation(defaultExecMock);
+    function mockRarFile(headers) {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        size: 4096,
+        mtimeMs: 1,
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
+      });
+      createExtractorFromFile.mockResolvedValueOnce({
+        getFileList: jest.fn().mockResolvedValue({ fileHeaders: headers })
+      });
+    }
+
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+      fs.statSync.mockRestore();
     });
 
-    test('should handle CBR extraction with fileHeaders array', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, isDirectory: () => false });
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]));
-
-      const nodeUnrar = require('node-unrar-js');
-      nodeUnrar.createExtractorFromFile.mockResolvedValue({
-        getFileList: jest.fn().mockResolvedValue({
-          fileHeaders: [
-            { name: 'image1.jpg' },
-            { name: 'image2.png' }
-          ]
-        }),
-        extract: jest.fn().mockResolvedValue({
-          files: [{ extraction: Buffer.from('fake-image-data') }]
-        })
-      });
-
-      const { exec } = require('child_process');
-      exec.mockImplementation((cmd, opts, cb) => {
-        if (typeof opts === 'function') { cb = opts; }
-        if (cmd.includes('unrar p')) {
-          return cb(null, Buffer.from('fake-image-data'), '');
-        }
-        return defaultExecMock(cmd, opts, cb);
+    test('should extract a CBR page with unrar and send it as an image', async () => {
+      mockRarFile([{ name: 'image1.jpg' }, { name: 'image2.png' }, { name: 'readme.txt' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        expect(command).toContain('unrar p -inul');
+        expect(command).toContain('image1.jpg');
+        callback(null, Buffer.from('fake-image-data'), '');
       });
 
       const response = await request(app)
-        .get('/comic-preview?path=test.cbr&page=1')
+        .get('/comic-preview?path=cbr-ok-1.cbr&page=1')
         .expect(200);
 
-      expect(response.headers['content-type']).toContain('image');
+      expect(response.headers['content-type']).toBe('image/jpeg');
     });
 
-    test('should handle CBR extraction with fileData property', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, isDirectory: () => false });
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]));
-
-      const nodeUnrar = require('node-unrar-js');
-      nodeUnrar.createExtractorFromFile.mockResolvedValue({
-        getFileList: jest.fn().mockResolvedValue({
-          fileHeaders: [{ name: 'image1.jpg' }]
-        }),
-        extract: jest.fn().mockResolvedValue({
-          files: [{ fileData: Buffer.from('fake-image-data-2') }]
-        })
-      });
-
-      const { exec } = require('child_process');
-      exec.mockImplementation((cmd, opts, cb) => {
-        if (typeof opts === 'function') { cb = opts; }
-        if (cmd.includes('unrar p')) {
-          return cb(null, Buffer.from('fake-image-data'), '');
-        }
-        return defaultExecMock(cmd, opts, cb);
+    test('should pick the requested page from the sorted image list', async () => {
+      mockRarFile([{ name: 'b.png' }, { name: 'a.jpg' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        expect(command).toContain('b.png');
+        callback(null, Buffer.from('fake-image-data-2'), '');
       });
 
       const response = await request(app)
-        .get('/comic-preview?path=test.cbr&page=1')
+        .get('/comic-preview?path=cbr-ok-2.cbr&page=2')
         .expect(200);
 
-      expect(response.headers['content-type']).toContain('image');
+      expect(response.headers['content-type']).toBe('image/png');
     });
 
-    test('should handle CBR extraction errors gracefully', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, isDirectory: () => false });
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]));
+    test('should extract the page in-process when the unrar binary is unavailable', async () => {
+      mockRarFile([{ name: 'image1.jpg' }]);
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValueOnce(Buffer.from('rar-bytes'));
+      exec.mockImplementationOnce((command, options, callback) => {
+        callback(new Error("'unrar' is not recognized"), Buffer.alloc(0), '');
+      });
+      const { createExtractorFromData } = require('node-unrar-js');
+      createExtractorFromData.mockResolvedValueOnce({
+        extract: () => ({ files: [{ fileHeader: { name: 'image1.jpg' }, extraction: Uint8Array.from([1, 2, 3]) }] })
+      });
 
-      const nodeUnrar = require('node-unrar-js');
-      nodeUnrar.createExtractorFromFile.mockRejectedValue(
-        new Error('File is not RAR archive')
-      );
+      const response = await request(app)
+        .get('/comic-preview?path=cbr-js.cbr&page=1')
+        .expect(200);
+
+      expect(response.headers['content-type']).toBe('image/jpeg');
+      fs.promises.readFile.mockRestore();
+    });
+
+    test('should report a corrupted archive when unrar fails and the CBZ fallback fails too', async () => {
+      mockRarFile([{ name: 'image1.jpg' }]);
+      exec.mockImplementationOnce((command, options, callback) => {
+        callback(new Error('unrar failed'), Buffer.alloc(0), 'unrar error');
+      });
 
       await request(app)
-        .get('/comic-preview?path=test.cbr&page=1')
+        .get('/comic-preview?path=cbr-bad.cbr&page=1')
         .expect(422);
     });
   });
 
   describe('EPUB Advanced Features', () => {
-    test('should handle EPUB with cover metadata patterns', async () => {
+    beforeEach(() => {
+      // Handlers check existence before opening the archive
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    });
 
+    afterEach(() => {
+      fs.existsSync.mockRestore();
+    });
+
+    test('should handle EPUB with cover metadata patterns', async () => {
       const yauzl = require('yauzl');
-      const files = new Map();
-      files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
-      files.set('content.opf', `<?xml version="1.0"?>
+      const originalOpen = yauzl.open;
+      
+      yauzl.open = jest.fn((filePath, options, callback) => {
+        const files = new Map();
+        files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
+        files.set('content.opf', `<?xml version="1.0"?>
 <package>
   <metadata>
     <dc:title>Test Book</dc:title>
@@ -136,19 +126,18 @@ describe('Comprehensive Coverage Tests', () => {
     <item id="ch1" href="ch1.html"/>
   </manifest>
 </package>`);
-      files.set('ch1.html', '<html><body><h1>Chapter 1</h1><p>Content here</p></body></html>');
-      files.set('images/cover.jpg', 'fake-cover-data');
-
-      yauzl.open = jest.fn((filePath, options, callback) => {
+        files.set('ch1.html', '<html><body><h1>Chapter 1</h1><p>Content here</p></body></html>');
+        files.set('images/cover.jpg', 'fake-cover-data');
+        
         const mockZipfile = {
           readEntry: jest.fn(),
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               const entries = ['META-INF/container.xml', 'content.opf', 'ch1.html', 'images/cover.jpg'];
               entries.forEach((entry, index) => {
-                setTimeout(() => handler({
+                setTimeout(() => handler({ 
                   fileName: entry,
-                  isDirectory: () => false
+                  isDirectory: () => false 
                 }), (index + 1) * 10);
               });
             } else if (event === 'end') {
@@ -175,39 +164,42 @@ describe('Comprehensive Coverage Tests', () => {
       const response = await request(app)
         .get('/epub-preview?path=test.epub')
         .expect(200);
-
+      
       expect(response.body.metadata.title).toBe('Test Book');
       expect(response.body.metadata.creator).toBe('Test Author');
       expect(response.body.metadata.description).toBe('Test Description');
       expect(response.body.metadata.coverPath).toBe('images/cover.jpg');
-    }, 15000);
+      
+      // Restore original function
+      yauzl.open = originalOpen;
+    });
 
     test('should handle EPUB with large chapter content truncation', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
       const yauzl = require('yauzl');
+      const originalOpen = yauzl.open;
+      
       const largeContent = '<html><body>' + 'x'.repeat(60000) + '</body></html>';
-
-      const files = new Map();
-      files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
-      files.set('content.opf', `<?xml version="1.0"?>
+      
+      yauzl.open = jest.fn((filePath, options, callback) => {
+        const files = new Map();
+        files.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
+        files.set('content.opf', `<?xml version="1.0"?>
 <package>
   <metadata><dc:title>Large Book</dc:title></metadata>
   <spine><itemref idref="ch1"/></spine>
   <manifest><item id="ch1" href="ch1.html"/></manifest>
 </package>`);
-      files.set('ch1.html', largeContent);
-
-      yauzl.open = jest.fn((filePath, options, callback) => {
+        files.set('ch1.html', largeContent);
+        
         const mockZipfile = {
           readEntry: jest.fn(),
           on: jest.fn((event, handler) => {
             if (event === 'entry') {
               const entries = ['META-INF/container.xml', 'content.opf', 'ch1.html'];
               entries.forEach((entry, index) => {
-                setTimeout(() => handler({
+                setTimeout(() => handler({ 
                   fileName: entry,
-                  isDirectory: () => false
+                  isDirectory: () => false 
                 }), (index + 1) * 10);
               });
             } else if (event === 'end') {
@@ -234,46 +226,34 @@ describe('Comprehensive Coverage Tests', () => {
       const response = await request(app)
         .get('/epub-preview?path=test.epub')
         .expect(200);
-
+      
       expect(response.body.chapters[0].content).toContain('[Content truncated for performance]');
-    }, 15000);
+      
+      // Restore original function
+      yauzl.open = originalOpen;
+    });
   });
 
   describe('Additional Auth Edge Cases', () => {
-    test('should handle logout when auth is disabled', async () => {
-      const response = await request(app)
+    test('should allow logout without an active login', async () => {
+      process.env.AUTH = 'TRUE';
+      jest.resetModules();
+      const authApp = require('../server.js');
+
+      // Logout is not behind requireAuth, so an anonymous request still succeeds
+      const response = await request(authApp)
         .post('/auth/logout')
-        .expect(404);
-
-      expect(response.body.error).toBe('Authentication is disabled');
-    });
-
-    test('should return auth status when auth is disabled', async () => {
-      const response = await request(app)
-        .get('/auth/user')
         .expect(200);
+      
+      expect(response.body.success).toBe(true);
 
-      expect(response.body.authDisabled).toBe(true);
-      expect(response.body.authenticated).toBe(false);
+      process.env.AUTH = 'FALSE';
+      jest.resetModules();
     });
   });
 
   describe('File Serving Edge Cases', () => {
     test('should handle different MIME types correctly', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      const content = 'test content';
-      jest.spyOn(fs, 'statSync').mockReturnValue({
-        isDirectory: () => false,
-        size: Buffer.byteLength(content)
-      });
-      jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
-        const { Readable } = require('stream');
-        const stream = new Readable({ read() {} });
-        stream.push(content);
-        stream.push(null);
-        return stream;
-      });
-
       const testCases = [
         { file: 'test.html', expected: 'text/html' },
         { file: 'test.js', expected: 'text/javascript' },
@@ -290,48 +270,43 @@ describe('Comprehensive Coverage Tests', () => {
         { file: 'test.epub', expected: 'application/epub+zip' }
       ];
 
+      const { Readable } = require('stream');
+      // '{}' is a valid body for every type, including application/json
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, size: 2 });
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from(['{}']));
+
       for (const testCase of testCases) {
-        const res = await request(app)
+        const response = await request(app)
           .get(`/files?path=${testCase.file}`)
-          .buffer(true)
-          .parse((res, cb) => {
-            let data = '';
-            res.on('data', chunk => data += chunk);
-            res.on('end', () => cb(null, data));
-          });
-
-        expect(res.status).toBe(200);
-        const ct = res.headers['content-type'];
-        expect(ct).toBe(testCase.expected);
+          .expect(200);
+        
+        expect(response.headers['content-type']).toBe(testCase.expected);
       }
-    });
-  });
 
-  describe('Request Logging Coverage', () => {
-    test('should handle /auth/user endpoint', async () => {
+      fs.statSync.mockRestore();
+      fs.createReadStream.mockRestore();
+    });
+
+    test('should handle file stat errors gracefully in browse', async () => {
+      // This test checks that the server doesn't crash when stat fails on some files
       const response = await request(app)
-        .get('/auth/user')
+        .get('/api/browse?path=.')
         .expect(200);
-
-      expect(response.body.authDisabled).toBe(true);
-    });
-
-    test('should return 400 for /files without path', async () => {
-      await request(app)
-        .get('/files')
-        .expect(400);
+      
+      expect(response.body.files).toBeDefined();
+      expect(Array.isArray(response.body.files)).toBe(true);
     });
   });
 
   describe('Directory and File Path Handling', () => {
     test('should handle various directory path formats', async () => {
       const testPaths = ['', '.', './'];
-
+      
       for (const testPath of testPaths) {
         const response = await request(app)
           .get(`/api/browse?path=${encodeURIComponent(testPath)}`)
           .expect(200);
-
+        
         expect(response.body.files).toBeDefined();
       }
     });

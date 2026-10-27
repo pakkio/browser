@@ -1,83 +1,93 @@
 const request = require('supertest');
+const { mockFileHeader, restoreFileHeader } = require('./helpers/file-header');
 const fs = require('fs');
+const path = require('path');
+const { exec } = require('child_process');
 
-jest.mock('node-unrar-js', () => ({
-  createExtractorFromFile: jest.fn()
-}));
+// Mock external dependencies
+jest.mock('pdf2pic');
+jest.mock('yauzl');
+jest.mock('node-unrar-js');
+jest.mock('child_process');
 
 describe('Integration Tests', () => {
   let app;
-
+  
   beforeAll(() => {
-    process.env.AUTH = 'FALSE';
-    delete require.cache[require.resolve('../lib/config.js')];
+    process.env.AUTH = 'FALSE'; // Disable auth for integration tests
+    jest.resetModules();
     app = require('../server');
   });
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   afterEach(() => {
+    // Spies on fs must not leak into later tests
     jest.restoreAllMocks();
   });
 
   describe('File Browser Workflow', () => {
     test('should browse directory and serve files', async () => {
+      // Mock fs operations
+      // Content-Length comes from stat, so it must match the streamed body
+      const stat = {
+        size: 'test content'.length,
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
+      };
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false },
         { name: 'folder', isDirectory: () => true }
       ]);
-      jest.spyOn(fs.promises, 'stat').mockResolvedValue({
-        size: 1024,
-        mtime: new Date('2023-01-01'),
-        isDirectory: () => false
-      });
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue(stat);
+      jest.spyOn(fs, 'statSync').mockReturnValue(stat);
+      
+      const { Readable } = require('stream');
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from(['test content']));
 
-      const mockStream = {
-        on: jest.fn((event, callback) => {
-          if (event === 'error') return;
-        }),
-        pipe: jest.fn((res) => {
-          res.end('test content');
-        })
-      };
-
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'statSync').mockReturnValue({
-        size: 1024,
-        mtime: new Date('2023-01-01'),
-        isDirectory: () => false
-      });
-      jest.spyOn(fs, 'createReadStream').mockReturnValue(mockStream);
-
+      // 1. Browse root directory
       const browseResponse = await request(app)
         .get('/api/browse')
         .expect(200);
 
       expect(browseResponse.body.files).toBeDefined();
       expect(Array.isArray(browseResponse.body.files)).toBe(true);
+
+      // 2. Serve a file  
+      const fileResponse = await request(app)
+        .get('/files?path=test.txt');
+
+      expect(fileResponse.status).toBe(200);
     });
 
     test('should handle complete PDF workflow', async () => {
       const { exec } = require('child_process');
       const pdf2pic = require('pdf2pic');
-
+      
+      // Mock PDF info
       exec.mockImplementation((command, callback) => {
         if (command.includes('pdfinfo')) {
           callback(null, 'Pages: 5\nCreator: Test', '');
         }
       });
-
+      
+      // Mock PDF conversion
       const mockConvert = jest.fn().mockResolvedValue({
         base64: 'base64encodedimage'
       });
-      pdf2pic.fromPath = jest.fn(() => mockConvert);
+      pdf2pic.fromPath.mockReturnValue(mockConvert);
+      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, mtime: new Date('2023-01-01') });
 
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
+      // 1. Get PDF info
       const infoResponse = await request(app)
         .get('/api/pdf-info?path=test.pdf')
         .expect(200);
 
       expect(infoResponse.body.pages).toBe(5);
 
+      // 2. Get PDF preview
       const previewResponse = await request(app)
         .get('/pdf-preview?path=test.pdf&page=1')
         .expect(200);
@@ -87,7 +97,8 @@ describe('Integration Tests', () => {
 
     test('should handle complete comic workflow', async () => {
       const yauzl = require('yauzl');
-
+      
+      // Mock CBZ extraction
       const mockZipfile = {
         readEntry: jest.fn(),
         on: jest.fn((event, callback) => {
@@ -112,13 +123,15 @@ describe('Integration Tests', () => {
         close: jest.fn()
       };
 
-      yauzl.open = jest.fn((path, options, callback) => {
+      yauzl.open.mockImplementation((path, options, callback) => {
         callback(null, mockZipfile);
       });
 
+      // Handlers check existence and the ZIP signature before extracting
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4B, 0x03]));
+      mockFileHeader();
 
+      // Test comic preview
       const response = await request(app)
         .get('/comic-preview?path=test.cbz&page=1');
 
@@ -126,43 +139,47 @@ describe('Integration Tests', () => {
     });
 
     test('should handle complete EPUB workflow', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-
       const yauzl = require('yauzl');
+      
+      // Mock EPUB extraction with proper structure
       const mockFiles = new Map();
-      mockFiles.set('META-INF/container.xml',
+      mockFiles.set('META-INF/container.xml', 
         '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
-      mockFiles.set('content.opf',
+      mockFiles.set('content.opf', 
         '<?xml version="1.0"?><package><metadata><dc:title>Test Book</dc:title></metadata><spine><itemref idref="ch1"/></spine><manifest><item id="ch1" href="ch1.html"/></manifest></package>');
-      mockFiles.set('ch1.html',
+      mockFiles.set('ch1.html', 
         '<html><body><h1>Chapter 1</h1><p>Test content</p></body></html>');
+      
+      const mockZipfile = {
+        readEntry: jest.fn(),
+        on: jest.fn((event, callback) => {
+          if (event === 'entry') {
+            Array.from(mockFiles.keys()).forEach(fileName => {
+              callback({ fileName });
+            });
+          } else if (event === 'end') {
+            callback();
+          }
+        }),
+        openReadStream: jest.fn((entry, callback) => {
+          const content = mockFiles.get(entry.fileName) || '';
+          const mockStream = {
+            on: jest.fn((event, callback) => {
+              if (event === 'data') callback(Buffer.from(content));
+              if (event === 'end') callback();
+            })
+          };
+          callback(null, mockStream);
+        })
+      };
 
-      yauzl.open = jest.fn((path, options, callback) => {
-        const mockZipfile = {
-          readEntry: jest.fn(),
-          on: jest.fn((event, handler) => {
-            if (event === 'entry') {
-              Array.from(mockFiles.keys()).forEach(fileName => {
-                handler({ fileName });
-              });
-            } else if (event === 'end') {
-              handler();
-            }
-          }),
-          openReadStream: jest.fn((entry, callback) => {
-            const content = mockFiles.get(entry.fileName) || '';
-            const mockStream = {
-              on: jest.fn((event, callback) => {
-                if (event === 'data') callback(Buffer.from(content));
-                if (event === 'end') callback();
-              })
-            };
-            callback(null, mockStream);
-          })
-        };
+      yauzl.open.mockImplementation((path, options, callback) => {
         callback(null, mockZipfile);
       });
 
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
+      // Test EPUB preview
       const response = await request(app)
         .get('/epub-preview?path=test.epub');
 
@@ -174,8 +191,23 @@ describe('Integration Tests', () => {
   });
 
   describe('Error Handling Integration', () => {
-    test('should handle PDF info errors', async () => {
-      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+    test('should handle cascading errors gracefully', async () => {
+      // 1. Mock file not found error
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => {
+        const stream = require('stream');
+        const errorStream = new stream.Readable();
+        errorStream._read = () => {};
+        process.nextTick(() => {
+          errorStream.emit('error', new Error('ENOENT: no such file or directory'));
+        });
+        return errorStream;
+      });
+
+      const response1 = await request(app)
+        .get('/files?path=nonexistent.txt');
+      expect(response1.status).toBe(404);
+
+      // 2. Invalid PDF
       const { exec } = require('child_process');
       exec.mockImplementation((command, callback) => {
         callback(new Error('Invalid PDF'), '', 'Error reading PDF');
@@ -184,46 +216,58 @@ describe('Integration Tests', () => {
       await request(app)
         .get('/api/pdf-info?path=invalid.pdf')
         .expect(500);
+
+      // 3. Corrupted archive
+      const yauzl = require('yauzl');
+      yauzl.open.mockImplementation((path, options, callback) => {
+        callback(new Error('Corrupted archive'));
+      });
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      mockFileHeader();
+
+      await request(app)
+        .get('/comic-preview?path=corrupted.cbz&page=1')
+        .expect(500);
     });
   });
 
   describe('Security Integration', () => {
-    test('should prevent path traversal in browse', async () => {
-      const response = await request(app)
+    test('should prevent path traversal attacks', async () => {
+      // Test specific path traversal patterns that should be blocked
+      const response1 = await request(app)
         .get('/api/browse?path=../../../etc/passwd');
-      expect(response.status).toBe(403);
-    });
+      expect(response1.status).toBe(403);
 
-    test('should prevent path traversal in files', async () => {
-      const response = await request(app)
+      const response2 = await request(app)
         .get('/files?path=../../../etc/passwd');
-      expect(response.status).toBe(403);
-    });
+      expect(response2.status).toBe(403);
 
-    test('should handle absolute paths in files', async () => {
-      const response = await request(app)
+      // Test path that should fail with file not found
+      const response3 = await request(app)
         .get('/files?path=/etc/passwd');
-      expect([403, 404, 500]).toContain(response.status);
+      expect([403, 404, 500]).toContain(response3.status); // Forbidden or file not found
     });
   });
 
   describe('Performance Integration', () => {
     test('should handle concurrent requests', async () => {
+      // Mock successful responses
       jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false }
       ]);
       jest.spyOn(fs.promises, 'stat').mockResolvedValue({
         size: 1024,
-        mtime: new Date(),
-        isDirectory: () => false
+        mtime: new Date()
       });
 
-      const requests = Array(5).fill(null).map(() =>
+      // Create multiple concurrent requests
+      const requests = Array(5).fill(null).map(() => 
         request(app).get('/api/browse').expect(200)
       );
 
       const responses = await Promise.all(requests);
-
+      
+      // All requests should succeed
       responses.forEach(response => {
         expect(response.status).toBe(200);
         expect(response.body.files).toBeDefined();
