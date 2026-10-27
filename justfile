@@ -1,10 +1,12 @@
-# Serve a folder on the default port (3000). With no argument it tries Z:\ (/mnt/z)
-# first and falls back to test-files. Override with `just run ~/Books` or PORT=4000 just run
+# Serve a folder on the default port (3000). With no argument it tries Z:\ first (/mnt/z, or
+# Windows node.exe when WSL can't see the drive) and falls back to test-files.
+# Override with `just run ~/Books` or PORT=4000 just run. Works from WSL and PowerShell.
 fallback := "test-files"
 
 default: run
 
 # Install deps if missing, print usage, then start the server
+[unix]
 run folder="":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -16,24 +18,16 @@ run folder="":
     fi
     dir="{{folder}}"
     if [ -z "$dir" ]; then
-        # Z:\ is a Windows drive; in WSL it only shows up once mounted (drvfs, needs sudo)
-        if [ -z "$(ls -A /mnt/z 2>/dev/null | head -1)" ]; then
-            if [ "$(powershell.exe -NoProfile -Command 'Test-Path Z:\' 2>/dev/null | tr -d '\r')" = "True" ]; then
-                echo "Z:\\ exists in Windows but /mnt/z is empty; mounting (sudo)..."
-                sudo mkdir -p /mnt/z
-                # Mapped/virtual drives (e.g. RaiDrive) often fail by drive letter; retry with the network path
-                unc="$(powershell.exe -NoProfile -Command '(Get-PSDrive Z).DisplayRoot' 2>/dev/null | tr -d '\r')"
-                sudo mount -t drvfs Z: /mnt/z 2>/dev/null \
-                    || { [ -n "$unc" ] && echo "Retrying with $unc" && sudo mount -t drvfs "$unc" /mnt/z; } \
-                    || echo "Mount failed: run 'sudo mount -t drvfs Z: /mnt/z' manually to see the error"
-            else
-                echo "Z:\\ not found in Windows"
-            fi
-        fi
+        # Z:\ is a Windows drive; mapped/virtual ones (e.g. RaiDrive) are not visible to WSL,
+        # so when /mnt/z is empty but Windows has Z:\, serve it with the Windows node.exe
         if [ -n "$(ls -A /mnt/z 2>/dev/null | head -1)" ]; then
             dir=/mnt/z
+        elif [ "$(powershell.exe -NoProfile -Command 'Test-Path Z:\' 2>/dev/null | tr -d '\r')" = "True" ]; then
+            echo "File Browser -> http://localhost:$port  (serving Z:\ via Windows node)"
+            echo "  stop: Ctrl+C | other folder: just run PATH | other port: PORT=4000 just run"
+            exec powershell.exe -NoProfile -Command "Set-Location '$(wslpath -w "$PWD")'; \$env:PORT='$port'; node server.js 'Z:\'"
         else
-            echo "Z:\\ (/mnt/z) not available, falling back to {{fallback}}"
+            echo "Z:\\ not available, falling back to {{fallback}}"
             dir="{{fallback}}"
         fi
     fi
@@ -41,6 +35,21 @@ run folder="":
     echo "  stop: Ctrl+C | other folder: just run PATH | other port: PORT=4000 just run"
     echo "  Google login: AUTH=true plus credentials in .env (see SETUP_AUTH.md)"
     exec node server.js "$dir"
+
+# Same as above, for `just run` typed in PowerShell
+[windows]
+[extension: '.ps1']
+run folder="":
+    #!powershell.exe -File
+    $ErrorActionPreference = 'Stop'
+    if (-not (Test-Path node_modules)) { npm install }
+    $port = if ($env:PORT) { $env:PORT } else { '3000' }
+    $env:PORT = $port
+    $dir = '{{folder}}'
+    if (-not $dir) { $dir = if (Test-Path 'Z:\') { 'Z:\' } else { '{{fallback}}' } }
+    Write-Host "File Browser -> http://localhost:$port  (serving $dir)"
+    Write-Host "  stop: Ctrl+C | other folder: just run PATH | other port: `$env:PORT=4000; just run"
+    node server.js $dir
 
 # Run the test suite
 test:
