@@ -109,8 +109,10 @@ app.use(helmet({
             "media-src": ["'self'", "blob:"],
             "connect-src": ["'self'"],
             "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
-            "object-src": ["'none'"],
-            "frame-ancestors": ["'none'"]
+            // PDFs and HTML from archives are shown in same-origin iframes; the browser's
+            // PDF viewer needs object-src. Other sites still cannot frame the app.
+            "object-src": ["'self'"],
+            "frame-ancestors": ["'self'"]
         }
     },
     crossOriginEmbedderPolicy: false
