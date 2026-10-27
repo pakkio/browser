@@ -1,7 +1,7 @@
+// jest.fn so tests can override the extractor per call (mockResolvedValueOnce)
 module.exports = {
-  createExtractorFromFile: (filePath, options = {}) => {
-    return {
-      extract: async (args = {}) => ({ files: [], warnings: [], errors: [] })
-    };
-  }
+  createExtractorFromFile: jest.fn(async () => ({
+    getFileList: async () => ({ fileHeaders: [] }),
+    extract: async () => ({ files: [], warnings: [], errors: [] })
+  }))
 };

@@ -10,15 +10,13 @@ describe('Authentication Tests', () => {
     // Mock argv to use current directory instead of test file path
     process.argv = ['node', 'server.js', '.'];
     // Clear require cache to force re-import of server with new AUTH setting
-    delete require.cache[require.resolve('../server.js')];
-    delete require.cache[require.resolve('../auth.js')];
+    jest.resetModules();
   });
   
   afterEach(() => {
     process.env.AUTH = originalAuthEnv;
     process.argv = originalArgv;
-    delete require.cache[require.resolve('../server.js')];
-    delete require.cache[require.resolve('../auth.js')];
+    jest.resetModules();
   });
 
   describe('AUTH=TRUE (Authentication Enabled)', () => {
@@ -108,8 +106,7 @@ describe('Authentication Tests', () => {
       'TRUE', 'true', 'YES', 'yes', '1'
     ])('should enable auth for AUTH=%s', async (authValue) => {
       process.env.AUTH = authValue;
-      delete require.cache[require.resolve('../server.js')];
-      delete require.cache[require.resolve('../auth.js')];
+      jest.resetModules();
       const app = require('../server.js');
       
       const response = await request(app)
@@ -122,8 +119,7 @@ describe('Authentication Tests', () => {
       'FALSE', 'false', 'NO', 'no', '0', '', 'invalid'
     ])('should disable auth for AUTH=%s', async (authValue) => {
       process.env.AUTH = authValue;
-      delete require.cache[require.resolve('../server.js')];
-      delete require.cache[require.resolve('../auth.js')];
+      jest.resetModules();
       const app = require('../server.js');
       
       await request(app)

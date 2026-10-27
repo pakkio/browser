@@ -5,12 +5,7 @@ describe('Middleware and Application Tests', () => {
   
   beforeEach(() => {
     originalAuth = process.env.AUTH;
-    // Clear require cache
-    Object.keys(require.cache).forEach(key => {
-      if (key.includes('server.js')) {
-        delete require.cache[key];
-      }
-    });
+    jest.resetModules();
   });
 
   afterEach(() => {
@@ -133,12 +128,17 @@ describe('Middleware and Application Tests', () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
       
-      // Test unknown extension (will error due to file not existing, but header should be set)
+      const fs = require('fs');
+      const { Readable } = require('stream');
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, size: 1 });
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => Readable.from(['x']));
+
       const response = await request(app)
         .get('/files?path=test.unknown')
-        .expect(500);
+        .expect(200);
       
       expect(response.headers['content-type']).toBe('application/octet-stream');
+      jest.restoreAllMocks();
     });
   });
 
@@ -196,22 +196,29 @@ describe('Middleware and Application Tests', () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
       
+      // Existence is checked before the extension
+      jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+
       const response = await request(app)
         .get('/comic-preview?path=test.txt&page=1')
         .expect(400);
       
-      expect(response.text).toBe('Not a comic book archive');
+      expect(response.text).toBe('Not a supported archive');
+      jest.restoreAllMocks();
     });
 
     test('should validate EPUB file extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
       
+      jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
+
       const response = await request(app)
         .get('/epub-preview?path=test.txt')
         .expect(400);
       
       expect(response.body.error).toBe('Not an EPUB file');
+      jest.restoreAllMocks();
     });
   });
 
@@ -231,21 +238,19 @@ describe('Middleware and Application Tests', () => {
       const app = require('../server.js');
       
       // Mock node-unrar-js to throw error
-      const { createExtractorFromFile } = require('node-unrar-js');
-      const originalCreateExtractor = createExtractorFromFile;
-      
-      require('node-unrar-js').createExtractorFromFile = jest.fn().mockRejectedValue(
-        new Error('Extraction library error')
+      require('node-unrar-js').createExtractorFromFile.mockRejectedValueOnce(
+        new Error('File is not RAR archive')
       );
+
+      jest.spyOn(require('fs'), 'existsSync').mockReturnValue(true);
 
       const response = await request(app)
         .get('/comic-preview?path=test.cbr&page=1')
-        .expect(500);
+        .expect(422);
       
-      expect(response.text).toContain('Comic extraction error');
-      
-      // Restore original function
-      require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
+      // Both the CBR and the CBZ fallback fail, so the archive is reported as corrupt
+      expect(response.text).toContain('Archive file is corrupted');
+      jest.restoreAllMocks();
     });
   });
 

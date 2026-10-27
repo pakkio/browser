@@ -14,8 +14,7 @@ describe('File Browser Server', () => {
   
   beforeAll(() => {
     process.env.AUTH = 'FALSE'; // Disable auth for server tests
-    delete require.cache[require.resolve('../server.js')];
-    delete require.cache[require.resolve('../auth.js')];
+    jest.resetModules();
     app = require('../server');
   });
 
@@ -33,8 +32,8 @@ describe('File Browser Server', () => {
         { name: 'folder', isDirectory: () => true }
       ];
       
-      jest.spyOn(fs, 'readdirSync').mockReturnValue(mockFiles);
-      jest.spyOn(fs, 'statSync').mockReturnValue({
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue(mockFiles);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({
         size: 1024,
         mtime: new Date('2023-01-01')
       });
@@ -48,9 +47,7 @@ describe('File Browser Server', () => {
     });
 
     test('should handle directory read errors', async () => {
-      jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
-        throw new Error('Permission denied');
-      });
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValue(new Error('Permission denied'));
 
       await request(app)
         .get('/api/browse')
@@ -151,6 +148,10 @@ describe('File Browser Server', () => {
       });
       
       pdf2pic.fromPath.mockReturnValue(mockConvert);
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        size: 1024,
+        mtime: new Date('2023-01-01')
+      });
 
       await request(app)
         .get('/pdf-preview?path=test.pdf&page=1')
@@ -166,6 +167,10 @@ describe('File Browser Server', () => {
 
   describe('GET /comic-preview', () => {
     test('should extract comic page from CBZ', async () => {
+      // Handlers check existence before validating the extension
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      // ZIP magic bytes ("PK\x03\x04") pass the format validation
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       const yauzl = require('yauzl');
       const mockZipfile = {
         readEntry: jest.fn(),
@@ -203,6 +208,8 @@ describe('File Browser Server', () => {
     });
 
     test('should reject non-comic files', async () => {
+      // Handlers check existence before validating the extension
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       await request(app)
         .get('/comic-preview?path=test.txt&page=1')
         .expect(400);
@@ -211,6 +218,8 @@ describe('File Browser Server', () => {
 
   describe('GET /epub-preview', () => {
     test('should extract EPUB content', async () => {
+      // Handlers check existence before validating the extension
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       const yauzl = require('yauzl');
       
       // Mock EPUB content
@@ -256,6 +265,8 @@ describe('File Browser Server', () => {
     });
 
     test('should reject non-EPUB files', async () => {
+      // Handlers check existence before validating the extension
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       await request(app)
         .get('/epub-preview?path=test.txt')
         .expect(400);
