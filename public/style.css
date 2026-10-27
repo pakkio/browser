@@ -1626,19 +1626,24 @@ audio, video {
     border-radius: 20px;
 }
 
+/* Collage: masonry columns, tiles keep their own aspect ratio and sit slightly askew */
 .library-shelf {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-    gap: 25px;
-    padding: 10px;
+    column-width: 170px;
+    column-gap: 18px;
+    padding: 14px;
 }
 
 .library-book {
     --book-shadow-depth: 5px;
     --book-shadow-blur: 8px;
+    --tilt: 0deg;
+    --thumb-ratio: 0.72;
     position: relative;
     display: flex;
     flex-direction: column;
+    break-inside: avoid;
+    margin: 0 0 18px;
+    transform: rotate(var(--tilt));
     background: linear-gradient(145deg, #2a2a3e, #1e1e30);
     border-radius: 8px;
     overflow: hidden;
@@ -1650,7 +1655,8 @@ audio, video {
 }
 
 .library-book:hover {
-    transform: translateY(-8px) scale(1.02);
+    z-index: 5;
+    transform: rotate(0deg) translateY(-6px) scale(1.04);
     box-shadow:
         calc(var(--book-shadow-depth) * 1.5) calc(var(--book-shadow-depth) * 1.5) calc(var(--book-shadow-blur) * 1.5) rgba(0, 0, 0, 0.6),
         0 0 20px rgba(78, 205, 196, 0.2);
@@ -1673,7 +1679,7 @@ audio, video {
 .library-thumb-container {
     position: relative;
     width: 100%;
-    padding-top: 140%;
+    aspect-ratio: var(--thumb-ratio);
     overflow: hidden;
     background: rgba(0, 0, 0, 0.3);
 }
@@ -1749,7 +1755,8 @@ audio, video {
 
 /* Selected state for library books */
 .library-book.selected {
-    transform: translateY(-8px) scale(1.02);
+    z-index: 5;
+    transform: rotate(0deg) translateY(-6px) scale(1.04);
     outline: 3px solid #4ecdc4;
     outline-offset: 2px;
     box-shadow:
