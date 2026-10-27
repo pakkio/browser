@@ -20,7 +20,12 @@ run folder="":
         if [ -z "$(ls -A /mnt/z 2>/dev/null | head -1)" ]; then
             if [ "$(powershell.exe -NoProfile -Command 'Test-Path Z:\' 2>/dev/null | tr -d '\r')" = "True" ]; then
                 echo "Z:\\ exists in Windows but /mnt/z is empty; mounting (sudo)..."
-                sudo mkdir -p /mnt/z && sudo mount -t drvfs Z: /mnt/z || echo "Mount failed"
+                sudo mkdir -p /mnt/z
+                # Mapped/virtual drives (e.g. RaiDrive) often fail by drive letter; retry with the network path
+                unc="$(powershell.exe -NoProfile -Command '(Get-PSDrive Z).DisplayRoot' 2>/dev/null | tr -d '\r')"
+                sudo mount -t drvfs Z: /mnt/z 2>/dev/null \
+                    || { [ -n "$unc" ] && echo "Retrying with $unc" && sudo mount -t drvfs "$unc" /mnt/z; } \
+                    || echo "Mount failed: run 'sudo mount -t drvfs Z: /mnt/z' manually to see the error"
             else
                 echo "Z:\\ not found in Windows"
             fi
