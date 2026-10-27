@@ -18,6 +18,8 @@ class ComicRenderer {
         this.panelMode = false; // 'n' key: step through panels of the current page
         this.panels = null;
         this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.aiPanelCache = new Map(); // "path:page" -> panels the AI found
     }
 
     isSingle() {
@@ -185,6 +187,62 @@ class ComicRenderer {
         }
         this.panels = this.detectPanels(img);
         this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.requestAIPanels(img);
+    }
+
+    /**
+     * Ask the server's AI to find the panels of the page. The gutter-based result is shown
+     * straight away; when the AI answers for the same page it replaces it and the view is
+     * refreshed. Any failure keeps the gutter-based panels.
+     */
+    async requestAIPanels(img) {
+        const page = this.currentPage;
+        const filePath = this.currentFilePath;
+        const key = `${filePath}:${page}`;
+
+        let panels = this.aiPanelCache.get(key);
+        if (!panels) {
+            try {
+                const blob = await this.pageToJpeg(img);
+                const response = await fetch('/api/comic-panels', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'image/jpeg' },
+                    body: blob,
+                    signal: this.abortController?.signal
+                });
+                if (!response.ok) {
+                    window.logger.warn(`[ComicRenderer] AI panels unavailable (HTTP ${response.status})`);
+                    return;
+                }
+                panels = (await response.json()).panels;
+                if (!Array.isArray(panels) || panels.length === 0) return;
+                this.aiPanelCache.set(key, panels);
+            } catch (error) {
+                if (error.name !== 'AbortError') {
+                    window.logger.warn(`[ComicRenderer] AI panels failed: ${error.message}`);
+                }
+                return;
+            }
+        }
+
+        // Only apply the answer if the reader is still on the same page in panel mode
+        if (this.isCleaningUp || !this.panelMode || this.currentPage !== page || this.currentFilePath !== filePath) return;
+        this.panels = panels;
+        this.panelsFromAI = true;
+        this.showPanel(Math.min(Math.max(this.panelIndex, 0), panels.length - 1));
+    }
+
+    /** Downscale the page image to a JPEG small enough to send to the AI. */
+    pageToJpeg(img) {
+        const scale = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        return new Promise((resolve, reject) => {
+            canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not encode page')), 'image/jpeg', 0.8);
+        });
     }
 
     exitPanelMode() {
@@ -274,7 +332,7 @@ class ComicRenderer {
 
         const statusElement = document.querySelector('#comic-status');
         if (statusElement) {
-            statusElement.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}`;
+            statusElement.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`;
         }
     }
 
