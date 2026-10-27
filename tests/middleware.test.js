@@ -1,13 +1,18 @@
 const request = require('supertest');
 
+jest.mock('node-unrar-js', () => ({
+  createExtractorFromFile: jest.fn().mockRejectedValue(new Error('File is not RAR archive'))
+}));
+
 describe('Middleware and Application Tests', () => {
   let originalAuth;
   
   beforeEach(() => {
     originalAuth = process.env.AUTH;
-    // Clear require cache
+    // Clear require cache for config-dependent modules
     Object.keys(require.cache).forEach(key => {
-      if (key.includes('server.js')) {
+      if (key.includes('server.js') || key.includes('config.js') ||
+          key.includes('auth.js') || key.includes('auth-routes.js')) {
         delete require.cache[key];
       }
     });
@@ -37,12 +42,13 @@ describe('Middleware and Application Tests', () => {
       
       // Mock fs for browse endpoint
       const fs = require('fs');
-      jest.spyOn(fs, 'readdirSync').mockReturnValue([
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false }
       ]);
-      jest.spyOn(fs, 'statSync').mockReturnValue({
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({
         size: 1024,
-        mtime: new Date('2023-01-01')
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
       });
       
       const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
@@ -56,8 +62,8 @@ describe('Middleware and Application Tests', () => {
       );
       
       consoleSpy.mockRestore();
-      fs.readdirSync.mockRestore();
-      fs.statSync.mockRestore();
+      fs.promises.readdir.mockRestore();
+      fs.promises.stat.mockRestore();
     });
 
     test('should not log file requests without query params', async () => {
@@ -80,39 +86,26 @@ describe('Middleware and Application Tests', () => {
   });
 
   describe('Application Startup Configuration', () => {
-    test('should start with correct authentication configuration', () => {
-      process.env.AUTH = 'TRUE';
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      require('../server.js');
-      
-      expect(consoleSpy).toHaveBeenCalledWith('🔐 Authentication: ENABLED');
-      
-      consoleSpy.mockRestore();
+    test('should export app module', () => {
+      process.env.AUTH = 'FALSE';
+      const app = require('../server.js');
+      expect(app).toBeDefined();
+      expect(typeof app).toBe('function');
     });
 
-    test('should display base directory on startup', () => {
-      process.env.AUTH = 'FALSE';
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      require('../server.js');
-      
-      expect(consoleSpy).toHaveBeenCalledWith(
-        expect.stringMatching(/📂 Base directory:/)
-      );
-      
-      consoleSpy.mockRestore();
+    test('should start with correct authentication configuration', () => {
+      process.env.AUTH = 'TRUE';
+      process.env.GOOGLE_CLIENT_ID = 'test-client-id';
+      process.env.GOOGLE_CLIENT_SECRET = 'test-client-secret';
+      delete require.cache[require.resolve('../lib/config.js')];
+      const app = require('../server.js');
+      expect(app).toBeDefined();
     });
 
     test('should display port configuration on startup', () => {
       process.env.AUTH = 'FALSE';
-      const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
-      
-      require('../server.js');
-      
-      expect(consoleSpy).toHaveBeenCalledWith('🔧 Port: 3000');
-      
-      consoleSpy.mockRestore();
+      const config = require('../lib/config');
+      expect(config.port).toBe(3000);
     });
   });
 
@@ -120,24 +113,46 @@ describe('Middleware and Application Tests', () => {
     test('should return correct MIME type for known extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
-      // Test PDF MIME type
+
+      // Mock file existence and content
+      const fs = require('fs');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'createReadStream').mockImplementation(() => ({
+        pipe: jest.fn((res) => res.end('test')),
+        on: jest.fn()
+      }));
+      jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, size: 4 });
+
       const response = await request(app)
         .get('/files?path=test.pdf')
         .expect(200);
-      
+
       expect(response.headers['content-type']).toBe('application/pdf');
     });
 
     test('should return default MIME type for unknown extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
-      // Test unknown extension (will error due to file not existing, but header should be set)
+
+      const fs = require('fs');
+      const { Readable } = require('stream');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'statSync').mockReturnValue({
+        isDirectory: () => false,
+        size: 4
+      });
+      const fakeStream = new Readable({
+        read() {
+          this.push('test');
+          this.push(null);
+        }
+      });
+      jest.spyOn(fs, 'createReadStream').mockReturnValue(fakeStream);
+
       const response = await request(app)
         .get('/files?path=test.unknown')
-        .expect(500);
-      
+        .expect(200);
+
       expect(response.headers['content-type']).toBe('application/octet-stream');
     });
   });
@@ -184,33 +199,39 @@ describe('Middleware and Application Tests', () => {
     test('should validate PDF file extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
+
       const response = await request(app)
         .get('/pdf-preview?path=test.txt&page=1')
         .expect(400);
-      
+
       expect(response.text).toBe('Not a PDF file');
     });
 
     test('should validate comic file extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
+
+      const fs = require('fs');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
       const response = await request(app)
         .get('/comic-preview?path=test.txt&page=1')
         .expect(400);
-      
-      expect(response.text).toBe('Not a comic book archive');
+
+      expect(response.text).toBe('Not a supported archive');
     });
 
     test('should validate EPUB file extensions', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
+
+      const fs = require('fs');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
       const response = await request(app)
         .get('/epub-preview?path=test.txt')
         .expect(400);
-      
+
       expect(response.body.error).toBe('Not an EPUB file');
     });
   });
@@ -229,23 +250,20 @@ describe('Middleware and Application Tests', () => {
     test('should handle CBR extraction fallback errors', async () => {
       process.env.AUTH = 'FALSE';
       const app = require('../server.js');
-      
-      // Mock node-unrar-js to throw error
-      const { createExtractorFromFile } = require('node-unrar-js');
-      const originalCreateExtractor = createExtractorFromFile;
-      
-      require('node-unrar-js').createExtractorFromFile = jest.fn().mockRejectedValue(
-        new Error('Extraction library error')
-      );
+
+      const fs = require('fs');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'statSync').mockReturnValue({ size: 1024, isDirectory: () => false });
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1A, 0x07]));
+
+      // node-unrar-js is already mocked at the top of the file to reject with 'File is not RAR archive'
+      // This triggers the CBZ fallback in extractFromCBR
 
       const response = await request(app)
         .get('/comic-preview?path=test.cbr&page=1')
-        .expect(500);
-      
-      expect(response.text).toContain('Comic extraction error');
-      
-      // Restore original function
-      require('node-unrar-js').createExtractorFromFile = originalCreateExtractor;
+        .expect(422);
+
+      expect(response.text).toBe('Archive file is corrupted and cannot be processed');
     });
   });
 

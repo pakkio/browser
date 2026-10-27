@@ -88,7 +88,7 @@ class LibraryRenderer {
                     }
                 }
             } catch (e) {
-                console.log('Could not load annotations:', e);
+                window.logger.info('Could not load annotations:', e);
             }
         }
 
@@ -534,7 +534,7 @@ class LibraryRenderer {
                     updateProgress();
                 }
             } catch (e) {
-                console.log('Thumbnail load error for', fileName, e);
+                window.logger.info('Thumbnail load error for', fileName, e);
                 loaded++;
                 updateProgress();
             }

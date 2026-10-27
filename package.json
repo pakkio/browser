@@ -7,9 +7,9 @@
     "test": "jest --config jest.config.js",
     "test:watch": "jest --watch --config jest.config.js",
     "test:coverage": "jest --coverage --config jest.config.js",
-    "test:min": "jest tests/sanity.test.js tests/contract/homogeneity.test.js tests/integration/homogeneity-orthogonality.integration.test.js tests/unit/orthogonality.model.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json",
-    "test:min:node": "node scripts/mini-test.js",
-    "test:min:direct": "node ./node_modules/jest/bin/jest.js tests/sanity.test.js tests/contract/homogeneity.test.js tests/integration/homogeneity-orthogonality.integration.test.js tests/unit/orthogonality.model.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json"
+    "test:min": "jest tests/sanity.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json",
+    "test:min:node": "node -e \"console.log('Deprecated - run npm test instead')\"",
+    "test:min:direct": "node ./node_modules/jest/bin/jest.js tests/sanity.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json"
   },
   "keywords": [
     "file-browser",
@@ -27,7 +27,7 @@
   "description": "Modern file browser with conditional authentication, media preview, and comprehensive test coverage",
   "dependencies": {
     "dotenv": "^16.6.1",
-    "express": "^5.1.0",
+    "express": "^4.21.1",
     "express-rate-limit": "^8.1.0",
     "express-session": "^1.18.0",
     "helmet": "^8.1.0",

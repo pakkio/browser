@@ -143,7 +143,7 @@ class ImageRenderer {
 
             img.onerror = async (errorEvent) => {
                 cleanup();
-                console.error(`Failed to load image: ${fileName}`, errorEvent);
+                window.logger.error(`Failed to load image: ${fileName}`, errorEvent);
                 
                 // Hide loading popup on error
                 if (window.debugConsole) {
@@ -154,7 +154,7 @@ class ImageRenderer {
                 try {
                     const checkResponse = await fetch(`/files?path=${encodeURIComponent(filePath)}`, { method: 'HEAD' });
                     if (checkResponse.status === 404 || checkResponse.status === 410) {
-                        console.log('[ImageRenderer] File not found, triggering directory refresh');
+                        window.logger.info('[ImageRenderer] File not found, triggering directory refresh');
                         
                         // Show toast notification
                         if (typeof showToast === 'function') {
@@ -189,14 +189,14 @@ class ImageRenderer {
                         setTimeout(() => {
                             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                                 const currentPath = window.fileExplorer.currentPath();
-                                console.log(`[ImageRenderer] Refreshing directory: ${currentPath}`);
+                                window.logger.info(`[ImageRenderer] Refreshing directory: ${currentPath}`);
                                 window.fileExplorer.loadFiles(currentPath);
                             }
                         }, 500);
                         return;
                     }
                 } catch (checkError) {
-                    console.log('Error checking file existence:', checkError);
+                    window.logger.info('Error checking file existence:', checkError);
                 }
                 
                 imageContainer.innerHTML = '';
@@ -236,7 +236,7 @@ class ImageRenderer {
             // Set a timeout for image loading
             imageLoadTimeout = setTimeout(() => {
                 if (img.complete === false) {
-                    console.warn(`Image loading timeout for: ${fileName}`);
+                    window.logger.warn(`Image loading timeout for: ${fileName}`);
                     loadingDiv.innerHTML = `
                         <div style="color: #ff9999;">
                             ⏱️ Loading is taking longer than expected...<br>
@@ -257,7 +257,7 @@ class ImageRenderer {
             this.setupKeyboardNavigation();
 
         } catch (error) {
-            console.error(`Error in ImageRenderer for ${fileName}:`, error);
+            window.logger.error(`Error in ImageRenderer for ${fileName}:`, error);
             throw new Error(`Image rendering failed: ${error.message}`);
         }
     }
@@ -374,7 +374,7 @@ class ImageRenderer {
         // Apply initial fullscreen image styles
         this.updateFullscreenImageStyles();
         
-        console.log('Image entered fullscreen mode');
+        window.logger.info('Image entered fullscreen mode');
     }
 
     exitFullscreen() {
@@ -445,7 +445,7 @@ class ImageRenderer {
         this.originalParent = null;
         this.isFullscreen = false;
         this.isTruncatedView = false;
-        console.log('Image exited fullscreen mode');
+        window.logger.info('Image exited fullscreen mode');
     }
 
     toggleTruncatedView() {
@@ -453,7 +453,7 @@ class ImageRenderer {
 
         this.isTruncatedView = !this.isTruncatedView;
         this.updateFullscreenImageStyles();
-        console.log(`Image view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+        window.logger.info(`Image view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
     }
 
     updateFullscreenImageStyles() {

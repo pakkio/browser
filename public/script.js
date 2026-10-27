@@ -1,4 +1,4 @@
-console.log('FileRenderer type:', typeof FileRenderer);
+window.logger.info('FileRenderer type:', typeof FileRenderer);
 
 // Show a modal with all keyboard shortcuts
 function showShortcutHelpPopup() {
@@ -113,10 +113,10 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
                             throw new Error(text || 'Failed to open file');
                         });
                     }
-                    console.log('Opened file with native player:', fileName);
+                    window.logger.info('Opened file with native player:', fileName);
                 })
                 .catch(error => {
-                    console.error('Error opening file:', error);
+                    window.logger.error('Error opening file:', error);
                     alert('Failed to open file: ' + error.message);
                 });
             }
@@ -226,7 +226,7 @@ async function renameFile(filePath, currentName) {
             showToast(`Failed to rename: ${result.error}`, 'error');
         }
     } catch (error) {
-        console.error('Error renaming file:', error);
+        window.logger.error('Error renaming file:', error);
         showToast(`Error renaming file: ${error.message}`, 'error');
     }
 }
@@ -266,7 +266,7 @@ async function deleteFile(filePath, fileName, isDirectory) {
             showToast(`Failed to delete: ${result.error}`, 'error');
         }
     } catch (error) {
-        console.error('Error deleting file:', error);
+        window.logger.error('Error deleting file:', error);
         showToast(`Error deleting file: ${error.message}`, 'error');
     }
 }
@@ -654,7 +654,7 @@ async function moveFile(filePath, fileName, isDirectory) {
             });
             
         } catch (error) {
-            console.error('Error loading folders:', error);
+            window.logger.error('Error loading folders:', error);
             folderBrowser.innerHTML = `<div style="padding: 20px; text-align: center; color: #f44;">Error loading folders</div>`;
         }
     }
@@ -715,7 +715,7 @@ async function moveFile(filePath, fileName, isDirectory) {
                 });
                 
             } catch (error) {
-                console.error('Error searching folders:', error);
+                window.logger.error('Error searching folders:', error);
             }
         }, 300);
     });
@@ -788,7 +788,7 @@ async function moveFile(filePath, fileName, isDirectory) {
                 showToast(`Failed to move: ${result.error}`, 'error');
             }
         } catch (error) {
-            console.error('Error moving file:', error);
+            window.logger.error('Error moving file:', error);
             showToast(`Error moving file: ${error.message}`, 'error');
         }
     });
@@ -825,11 +825,11 @@ function showToast(message, type = 'info') {
 
 // Initialize the main application
 function initializeApp() {
-    console.log('Initializing main application...');
+    window.logger.info('Initializing main application...');
     
     // Make sure we're authenticated before proceeding
     if (!window.authManager?.authenticated) {
-        console.warn('Attempted to initialize app without authentication');
+        window.logger.warn('Attempted to initialize app without authentication');
         return;
     }
 
@@ -912,7 +912,7 @@ function initializeFileExplorer() {
     }
 
     function loadFiles(path) {
-        console.log('Loading files for path:', path);
+        window.logger.info('Loading files for path:', path);
         
         // Stop any playing media before loading new content
         clearContentView();
@@ -925,7 +925,7 @@ function initializeFileExplorer() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ path: path })
-        }).catch(err => console.warn('Failed to save current path:', err));
+        }).catch(err => window.logger.warn('Failed to save current path:', err));
         
         // Show prominent loading popup
         if (window.debugConsole) {
@@ -941,7 +941,7 @@ function initializeFileExplorer() {
                     // Authentication failed, handled by authManager
                     return;
                 }
-                console.log('Response status:', response.status);
+                window.logger.info('Response status:', response.status);
                 if (window.debugConsole) {
                     window.debugConsole.showProgress('Processing response...', 50);
                 }
@@ -952,7 +952,7 @@ function initializeFileExplorer() {
             })
             .then(data => {
                 if (!data) return; // Handle auth failure
-                console.log('Received data:', data);
+                window.logger.info('Received data:', data);
                 if (window.debugConsole) {
                     window.debugConsole.showProgress('Rendering file list...', 80);
                 }
@@ -977,7 +977,7 @@ function initializeFileExplorer() {
                 }
             })
             .catch(error => {
-                console.error('Error loading files:', error);
+                window.logger.error('Error loading files:', error);
                 document.getElementById('current-path-display').textContent = 'Error loading directory';
                 fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
             })
@@ -992,16 +992,16 @@ function initializeFileExplorer() {
     function displayFiles(data, path) {
         fileList.innerHTML = '';
         
-        console.log('displayFiles called with path:', JSON.stringify(path), 'path !== "":', path !== '');
+        window.logger.info('displayFiles called with path:', JSON.stringify(path), 'path !== "":', path !== '');
         
         if (path !== '') {
             const parentLi = document.createElement('li');
             parentLi.textContent = '..';
             parentLi.classList.add('parent-dir');
             parentLi.addEventListener('click', () => {
-                console.log('Parent directory clicked. Current path:', JSON.stringify(currentPath));
+                window.logger.info('Parent directory clicked. Current path:', JSON.stringify(currentPath));
                 const lastSlashIndex = currentPath.lastIndexOf('/');
-                console.log('Last slash index:', lastSlashIndex);
+                window.logger.info('Last slash index:', lastSlashIndex);
                 
                 if (lastSlashIndex > 0) {
                     currentPath = currentPath.substring(0, lastSlashIndex);
@@ -1009,14 +1009,14 @@ function initializeFileExplorer() {
                     currentPath = '';  // Go to root if we're at first level
                 }
                 
-                console.log('New path after parent navigation:', JSON.stringify(currentPath));
+                window.logger.info('New path after parent navigation:', JSON.stringify(currentPath));
                 clearContentView();
                 loadFiles(currentPath);
             });
             fileList.appendChild(parentLi);
-            console.log('Added parent directory (..) to file list');
+            window.logger.info('Added parent directory (..) to file list');
         } else {
-            console.log('At root directory - not showing parent (..)');
+            window.logger.info('At root directory - not showing parent (..)');
         }
         
         const selectedFilter = fileTypeFilter.value;
@@ -1192,11 +1192,11 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                             })
                             .then(result => {
                                 if (result && !result.success) {
-                                    console.error('Failed to open file:', result.error);
+                                    window.logger.error('Failed to open file:', result.error);
                                 }
                             })
                             .catch(error => {
-                                console.error('Error opening file:', error);
+                                window.logger.error('Error opening file:', error);
                             });
                         });
 
@@ -1232,10 +1232,10 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                         annotationBtn.addEventListener('click', (e) => {
                             e.stopPropagation();
                             const filePath = path ? `${path}/${file.name}` : file.name;
-                            console.log('Annotation button clicked for:', filePath);
+                            window.logger.info('Annotation button clicked for:', filePath);
                             
                             if (!window.annotationManager) {
-                                console.error('AnnotationManager not initialized');
+                                window.logger.error('AnnotationManager not initialized');
                                 alert('Annotation system not available. Please refresh the page.');
                                 return;
                             }
@@ -1243,7 +1243,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                             try {
                                 window.annotationManager.showAnnotationDialog(filePath, file.name);
                             } catch (error) {
-                                console.error('Error showing annotation dialog:', error);
+                                window.logger.error('Error showing annotation dialog:', error);
                                 alert('Failed to open annotation dialog: ' + error.message);
                             }
                         });
@@ -1469,7 +1469,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         } else if (index >= 0 && index < filteredFiles.length) {
             // DOM not ready yet, just update the index - the display will catch up
             selectedIndex = index;
-            console.log(`selectFile: DOM element not ready for index ${index}, updating selectedIndex only`);
+            window.logger.info(`selectFile: DOM element not ready for index ${index}, updating selectedIndex only`);
         }
     }
     
@@ -1736,16 +1736,16 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             // Otherwise the URL parameter handler will set the correct path
             if (!hasFileParam) {
                 currentPath = data.currentPath || '';
-                console.log('Server root directory:', serverRootDir);
-                console.log('Restored current path:', currentPath);
+                window.logger.info('Server root directory:', serverRootDir);
+                window.logger.info('Restored current path:', currentPath);
                 loadFiles(currentPath);
             } else {
-                console.log('Server root directory:', serverRootDir);
-                console.log('Skipping path restoration - file parameter in URL');
+                window.logger.info('Server root directory:', serverRootDir);
+                window.logger.info('Skipping path restoration - file parameter in URL');
             }
         })
         .catch(err => {
-            console.warn('Failed to fetch server info, starting at root:', err);
+            window.logger.warn('Failed to fetch server info, starting at root:', err);
             if (!hasFileParam) {
                 loadFiles(currentPath);
             }
@@ -1797,7 +1797,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             }
         })
         .catch(error => {
-            console.error('Error saving annotation:', error);
+            window.logger.error('Error saving annotation:', error);
             showQuickAnnotationFeedback('error', 'Failed to save');
         });
     }
@@ -1903,7 +1903,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         if (primaryContent) {
             const firstFile = primaryContent.files[0];
             const filePath = currentPath ? `${currentPath}/${firstFile.name}` : firstFile.name;
-            console.log(`Auto-displaying ${primaryContent.type} content:`, firstFile.name);
+            window.logger.info(`Auto-displaying ${primaryContent.type} content:`, firstFile.name);
             showContent(currentPath, firstFile.name);
         }
     }
@@ -1962,7 +1962,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         const dirPath = lastSlash > 0 ? fileToOpen.substring(0, lastSlash) : '';
         const fileName = lastSlash >= 0 ? fileToOpen.substring(lastSlash + 1) : fileToOpen;
 
-        console.log(`Auto-opening file from URL (fast path): ${fileToOpen}`);
+        window.logger.info(`Auto-opening file from URL (fast path): ${fileToOpen}`);
 
         // Prevent auto-display of folder contents while we open a specific file
         skipAutoDisplay = true;

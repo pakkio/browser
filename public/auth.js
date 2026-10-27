@@ -26,7 +26,7 @@ class AuthManager {
                 
                 // Check if authentication is disabled
                 if (data.authDisabled) {
-                    console.log('Authentication is disabled, proceeding without auth');
+                    window.logger.info('Authentication is disabled, proceeding without auth');
                     this.authenticated = true; // Allow access when auth is disabled
                     this.user = null;
                     this.authDisabled = true;
@@ -37,21 +37,21 @@ class AuthManager {
                 this.user = data.user || null;
                 this.authDisabled = false;
                 
-                console.log('Authentication status:', this.authenticated ? 'Authenticated' : 'Not authenticated');
+                window.logger.info('Authentication status:', this.authenticated ? 'Authenticated' : 'Not authenticated');
                 if (this.authenticated && this.user) {
-                    console.log('User:', this.user.name, this.user.email);
+                    window.logger.info('User:', this.user.name, this.user.email);
                 }
                 
                 return this.authenticated;
             } else {
-                console.warn('Auth check failed:', response.status);
+                window.logger.warn('Auth check failed:', response.status);
                 this.authenticated = false;
                 this.user = null;
                 this.authDisabled = false;
                 return false;
             }
         } catch (error) {
-            console.error('Auth check error:', error);
+            window.logger.error('Auth check error:', error);
             this.authenticated = false;
             this.user = null;
             this.authDisabled = false;
@@ -74,10 +74,10 @@ class AuthManager {
                 // Reload the page to reset state
                 window.location.reload();
             } else {
-                console.error('Logout failed:', response.status);
+                window.logger.error('Logout failed:', response.status);
             }
         } catch (error) {
-            console.error('Logout error:', error);
+            window.logger.error('Logout error:', error);
         }
     }
 
@@ -130,8 +130,8 @@ class AuthManager {
 
     // Enhanced fetch that handles authentication
     async authenticatedFetch(url, options = {}) {
-        console.log(`[Auth Debug] Fetching URL: ${url}`);
-        console.log(`[Auth Debug] Options:`, options);
+        window.logger.info(`[Auth Debug] Fetching URL: ${url}`);
+        window.logger.info(`[Auth Debug] Options:`, options);
         
         const defaultOptions = {
             credentials: 'include',
@@ -139,14 +139,14 @@ class AuthManager {
         };
 
         try {
-            console.log(`[Auth Debug] Making request with options:`, defaultOptions);
+            window.logger.info(`[Auth Debug] Making request with options:`, defaultOptions);
             const response = await fetch(url, defaultOptions);
-            console.log(`[Auth Debug] Response status: ${response.status}`);
-            console.log(`[Auth Debug] Response headers:`, Object.fromEntries(response.headers.entries()));
+            window.logger.info(`[Auth Debug] Response status: ${response.status}`);
+            window.logger.info(`[Auth Debug] Response headers:`, Object.fromEntries(response.headers.entries()));
             
             if (response.status === 401) {
                 // Authentication required
-                console.log('Authentication required, redirecting to login');
+                window.logger.info('Authentication required, redirecting to login');
                 this.authenticated = false;
                 this.user = null;
                 this.authCheckPromise = null;
@@ -156,7 +156,7 @@ class AuthManager {
             
             return response;
         } catch (error) {
-            console.error('Authenticated fetch error:', error);
+            window.logger.error('Authenticated fetch error:', error);
             throw error;
         }
     }
@@ -167,19 +167,19 @@ window.authManager = new AuthManager();
 
 // Initialize authentication on page load
 document.addEventListener('DOMContentLoaded', async () => {
-    console.log('Checking authentication status...');
+    window.logger.info('Checking authentication status...');
     
     const isAuthenticated = await window.authManager.checkAuthStatus();
     window.authManager.updateUI();
     
     if (isAuthenticated) {
-        console.log('User is authenticated, proceeding to load application');
+        window.logger.info('User is authenticated, proceeding to load application');
         // Trigger the main application to load
         if (window.initializeApp) {
             window.initializeApp();
         }
     } else {
-        console.log('User not authenticated, showing login screen');
+        window.logger.info('User not authenticated, showing login screen');
     }
 });
 

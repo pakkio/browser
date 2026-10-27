@@ -43,13 +43,13 @@ class GlobalErrorHandler {
             }
         }, true);
 
-        console.log('🛡️ Global error handlers initialized');
+        window.logger.info('🛡️ Global error handlers initialized');
     }
 
     handleError(errorInfo) {
         this.errorCount++;
         
-        console.error('🚨 CLIENT ERROR CAUGHT:', {
+        window.logger.error('🚨 CLIENT ERROR CAUGHT:', {
             ...errorInfo,
             timestamp: new Date().toISOString(),
             userAgent: navigator.userAgent,
@@ -70,7 +70,7 @@ class GlobalErrorHandler {
     }
 
     handleResourceError(errorInfo) {
-        console.warn('⚠️ RESOURCE ERROR:', errorInfo);
+        window.logger.warn('⚠️ RESOURCE ERROR:', errorInfo);
         
         // Don't count resource errors toward the error limit
         // They're usually not critical to app functionality
@@ -193,7 +193,7 @@ class GlobalErrorHandler {
             try {
                 window.debugConsole.hideProgress();
             } catch (e) {
-                console.log('Attempted debug console recovery');
+                window.logger.info('Attempted debug console recovery');
             }
         }
         
@@ -207,7 +207,7 @@ class GlobalErrorHandler {
                     }
                 });
             } catch (e) {
-                console.log('Attempted loading state recovery');
+                window.logger.info('Attempted loading state recovery');
             }
         }
     }

@@ -1,5 +1,6 @@
 const passport = require('passport');
 const GoogleStrategy = require('passport-google-oauth20').Strategy;
+const logger = require('./lib/logger');
 
 // Load environment variables
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || '';
@@ -24,7 +25,7 @@ if (AUTH_ENABLED) {
             provider: 'google'
         };
         
-        console.log(`[${new Date().toISOString()}] 🔐 User authenticated: ${user.name} (${user.email})`);
+        logger.info(`User authenticated: ${user.name} (${user.email})`);
         return done(null, user);
     }));
 

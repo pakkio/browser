@@ -2,7 +2,7 @@ const request = require('supertest');
 const { spawn } = require('child_process');
 
 // Mock child_process spawn for video transcoding tests
-jest.mock('child_process');
+
 
 describe('Video Transcoding Tests', () => {
   let app;
@@ -13,7 +13,7 @@ describe('Video Transcoding Tests', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
   });
 
   describe('GET /video-transcode', () => {
@@ -33,12 +33,12 @@ describe('Video Transcoding Tests', () => {
       expect(response.text).toBe('Forbidden');
     });
 
-    test('should only accept AVI files', async () => {
+    test('should reject unsupported video formats', async () => {
       const response = await request(app)
-        .get('/video-transcode?path=test.mp4')
+        .get('/video-transcode?path=test.txt')
         .expect(400);
-      
-      expect(response.text).toBe('Only AVI files supported for transcoding');
+
+      expect(response.text).toContain('not supported for transcoding');
     });
 
     test('should start FFmpeg transcoding for valid AVI file', async () => {

@@ -119,7 +119,7 @@ class TextRenderer {
         if (!response.ok) {
             // Check for file-not-found errors and trigger auto-refresh
             if (response.status === 404 || response.status === 410) {
-                console.log(`[TextRenderer] File not found: ${fileName}, triggering directory refresh`);
+                window.logger.info(`[TextRenderer] File not found: ${fileName}, triggering directory refresh`);
                 
                 // Show toast notification
                 if (typeof showToast === 'function') {
@@ -143,7 +143,7 @@ class TextRenderer {
                 setTimeout(() => {
                     if (window.fileExplorer && window.fileExplorer.loadFiles) {
                         const currentPath = window.fileExplorer.currentPath();
-                        console.log(`[TextRenderer] Refreshing directory: ${currentPath}`);
+                        window.logger.info(`[TextRenderer] Refreshing directory: ${currentPath}`);
                         window.fileExplorer.loadFiles(currentPath);
                     }
                 }, 500);

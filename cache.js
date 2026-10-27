@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
+const logger = require('./lib/logger');
 
 class FileCache {
     constructor(options = {}) {
@@ -18,7 +19,7 @@ class FileCache {
             // Create cache directory structure
             if (!fs.existsSync(this.cacheDir)) {
                 fs.mkdirSync(this.cacheDir, { recursive: true });
-                console.log(`[${new Date().toISOString()}] 📁 Created cache directory: ${this.cacheDir}`);
+                logger.info(` 📁 Created cache directory: ${this.cacheDir}`);
             }
 
             // Create subdirectories for different cache types
@@ -31,9 +32,9 @@ class FileCache {
             });
 
             this.initialized = true;
-            console.log(`[${new Date().toISOString()}] ✅ Cache system initialized at ${this.cacheDir}`);
+            logger.info(` ✅ Cache system initialized at ${this.cacheDir}`);
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache initialization failed: ${error.message}`);
+            logger.error(` ❌ Cache initialization failed: ${error.message}`);
             this.initialized = false;
         }
     }
@@ -53,18 +54,18 @@ class FileCache {
     async isValidCache(cacheFilePath, sourceFilePath) {
         try {
             if (!fs.existsSync(cacheFilePath)) {
-                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: File does not exist ${cacheFilePath}`);
+                logger.info(` 🔍 Cache invalid: File does not exist ${cacheFilePath}`);
                 return false;
             }
 
             const cacheStats = fs.statSync(cacheFilePath);
             const sourceStats = fs.statSync(sourceFilePath);
             
-            console.log(`[${new Date().toISOString()}] 🔍 Cache validation: source mtime=${sourceStats.mtime.getTime()}, cache mtime=${cacheStats.mtime.getTime()}, diff=${sourceStats.mtime.getTime() - cacheStats.mtime.getTime()}ms`);
+            logger.info(` 🔍 Cache validation: source mtime=${sourceStats.mtime.getTime()}, cache mtime=${cacheStats.mtime.getTime()}, diff=${sourceStats.mtime.getTime() - cacheStats.mtime.getTime()}ms`);
             
             // Check if cache is newer than source file (allow 1 second tolerance for filesystem timing)
             if (sourceStats.mtime.getTime() > cacheStats.mtime.getTime() + 1000) {
-                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Source file is newer than cache`);
+                logger.info(` 🔍 Cache invalid: Source file is newer than cache`);
                 return false;
             }
 
@@ -72,14 +73,14 @@ class FileCache {
             const now = Date.now();
             const cacheAge = now - cacheStats.mtime.getTime();
             if (cacheAge > this.maxAge) {
-                console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Cache is too old (${cacheAge}ms > ${this.maxAge}ms)`);
+                logger.info(` 🔍 Cache invalid: Cache is too old (${cacheAge}ms > ${this.maxAge}ms)`);
                 return false;
             }
 
-            console.log(`[${new Date().toISOString()}] 🔍 Cache valid: All checks passed`);
+            logger.info(` 🔍 Cache valid: All checks passed`);
             return true;
         } catch (error) {
-            console.log(`[${new Date().toISOString()}] 🔍 Cache invalid: Error ${error.message}`);
+            logger.info(` 🔍 Cache invalid: Error ${error.message}`);
             return false;
         }
     }
@@ -87,36 +88,36 @@ class FileCache {
     // Get cached data
     async get(category, key, sourceFilePath = null) {
         if (!this.initialized) {
-            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Not initialized`);
+            logger.info(` 🔍 Cache GET: Not initialized`);
             return null;
         }
 
         try {
             const cacheFilePath = this.getCacheFilePath(category, key);
-            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Looking for ${cacheFilePath}`);
+            logger.info(` 🔍 Cache GET: Looking for ${cacheFilePath}`);
             
             // Check if cache is valid
             if (sourceFilePath && !(await this.isValidCache(cacheFilePath, sourceFilePath))) {
-                console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Invalid cache for ${key}`);
+                logger.info(` 🔍 Cache GET: Invalid cache for ${key}`);
                 return null;
             }
 
             if (!fs.existsSync(cacheFilePath)) {
-                console.log(`[${new Date().toISOString()}] 🔍 Cache GET: File does not exist ${cacheFilePath}`);
+                logger.info(` 🔍 Cache GET: File does not exist ${cacheFilePath}`);
                 return null;
             }
 
             const cacheData = JSON.parse(fs.readFileSync(cacheFilePath, 'utf8'));
-            console.log(`[${new Date().toISOString()}] 🔍 Cache GET: Successfully loaded ${Array.isArray(cacheData) ? cacheData.length : 'non-array'} items`);
+            logger.info(` 🔍 Cache GET: Successfully loaded ${Array.isArray(cacheData) ? cacheData.length : 'non-array'} items`);
             
             // Update access time for LRU (keep mtime as current time to prevent cache invalidation)
             const now = new Date();
             fs.utimesSync(cacheFilePath, now, now);
 
-            console.log(`[${new Date().toISOString()}] 📋 Cache HIT: ${category}/${key}`);
+            logger.info(` 📋 Cache HIT: ${category}/${key}`);
             return cacheData.data;
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache read error: ${error.message}`);
+            logger.error(` ❌ Cache read error: ${error.message}`);
             return null;
         }
     }
@@ -138,16 +139,14 @@ class FileCache {
             };
 
             fs.writeFileSync(cacheFilePath, JSON.stringify(cacheData, null, 2));
-            // Ensure the file is written to disk
-            fs.fsyncSync(fs.openSync(cacheFilePath, 'r'));
-            console.log(`[${new Date().toISOString()}] 💾 Cache SET: ${category}/${key} -> ${cacheFilePath}`);
+            logger.info(` 💾 Cache SET: ${category}/${key} -> ${cacheFilePath}`);
             
             // Trigger cleanup if cache is getting large
             setImmediate(() => this.cleanup());
             
             return true;
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache write error: ${error.message}`);
+            logger.error(` ❌ Cache write error: ${error.message}`);
             return false;
         }
     }
@@ -162,12 +161,12 @@ class FileCache {
             const cacheFilePath = this.getCacheFilePath(category, key);
             if (fs.existsSync(cacheFilePath)) {
                 fs.unlinkSync(cacheFilePath);
-                console.log(`[${new Date().toISOString()}] 🗑️ Cache DELETE: ${category}/${key}`);
+                logger.info(` 🗑️ Cache DELETE: ${category}/${key}`);
                 return true;
             }
             return false;
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache delete error: ${error.message}`);
+            logger.error(` ❌ Cache delete error: ${error.message}`);
             return false;
         }
     }
@@ -229,7 +228,7 @@ class FileCache {
                 return;
             }
 
-            console.log(`[${new Date().toISOString()}] 🧹 Cache cleanup starting (${(stats.totalSize / 1024 / 1024).toFixed(1)}MB)`);
+            logger.info(` 🧹 Cache cleanup starting (${(stats.totalSize / 1024 / 1024).toFixed(1)}MB)`);
 
             const allFiles = [];
             const categories = Object.keys(stats.categories);
@@ -271,16 +270,16 @@ class FileCache {
                     removedSize += fileInfo.size;
                     removedCount++;
                 } catch (error) {
-                    console.error(`[${new Date().toISOString()}] ❌ Failed to remove cache file: ${error.message}`);
+                    logger.error(` ❌ Failed to remove cache file: ${error.message}`);
                 }
             }
 
             if (removedCount > 0) {
-                console.log(`[${new Date().toISOString()}] ✅ Cache cleanup: removed ${removedCount} files (${(removedSize / 1024 / 1024).toFixed(1)}MB)`);
+                logger.info(` ✅ Cache cleanup: removed ${removedCount} files (${(removedSize / 1024 / 1024).toFixed(1)}MB)`);
             }
 
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache cleanup error: ${error.message}`);
+            logger.error(` ❌ Cache cleanup error: ${error.message}`);
         }
     }
 
@@ -305,10 +304,10 @@ class FileCache {
                 });
             }
 
-            console.log(`[${new Date().toISOString()}] 🗑️ Cache cleared: ${removedCount} files removed`);
+            logger.info(` 🗑️ Cache cleared: ${removedCount} files removed`);
             return true;
         } catch (error) {
-            console.error(`[${new Date().toISOString()}] ❌ Cache clear error: ${error.message}`);
+            logger.error(` ❌ Cache clear error: ${error.message}`);
             return false;
         }
     }

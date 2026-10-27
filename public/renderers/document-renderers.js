@@ -11,7 +11,7 @@ class EpubPdfRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
-        console.log(`[EPUB-PDF] Rendering EPUB as PDF: ${fileName}`);
+        window.logger.info(`[EPUB-PDF] Rendering EPUB as PDF: ${fileName}`);
         
         // Show loading message
         if (window.debugConsole) {
@@ -21,7 +21,7 @@ class EpubPdfRenderer {
         try {
             // Use the /epub-pdf endpoint which converts EPUB to PDF on the server
             const pdfUrl = `/epub-pdf?path=${encodeURIComponent(filePath)}`;
-            console.log(`[EPUB-PDF] Converting EPUB to PDF via: ${pdfUrl}`);
+            window.logger.info(`[EPUB-PDF] Converting EPUB to PDF via: ${pdfUrl}`);
             
             // Use the PDF renderer's full render method with the EPUB-to-PDF endpoint
             // This will set up the PDF UI and load the converted PDF
@@ -31,9 +31,9 @@ class EpubPdfRenderer {
                 window.debugConsole.hideProgress();
             }
             
-            console.log(`[EPUB-PDF] Successfully rendered EPUB as PDF`);
+            window.logger.info(`[EPUB-PDF] Successfully rendered EPUB as PDF`);
         } catch (error) {
-            console.error(`[EPUB-PDF] Error rendering EPUB as PDF:`, error);
+            window.logger.error(`[EPUB-PDF] Error rendering EPUB as PDF:`, error);
             
             if (window.debugConsole) {
                 window.debugConsole.hideProgress();
@@ -63,7 +63,7 @@ class EpubRenderer {
         this.isFullscreen = false;
         this.originalParent = null;
         this.fullscreenContainer = null;
-        console.log(`[EPUB Debug] Creating EpubRenderer instance: ${this.instanceId}`);
+        window.logger.info(`[EPUB Debug] Creating EpubRenderer instance: ${this.instanceId}`);
     }
 
     cleanup() {
@@ -74,7 +74,7 @@ class EpubRenderer {
     }
 
     async render(filePath, fileName, contentCode, contentOther) {
-        console.log(`[EPUB Debug] Render called on instance ${this.instanceId} for file: ${fileName}`);
+        window.logger.info(`[EPUB Debug] Render called on instance ${this.instanceId} for file: ${fileName}`);
         this.cleanup();
         
         // Show prominent loading popup
@@ -87,24 +87,24 @@ class EpubRenderer {
         contentOther.style.display = 'none';
         
         try {
-            console.log(`[EPUB Debug] Fetching: /epub-preview?path=${encodeURIComponent(filePath)}`);
+            window.logger.info(`[EPUB Debug] Fetching: /epub-preview?path=${encodeURIComponent(filePath)}`);
             const response = await window.authManager.authenticatedFetch(`/epub-preview?path=${encodeURIComponent(filePath)}`);
-            console.log(`[EPUB Debug] Response status: ${response.status}`);
-            console.log(`[EPUB Debug] Response headers:`, response.headers);
+            window.logger.info(`[EPUB Debug] Response status: ${response.status}`);
+            window.logger.info(`[EPUB Debug] Response headers:`, response.headers);
             
             // Check if response is actually JSON
             const contentType = response.headers.get('content-type');
-            console.log(`[EPUB Debug] Content-Type: ${contentType}`);
+            window.logger.info(`[EPUB Debug] Content-Type: ${contentType}`);
             
             const responseText = await response.text();
-            console.log(`[EPUB Debug] Raw response:`, responseText.substring(0, 500));
+            window.logger.info(`[EPUB Debug] Raw response:`, responseText.substring(0, 500));
             
             let epubData;
             try {
                 epubData = JSON.parse(responseText);
             } catch (parseError) {
-                console.error(`[EPUB Debug] JSON parse error:`, parseError);
-                console.error(`[EPUB Debug] Response was not JSON:`, responseText);
+                window.logger.error(`[EPUB Debug] JSON parse error:`, parseError);
+                window.logger.error(`[EPUB Debug] Response was not JSON:`, responseText);
                 throw new Error(`Server returned non-JSON response: ${responseText.substring(0, 100)}`);
             }
             
@@ -391,14 +391,14 @@ class EpubRenderer {
                     this.currentChapter = chapterIndex;
                     chapterSelect.value = chapterIndex;
                     
-                    console.log(`[EPUB Debug] Instance ${this.instanceId}: Showing chapter ${chapterIndex + 1} of ${this.totalChapters}, double-page: ${this.doublePageMode}`);
+                    window.logger.info(`[EPUB Debug] Instance ${this.instanceId}: Showing chapter ${chapterIndex + 1} of ${this.totalChapters}, double-page: ${this.doublePageMode}`);
                     
                     // Clear both content areas first
                     contentArea.innerHTML = '<div style="color: yellow; text-align: center; padding: 20px;">🔄 Loading left page...</div>';
                     contentArea2.innerHTML = '<div style="color: yellow; text-align: center; padding: 20px;">🔄 Loading right page...</div>';
                     
                     const processContent = (content) => {
-                        console.log('[EPUB] Original content sample:', content.substring(0, 200));
+                        window.logger.info('[EPUB] Original content sample:', content.substring(0, 200));
                         
                         // Rewrite image URLs to use the epub-cover endpoint
                         let processedContent = content;
@@ -411,7 +411,7 @@ class EpubRenderer {
                             .replace(/&quot;/g, '"')
                             .replace(/&#39;/g, "'");
                         
-                        console.log('[EPUB] Processed content sample:', processedContent.substring(0, 200));
+                        window.logger.info('[EPUB] Processed content sample:', processedContent.substring(0, 200));
                         
                         // Rewrite src attributes
                         processedContent = processedContent.replace(/src=["']([^"']*\.(jpg|jpeg|png|gif))["']/gi, (match, imagePath) => {
@@ -474,7 +474,7 @@ class EpubRenderer {
                         // Simple double-page logic: always show next chapter if available
                         const nextChapterIndex = chapterIndex + 1;
                         
-                        console.log(`[EPUB Debug] Double-page mode: Left=Chapter ${chapterIndex + 1}, Right=Chapter ${nextChapterIndex + 1}`);
+                        window.logger.info(`[EPUB Debug] Double-page mode: Left=Chapter ${chapterIndex + 1}, Right=Chapter ${nextChapterIndex + 1}`);
                         
                         if (nextChapterIndex < this.totalChapters) {
                             // Show next chapter on right page
@@ -521,7 +521,7 @@ class EpubRenderer {
             };
             
             const navigatePrev = () => {
-                console.log(`[EPUB Debug] Navigate PREV from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
+                window.logger.info(`[EPUB Debug] Navigate PREV from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
                 if (!this.doublePageMode) {
                     showChapter(this.currentChapter - 1);
                     return;
@@ -532,7 +532,7 @@ class EpubRenderer {
             };
 
             const navigateNext = () => {
-                console.log(`[EPUB Debug] Navigate NEXT from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
+                window.logger.info(`[EPUB Debug] Navigate NEXT from chapter ${this.currentChapter + 1}, double-page: ${this.doublePageMode}`);
                 if (!this.doublePageMode) {
                     showChapter(this.currentChapter + 1);
                     return;
@@ -595,7 +595,7 @@ class EpubRenderer {
             }
             
         } catch (error) {
-            console.error('EPUB render error:', error);
+            window.logger.error('EPUB render error:', error);
             
             // Hide loading popup on error
             if (window.debugConsole) {
@@ -608,7 +608,7 @@ class EpubRenderer {
                 .some(indicator => errorMessage.includes(indicator));
             
             if (isFileNotFound) {
-                console.log(`[EpubRenderer] File not found: ${fileName}, triggering directory refresh`);
+                window.logger.info(`[EpubRenderer] File not found: ${fileName}, triggering directory refresh`);
                 
                 // Show toast notification
                 if (typeof showToast === 'function') {
@@ -632,7 +632,7 @@ class EpubRenderer {
                 setTimeout(() => {
                     if (window.fileExplorer && window.fileExplorer.loadFiles) {
                         const currentPath = window.fileExplorer.currentPath();
-                        console.log(`[EpubRenderer] Refreshing directory: ${currentPath}`);
+                        window.logger.info(`[EpubRenderer] Refreshing directory: ${currentPath}`);
                         window.fileExplorer.loadFiles(currentPath);
                     }
                 }, 500);
@@ -769,7 +769,7 @@ class EpubRenderer {
         }
 
         this.isFullscreen = true;
-        console.log('EPUB entered fullscreen mode');
+        window.logger.info('EPUB entered fullscreen mode');
     }
 
     exitFullscreen() {
@@ -864,6 +864,6 @@ class EpubRenderer {
         this.fullscreenContainer = null;
         this.originalParent = null;
         this.isFullscreen = false;
-        console.log('EPUB exited fullscreen mode');
+        window.logger.info('EPUB exited fullscreen mode');
     }
 }

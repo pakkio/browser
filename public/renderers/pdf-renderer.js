@@ -63,7 +63,7 @@ class PDFRenderer {
                 try {
                     task.cancel();
                 } catch (e) {
-                    console.warn(`Failed to cancel render task for ${canvasId}:`, e);
+                    window.logger.warn(`Failed to cancel render task for ${canvasId}:`, e);
                 }
             });
             this.activeRenderTasks.clear();
@@ -96,12 +96,12 @@ class PDFRenderer {
             try {
                 await this.loadPDF(filePath);
             } catch (error) {
-                console.error('PDF loading error:', error);
+                window.logger.error('PDF loading error:', error);
                 this.showPDFError(pagesContainer, error, fileName, filePath);
                 this.uiManager.setStatus(`Error: ${error.message}`);
             }
         } catch (error) {
-            console.error(`Fatal error in PDFRenderer for ${fileName}:`, error);
+            window.logger.error(`Fatal error in PDFRenderer for ${fileName}:`, error);
             throw new Error(`PDF rendering failed: ${error.message}`);
         }
     }
@@ -124,7 +124,7 @@ class PDFRenderer {
             
             [pdfContainer, pagesContainer, leftContainer, rightContainer].forEach(container => {
                 if (container) {
-                    console.log('PDF: Adding wheel listener to', container.className || container.id);
+                    window.logger.info('PDF: Adding wheel listener to', container.className || container.id);
                     container.addEventListener('wheel', this.handleWheel, { passive: false });
                     // Store reference for cleanup
                     if (!this.wheelListenerElements) this.wheelListenerElements = [];
@@ -192,7 +192,7 @@ class PDFRenderer {
         };
 
         this.handleWheel = (e) => {
-            console.log('PDF Wheel event fired:', {
+            window.logger.info('PDF Wheel event fired:', {
                 target: e.target.tagName,
                 targetId: e.target.id,
                 targetClass: e.target.className,
@@ -201,11 +201,11 @@ class PDFRenderer {
             
             // Skip if target is an input
             if (e.target.tagName === 'INPUT') {
-                console.log('PDF Wheel: Skipping - target is INPUT');
+                window.logger.info('PDF Wheel: Skipping - target is INPUT');
                 return;
             }
             
-            console.log('PDF Wheel: Processing scroll', e.deltaY > 0 ? 'DOWN (next page)' : 'UP (previous page)');
+            window.logger.info('PDF Wheel: Processing scroll', e.deltaY > 0 ? 'DOWN (next page)' : 'UP (previous page)');
             
             e.preventDefault();
             e.stopPropagation();
@@ -351,7 +351,7 @@ class PDFRenderer {
             `;
             
         } catch (error) {
-            console.warn('Failed to fetch PDF diagnosis:', error);
+            window.logger.warn('Failed to fetch PDF diagnosis:', error);
             loadingEl.innerHTML = `<p style="font-size: 11px; opacity: 0.6;">Could not analyze PDF (ghostscript may not be available)</p>`;
         }
     }
@@ -378,7 +378,7 @@ class PDFRenderer {
     }
 
     handleFileNotFound(fileName, pagesContainer) {
-        console.log(`[PDFRenderer] File not found: ${fileName}, triggering directory refresh`);
+        window.logger.info(`[PDFRenderer] File not found: ${fileName}, triggering directory refresh`);
         
         // Show toast notification
         if (typeof showToast === 'function') {
@@ -413,7 +413,7 @@ class PDFRenderer {
         setTimeout(() => {
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 const currentPath = window.fileExplorer.currentPath();
-                console.log(`[PDFRenderer] Refreshing directory: ${currentPath}`);
+                window.logger.info(`[PDFRenderer] Refreshing directory: ${currentPath}`);
                 window.fileExplorer.loadFiles(currentPath);
             }
         }, 500);
@@ -449,7 +449,7 @@ class PDFRenderer {
                 ? filePath
                 : `/files?path=${encodeURIComponent(filePath)}`;
             
-            console.log(`[PDF] Fetching from: ${fetchUrl}`);
+            window.logger.info(`[PDF] Fetching from: ${fetchUrl}`);
             
             // Load the PDF document using authenticated fetch
             const response = await window.authManager.authenticatedFetch(
@@ -517,7 +517,7 @@ class PDFRenderer {
                 }, 500);
             }
         } catch (error) {
-            console.error('Failed to load PDF:', error);
+            window.logger.error('Failed to load PDF:', error);
             
             // Hide loading popup on error
             if (window.debugConsole) {
@@ -570,7 +570,7 @@ class PDFRenderer {
                 }, 300);
             }
         } catch (error) {
-            console.error('Error loading page:', error);
+            window.logger.error('Error loading page:', error);
             this.uiManager.setStatus(`Error loading page: ${error.message}`);
             
             // Hide loading popup on error
@@ -696,7 +696,7 @@ class PDFRenderer {
             
             const scaledViewport = page.getViewport({ scale: outputScale });
             
-            console.log(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, pixelRatio: ${pixelRatio}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
+            window.logger.info(`PDF page ${pageNum}: original size ${viewport.width}x${viewport.height}, scale: ${scale.toFixed(2)}, pixelRatio: ${pixelRatio}, final size: ${scaledViewport.width}x${scaledViewport.height}`);
             
             // Set canvas dimensions for high-DPI rendering
             canvas.width = scaledViewport.width;
@@ -740,7 +740,7 @@ class PDFRenderer {
                 return; // Don't treat this as an error
             }
             
-            console.error(`Error rendering PDF page ${pageNum} from ${this.fileName || 'unknown file'}:`, {
+            window.logger.error(`Error rendering PDF page ${pageNum} from ${this.fileName || 'unknown file'}:`, {
                 error: error.message,
                 page: pageNum,
                 filePath: this.filePath,
@@ -754,7 +754,7 @@ class PDFRenderer {
         try {
             // Check if PDF.js is loaded
             if (typeof pdfjsLib === 'undefined') {
-                console.warn('PDF.js library not loaded, skipping text layer');
+                window.logger.warn('PDF.js library not loaded, skipping text layer');
                 return;
             }
             
@@ -782,7 +782,7 @@ class PDFRenderer {
                 textDivs: []
             });
         } catch (error) {
-            console.warn(`Failed to render text layer for page ${pageNum}:`, error);
+            window.logger.warn(`Failed to render text layer for page ${pageNum}:`, error);
         }
     }
 
@@ -942,7 +942,7 @@ class PDFRenderer {
         // Apply initial fullscreen page styles
         this.updateFullscreenPageStyles();
         
-        console.log('PDF entered fullscreen mode');
+        window.logger.info('PDF entered fullscreen mode');
         
         // Refresh current page to fit new container
         this.refreshCurrentPage();
@@ -1016,7 +1016,7 @@ class PDFRenderer {
         this.isFullscreen = false;
         this.isTruncatedView = false;
         this.controlsPosition = null; // Reset controls position for next time
-        console.log('PDF exited fullscreen mode');
+        window.logger.info('PDF exited fullscreen mode');
         
         // Refresh current page to fit new container
         this.refreshCurrentPage();
@@ -1027,7 +1027,7 @@ class PDFRenderer {
 
         this.isTruncatedView = !this.isTruncatedView;
         this.updateFullscreenPageStyles();
-        console.log(`PDF view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+        window.logger.info(`PDF view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
     }
 
     updateFullscreenPageStyles() {
@@ -1156,15 +1156,15 @@ class PDFRenderer {
             this.outline = await this.pdfDoc.getOutline();
             
             if (this.outline && this.outline.length > 0) {
-                console.log(`PDF: Found ${this.outline.length} outline entries`);
+                window.logger.info(`PDF: Found ${this.outline.length} outline entries`);
                 this.uiManager.enableOutlineButton();
                 this.uiManager.createOutlineSidebar(this.outline, (dest) => this.navigateToDestination(dest));
             } else {
-                console.log('PDF: No outline/TOC available');
+                window.logger.info('PDF: No outline/TOC available');
                 this.uiManager.disableOutlineButton();
             }
         } catch (error) {
-            console.warn('Failed to load PDF outline:', error);
+            window.logger.warn('Failed to load PDF outline:', error);
             this.uiManager.disableOutlineButton();
         }
     }
@@ -1194,11 +1194,11 @@ class PDFRenderer {
             }
             
             if (pageNumber && pageNumber >= 1 && pageNumber <= this.uiManager.totalPages) {
-                console.log(`PDF: Navigating to page ${pageNumber} from outline`);
+                window.logger.info(`PDF: Navigating to page ${pageNumber} from outline`);
                 this.loadPage(pageNumber);
             }
         } catch (error) {
-            console.warn('Failed to navigate to destination:', error);
+            window.logger.warn('Failed to navigate to destination:', error);
         }
     }
 

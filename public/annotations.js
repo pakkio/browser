@@ -48,13 +48,13 @@ class AnnotationManager {
                 this.updateFileListDisplay();
             }
         } catch (error) {
-            console.error('Failed to load annotations:', error);
+            window.logger.error('Failed to load annotations:', error);
         }
     }
 
     async saveAnnotation(filePath, annotation) {
         try {
-            console.log('saveAnnotation called with:', { filePath, annotation });
+            window.logger.info('saveAnnotation called with:', { filePath, annotation });
             
             // Use direct fetch if authManager is not available or auth is disabled
             const fetchFn = window.authManager?.authenticatedFetch || fetch;
@@ -70,11 +70,11 @@ class AnnotationManager {
                 })
             });
 
-            console.log('Response received:', response);
+            window.logger.info('Response received:', response);
 
             if (response && response.ok) {
                 const result = await response.json();
-                console.log('Response JSON:', result);
+                window.logger.info('Response JSON:', result);
                 
                 if (result.success) {
                     if (result.annotation && Object.keys(result.annotation).length > 0) {
@@ -86,11 +86,11 @@ class AnnotationManager {
                     return true;
                 }
             } else {
-                console.error('Response not ok:', response.status, response.statusText);
+                window.logger.error('Response not ok:', response.status, response.statusText);
             }
             return false;
         } catch (error) {
-            console.error('Failed to save annotation:', error);
+            window.logger.error('Failed to save annotation:', error);
             return false;
         }
     }
@@ -110,7 +110,7 @@ class AnnotationManager {
             }
             return false;
         } catch (error) {
-            console.error('Failed to delete annotation:', error);
+            window.logger.error('Failed to delete annotation:', error);
             return false;
         }
     }
@@ -365,7 +365,7 @@ class AnnotationManager {
         if (cancelBtn) {
             cancelBtn.addEventListener('click', (e) => {
                 e.preventDefault();
-                console.log('Cancel clicked');
+                window.logger.info('Cancel clicked');
                 closeModal();
             });
         }
@@ -373,13 +373,13 @@ class AnnotationManager {
         if (deleteBtn) {
             deleteBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                console.log('Delete clicked');
+                window.logger.info('Delete clicked');
                 if (confirm('Delete all annotations for this file?')) {
                     try {
                         await this.deleteAnnotation(filePath);
                         closeModal();
                     } catch (error) {
-                        console.error('Delete error:', error);
+                        window.logger.error('Delete error:', error);
                         alert('Failed to delete annotation. Please try again.');
                     }
                 }
@@ -389,13 +389,13 @@ class AnnotationManager {
         if (saveBtn) {
             saveBtn.addEventListener('click', async (e) => {
                 e.preventDefault();
-                console.log('Save clicked');
+                window.logger.info('Save clicked');
                 
                 try {
                     const commentInput = modal.querySelector('#annotation-comment');
                     const comment = commentInput ? commentInput.value : '';
                     
-                    console.log('Saving annotation:', {
+                    window.logger.info('Saving annotation:', {
                         filePath,
                         comment: comment || undefined,
                         stars: currentStars || undefined,
@@ -409,14 +409,14 @@ class AnnotationManager {
                     });
 
                     if (success) {
-                        console.log('Save successful');
+                        window.logger.info('Save successful');
                         closeModal();
                     } else {
-                        console.error('Save failed');
+                        window.logger.error('Save failed');
                         alert('Failed to save annotation. Please try again.');
                     }
                 } catch (error) {
-                    console.error('Save error:', error);
+                    window.logger.error('Save error:', error);
                     alert('Failed to save annotation: ' + error.message);
                 }
             });
@@ -467,7 +467,7 @@ class AnnotationManager {
             }
             return [];
         } catch (error) {
-            console.error('Failed to search annotations:', error);
+            window.logger.error('Failed to search annotations:', error);
             return [];
         }
     }
@@ -925,27 +925,27 @@ class AnnotationManager {
             setTimeout(() => {
                 const videoPlayer = document.querySelector('#media-player video');
                 if (videoPlayer) {
-                    console.log('Found video player, attempting autoplay and fullscreen');
+                    window.logger.info('Found video player, attempting autoplay and fullscreen');
                     
                     // Start playback and fullscreen
                     videoPlayer.play().then(() => {
-                        console.log('Video playback started successfully');
+                        window.logger.info('Video playback started successfully');
                         
                         setTimeout(() => {
                             if (videoPlayer.requestFullscreen) {
                                 videoPlayer.requestFullscreen().then(() => {
-                                    console.log('Entered fullscreen successfully');
+                                    window.logger.info('Entered fullscreen successfully');
                                 }).catch(err => {
-                                    console.log('Could not enter fullscreen:', err);
+                                    window.logger.info('Could not enter fullscreen:', err);
                                 });
                             }
                         }, 500);
                         
                     }).catch(err => {
-                        console.log('Could not start playback:', err);
+                        window.logger.info('Could not start playback:', err);
                     });
                 } else {
-                    console.log('Video player not found - file may not be a video or still loading');
+                    window.logger.info('Video player not found - file may not be a video or still loading');
                 }
             }, 2000); // Wait longer for video to load
         }
@@ -972,13 +972,13 @@ class AnnotationManager {
         const directory = relativePath.includes('/') ? relativePath.substring(0, relativePath.lastIndexOf('/')) : '';
         const fileName = relativePath.split('/').pop();
         
-        console.log('Navigating to file:', { originalPath: filePath, relativePath, directory, fileName, serverRoot });
+        window.logger.info('Navigating to file:', { originalPath: filePath, relativePath, directory, fileName, serverRoot });
         
         // Use the existing file explorer to navigate
         if (window.fileExplorer && window.fileExplorer.loadFiles) {
             // Use the directory from the file path, not the current path
             const targetDirectory = directory || '';
-            console.log('Loading directory:', targetDirectory);
+            window.logger.info('Loading directory:', targetDirectory);
             
             // Load the directory first
             window.fileExplorer.loadFiles(targetDirectory);
@@ -987,15 +987,15 @@ class AnnotationManager {
             const attemptToSelectFile = (attempts = 0) => {
                 const filteredFiles = window.fileExplorer.filteredFiles();
                 const domItems = document.querySelectorAll('.file-item');
-                console.log('Attempt', attempts, 'filteredFiles:', filteredFiles.length, 'DOM items:', domItems.length);
+                window.logger.info('Attempt', attempts, 'filteredFiles:', filteredFiles.length, 'DOM items:', domItems.length);
                 
                 const fileIndex = filteredFiles.findIndex(file => file.name === fileName);
-                console.log('Found file at index:', fileIndex);
+                window.logger.info('Found file at index:', fileIndex);
                 
                 // Check both that we found the file AND the DOM is ready with enough elements
                 if (fileIndex >= 0 && domItems.length > fileIndex) {
                     // Use the exposed selectFile function to properly select and display the file
-                    console.log('Selecting file:', fileName);
+                    window.logger.info('Selecting file:', fileName);
                     window.fileExplorer.selectFile(fileIndex, relativePath, fileName);
                     // Also display the file content
                     window.fileExplorer.showContent(targetDirectory, fileName);
@@ -1003,7 +1003,7 @@ class AnnotationManager {
                     // Retry if files haven't loaded yet or DOM isn't ready
                     setTimeout(() => attemptToSelectFile(attempts + 1), 200);
                 } else {
-                    console.error('Could not find file:', fileName, 'in directory:', directory, '(fileIndex:', fileIndex, 'domItems:', domItems.length, ')');
+                    window.logger.error('Could not find file:', fileName, 'in directory:', directory, '(fileIndex:', fileIndex, 'domItems:', domItems.length, ')');
                 }
             };
             
@@ -1013,7 +1013,7 @@ class AnnotationManager {
     }
     // Migration utility to fix bookmark paths
     async migrateBookmarks() {
-        console.log('Starting bookmark migration...');
+        window.logger.info('Starting bookmark migration...');
         
         try {
             // Get all current annotations
@@ -1024,22 +1024,22 @@ class AnnotationManager {
             }
             
             const allAnnotations = await response.json();
-            console.log('Found annotations:', allAnnotations);
+            window.logger.info('Found annotations:', allAnnotations);
             
             const migratedCount = { updated: 0, skipped: 0, errors: 0 };
             
             for (const [filePath, annotation] of Object.entries(allAnnotations)) {
-                console.log('Processing:', filePath);
+                window.logger.info('Processing:', filePath);
                 
                 // Check if path needs migration (no directory separator)
                 if (!filePath.includes('/') && filePath !== '') {
-                    console.log('Found bookmark needing migration:', filePath);
+                    window.logger.info('Found bookmark needing migration:', filePath);
                     
                     // Try to find the file in common directories
                     const found = await this.findFileInDirectories(filePath);
                     
                     if (found) {
-                        console.log(`Migrating: ${filePath} -> ${found.fullPath}`);
+                        window.logger.info(`Migrating: ${filePath} -> ${found.fullPath}`);
                         
                         // Save with new path
                         const success = await this.saveAnnotation(found.fullPath, annotation);
@@ -1047,36 +1047,36 @@ class AnnotationManager {
                             // Delete old bookmark
                             await this.deleteAnnotation(filePath);
                             migratedCount.updated++;
-                            console.log(`✅ Migrated: ${filePath}`);
+                            window.logger.info(`✅ Migrated: ${filePath}`);
                         } else {
                             migratedCount.errors++;
-                            console.log(`❌ Failed to migrate: ${filePath}`);
+                            window.logger.info(`❌ Failed to migrate: ${filePath}`);
                         }
                     } else {
                         migratedCount.skipped++;
-                        console.log(`⚠️ Could not find file: ${filePath}`);
+                        window.logger.info(`⚠️ Could not find file: ${filePath}`);
                     }
                 } else {
                     migratedCount.skipped++;
-                    console.log(`✓ Already has path: ${filePath}`);
+                    window.logger.info(`✓ Already has path: ${filePath}`);
                 }
             }
             
-            console.log('Migration complete:', migratedCount);
+            window.logger.info('Migration complete:', migratedCount);
             alert(`Migration complete!\nUpdated: ${migratedCount.updated}\nSkipped: ${migratedCount.skipped}\nErrors: ${migratedCount.errors}`);
             
             // Reload annotations
             await this.loadAnnotations();
             
         } catch (error) {
-            console.error('Migration failed:', error);
+            window.logger.error('Migration failed:', error);
             alert('Migration failed: ' + error.message);
         }
     }
 
     // Migrate to sparse storage (one .browser.json per file)
     async migrateToSparseStorage() {
-        console.log('Starting migration to sparse storage...');
+        window.logger.info('Starting migration to sparse storage...');
         
         try {
             const fetchFn = window.authManager?.authenticatedFetch || fetch;
@@ -1090,7 +1090,7 @@ class AnnotationManager {
             }
             
             const result = await response.json();
-            console.log('Migration result:', result);
+            window.logger.info('Migration result:', result);
             
             alert(`Migration to sparse storage complete!\nMigrated: ${result.migrated}\nSkipped: ${result.skipped}\nFailed: ${result.failed}${result.errors?.length ? '\n\nErrors:\n' + result.errors.slice(0, 5).join('\n') : ''}`);
             
@@ -1098,7 +1098,7 @@ class AnnotationManager {
             await this.loadAnnotations();
             
         } catch (error) {
-            console.error('Migration to sparse storage failed:', error);
+            window.logger.error('Migration to sparse storage failed:', error);
             alert('Migration failed: ' + error.message);
         }
     }
@@ -1120,7 +1120,7 @@ class AnnotationManager {
         
         for (const dir of commonDirs) {
             try {
-                console.log(`Searching in: ${dir || 'root'}`);
+                window.logger.info(`Searching in: ${dir || 'root'}`);
                 
                 const fetchFn = window.authManager?.authenticatedFetch || fetch;
                 const response = await fetchFn(`/api/browse?path=${encodeURIComponent(dir)}`);
@@ -1131,12 +1131,12 @@ class AnnotationManager {
                     
                     if (foundFile) {
                         const fullPath = dir ? `${dir}/${fileName}` : fileName;
-                        console.log(`✅ Found file: ${fullPath}`);
+                        window.logger.info(`✅ Found file: ${fullPath}`);
                         return { fullPath, directory: dir };
                     }
                 }
             } catch (error) {
-                console.log(`Error searching in ${dir}:`, error);
+                window.logger.info(`Error searching in ${dir}:`, error);
             }
         }
         
