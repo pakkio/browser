@@ -14,6 +14,258 @@ class ComicRenderer {
         this.isTruncatedView = false;
         this.retryAttempts = new Map(); // Track retry attempts per page
         this.isCleaningUp = false; // Flag to prevent operations during cleanup
+        this.singlePage = false; // '1' key: show one page instead of a spread
+        this.panelMode = false; // 'n' key: step through panels of the current page
+        this.panels = null;
+        this.panelIndex = -1;
+    }
+
+    isSingle() {
+        return this.singlePage || this.panelMode;
+    }
+
+    ensureModeStyles() {
+        if (document.getElementById('comic-mode-styles')) return;
+        const style = document.createElement('style');
+        style.id = 'comic-mode-styles';
+        style.textContent = `
+            .comic-container.comic-single #page-right { display: none !important; }
+            .comic-container.comic-single #page-left { max-width: 100% !important; flex: none !important; }
+            .comic-container.comic-panel .pages-container { overflow: hidden !important; }
+            .comic-container.comic-panel #page-left { transform-origin: 0 0; transition: transform 0.25s ease; }
+        `;
+        document.head.appendChild(style);
+    }
+
+    applyModeClasses() {
+        const container = document.querySelector('.comic-container');
+        if (!container) return;
+        container.classList.toggle('comic-single', this.isSingle());
+        container.classList.toggle('comic-panel', this.panelMode);
+    }
+
+    async toggleSinglePage() {
+        this.singlePage = !this.singlePage;
+        if (this.panelMode) {
+            this.exitPanelMode();
+        }
+        this.applyModeClasses();
+        this.updatePageInfo();
+        await this.loadPage(this.currentPage);
+    }
+
+    /**
+     * Split a page image into panels by finding gutters (rows/columns that match the
+     * page background) with a recursive XY-cut. Returns rects as fractions of the image,
+     * in reading order (top to bottom, left to right).
+     */
+    detectPanels(img) {
+        const full = [{ x: 0, y: 0, w: 1, h: 1 }];
+        const nw = img.naturalWidth, nh = img.naturalHeight;
+        if (!nw || !nh) return full;
+
+        const scale = Math.min(1, 500 / Math.max(nw, nh));
+        const w = Math.max(1, Math.round(nw * scale));
+        const h = Math.max(1, Math.round(nh * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        ctx.drawImage(img, 0, 0, w, h);
+        let data;
+        try {
+            data = ctx.getImageData(0, 0, w, h).data;
+        } catch (e) {
+            return full;
+        }
+
+        // Background colour = most common colour on the outer frame of the page
+        const bins = new Map();
+        const sample = (x, y) => {
+            const i = (y * w + x) * 4;
+            const key = ((data[i] >> 4) << 8) | ((data[i + 1] >> 4) << 4) | (data[i + 2] >> 4);
+            bins.set(key, (bins.get(key) || 0) + 1);
+        };
+        for (let x = 0; x < w; x++) { sample(x, 0); sample(x, h - 1); }
+        for (let y = 0; y < h; y++) { sample(0, y); sample(w - 1, y); }
+        let bgKey = 0, bgCount = -1;
+        for (const [key, count] of bins) {
+            if (count > bgCount) { bgKey = key; bgCount = count; }
+        }
+        const br = ((bgKey >> 8) & 15) * 16 + 8;
+        const bg = ((bgKey >> 4) & 15) * 16 + 8;
+        const bb = (bgKey & 15) * 16 + 8;
+
+        const isBg = new Uint8Array(w * h);
+        for (let p = 0; p < w * h; p++) {
+            const i = p * 4;
+            const diff = Math.abs(data[i] - br) + Math.abs(data[i + 1] - bg) + Math.abs(data[i + 2] - bb);
+            isBg[p] = diff <= 60 ? 1 : 0;
+        }
+
+        const rowIsGutter = (y, x0, x1) => {
+            let n = 0;
+            for (let x = x0; x < x1; x++) n += isBg[y * w + x];
+            return n >= (x1 - x0) * 0.98;
+        };
+        const colIsGutter = (x, y0, y1) => {
+            let n = 0;
+            for (let y = y0; y < y1; y++) n += isBg[y * w + x];
+            return n >= (y1 - y0) * 0.98;
+        };
+
+        const minGapY = Math.max(2, Math.round(h * 0.008));
+        const minGapX = Math.max(2, Math.round(w * 0.008));
+        const minW = w * 0.06, minH = h * 0.06;
+        const out = [];
+
+        // First gutter run of at least minGap inside [from, to); returns [start, end) or null
+        const findGap = (from, to, isGutter, minGap) => {
+            let start = -1;
+            for (let i = from; i <= to; i++) {
+                const g = i < to && isGutter(i);
+                if (g && start < 0) start = i;
+                if (!g && start >= 0) {
+                    if (i - start >= minGap) return [start, i];
+                    start = -1;
+                }
+            }
+            return null;
+        };
+
+        const cut = (x0, y0, x1, y1, depth) => {
+            // Trim gutters from the edges
+            while (y0 < y1 && rowIsGutter(y0, x0, x1)) y0++;
+            while (y1 > y0 && rowIsGutter(y1 - 1, x0, x1)) y1--;
+            while (x0 < x1 && colIsGutter(x0, y0, y1)) x0++;
+            while (x1 > x0 && colIsGutter(x1 - 1, y0, y1)) x1--;
+            if (x1 - x0 < minW || y1 - y0 < minH) return;
+
+            if (depth < 8) {
+                const gapY = findGap(y0, y1, (y) => rowIsGutter(y, x0, x1), minGapY);
+                if (gapY) {
+                    cut(x0, y0, x1, gapY[0], depth + 1);
+                    cut(x0, gapY[1], x1, y1, depth + 1);
+                    return;
+                }
+                const gapX = findGap(x0, x1, (x) => colIsGutter(x, y0, y1), minGapX);
+                if (gapX) {
+                    cut(x0, y0, gapX[0], y1, depth + 1);
+                    cut(gapX[1], y0, x1, y1, depth + 1);
+                    return;
+                }
+            }
+            out.push({ x: x0 / w, y: y0 / h, w: (x1 - x0) / w, h: (y1 - y0) / h });
+        };
+
+        cut(0, 0, w, h, 0);
+        return out.length >= 2 ? out : full;
+    }
+
+    async enterPanelMode() {
+        const img = document.getElementById('page-left');
+        if (!img || !img.src) return;
+
+        this.panelMode = true;
+        this.applyModeClasses();
+        this.updatePageInfo();
+        // Re-layout in single-page mode (also fetches nothing extra, the left page is cached)
+        await this.loadPage(this.currentPage);
+        await this.preparePanels();
+        this.showPanel(0);
+    }
+
+    async preparePanels() {
+        const img = document.getElementById('page-left');
+        if (!img) return;
+        try {
+            await img.decode();
+        } catch (e) {
+            // Image failed to decode; fall back to whole-page view below
+        }
+        this.panels = this.detectPanels(img);
+        this.panelIndex = -1;
+    }
+
+    exitPanelMode() {
+        const img = document.getElementById('page-left');
+        if (img) img.style.transform = '';
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.applyModeClasses();
+    }
+
+    async nextPanel() {
+        if (!this.panelMode) {
+            await this.enterPanelMode();
+            return;
+        }
+        if (this.panels && this.panelIndex + 1 < this.panels.length) {
+            this.showPanel(this.panelIndex + 1);
+            return;
+        }
+        // Past the last panel: continue on the next page, starting at its first panel
+        if (this.totalPages && this.currentPage >= this.totalPages) return;
+        await this.loadPage(this.currentPage + 1);
+        await this.preparePanels();
+        this.showPanel(0);
+    }
+
+    async firstPanel() {
+        if (!this.panelMode) {
+            await this.enterPanelMode();
+            return;
+        }
+        this.showPanel(0);
+    }
+
+    async previousPanel() {
+        if (!this.panelMode) return;
+        if (this.panelIndex > 0) {
+            this.showPanel(this.panelIndex - 1);
+            return;
+        }
+        // Before the first panel: go to the last panel of the previous page
+        if (this.currentPage <= 1) return;
+        await this.loadPage(this.currentPage - 1);
+        await this.preparePanels();
+        this.showPanel(this.panels.length - 1);
+    }
+
+    showPanel(index) {
+        const img = document.getElementById('page-left');
+        const container = img && img.parentElement;
+        if (!img || !container || !this.panels) return;
+        this.panelIndex = Math.max(0, Math.min(index, this.panels.length - 1));
+        const panel = this.panels[this.panelIndex];
+
+        // Measure the untransformed image box
+        const previous = img.style.transition;
+        img.style.transition = 'none';
+        img.style.transform = '';
+        const imgRect = img.getBoundingClientRect();
+        const boxRect = container.getBoundingClientRect();
+        img.style.transition = previous;
+
+        const pad = 12;
+        const availW = boxRect.width - pad * 2;
+        const availH = boxRect.height - pad * 2;
+        const panelW = panel.w * imgRect.width;
+        const panelH = panel.h * imgRect.height;
+        if (!panelW || !panelH) return;
+
+        const scale = Math.min(availW / panelW, availH / panelH);
+        const centerX = (panel.x + panel.w / 2) * imgRect.width;
+        const centerY = (panel.y + panel.h / 2) * imgRect.height;
+        const tx = boxRect.left + boxRect.width / 2 - imgRect.left - centerX * scale;
+        const ty = boxRect.top + boxRect.height / 2 - imgRect.top - centerY * scale;
+        img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+
+        const statusElement = document.querySelector('#comic-status');
+        if (statusElement) {
+            statusElement.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}`;
+        }
     }
 
     cleanup() {
@@ -48,6 +300,9 @@ class ComicRenderer {
         this.pageCache.clear();
         this.currentFilePath = null;
         this.retryAttempts.clear();
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
@@ -62,9 +317,11 @@ class ComicRenderer {
 
             const comicContainer = this.createComicContainer();
             const { controls, pagesContainer } = this.createUIElements(comicContainer);
-            
+
             contentOther.innerHTML = '';
             contentOther.appendChild(comicContainer);
+            this.ensureModeStyles();
+            this.applyModeClasses();
             contentOther.style.display = 'block';
             
             this.setupEventHandlers(controls, filePath);
@@ -457,6 +714,9 @@ class ComicRenderer {
                     e.preventDefault();
                     if (this.isFullscreen) {
                         this.exitFullscreen();
+                    } else if (this.panelMode) {
+                        this.exitPanelMode();
+                        this.loadPage(this.currentPage);
                     }
                     break;
                 case 'b':
@@ -466,8 +726,26 @@ class ComicRenderer {
                         this.toggleTruncatedView();
                     }
                     break;
-                case 'r': case 'g': case 'y': case 'b': case 'c':
-                case '1': case '2': case '3': case '4': case '5':
+                case '1':
+                    e.preventDefault();
+                    this.toggleSinglePage();
+                    break;
+                case 'n':
+                case 'N':
+                    e.preventDefault();
+                    this.nextPanel();
+                    break;
+                case 'p':
+                case 'P':
+                    e.preventDefault();
+                    this.previousPanel();
+                    break;
+                case '0':
+                    e.preventDefault();
+                    this.firstPanel();
+                    break;
+                case 'r': case 'g': case 'y': case 'c':
+                case '2': case '3': case '4': case '5':
                     if (typeof handleAnnotationShortcut === 'function') {
                         handleAnnotationShortcut(e.key);
                     }
@@ -584,7 +862,7 @@ class ComicRenderer {
                 pageImg1.style.display = 'block';
             }
             
-            if (this.totalPages && rightPage <= this.totalPages) {
+            if (!this.isSingle() && this.totalPages && rightPage <= this.totalPages) {
                 if (statusElement) statusElement.innerHTML = `⏳ Loading page ${rightPage}...`;
                 const rightUrl = this.pageCache.has(rightPage) ? 
                     this.pageCache.get(rightPage) : 
@@ -780,7 +1058,9 @@ class ComicRenderer {
             return;
         }
         
-        const pagesToPreload = [currentPage - 2, currentPage - 1, currentPage + 2, currentPage + 3];
+        const pagesToPreload = this.isSingle()
+            ? [currentPage - 2, currentPage - 1, currentPage + 1, currentPage + 2]
+            : [currentPage - 2, currentPage - 1, currentPage + 2, currentPage + 3];
         
         for (const page of pagesToPreload) {
             if (page > 0 && (!this.totalPages || page <= this.totalPages) && !this.pageCache.has(page)) {
@@ -825,13 +1105,17 @@ class ComicRenderer {
 
     previousPage() {
         if (this.currentPage > 1) {
-            this.loadPage(this.currentPage - 2);
+            const step = this.isSingle() ? 1 : 2;
+            if (this.panelMode) this.exitPanelMode();
+            this.loadPage(this.currentPage - step);
         }
     }
 
     nextPage() {
         if (!this.totalPages || this.currentPage < this.totalPages) {
-            this.loadPage(this.currentPage + 2);
+            const step = this.isSingle() ? 1 : 2;
+            if (this.panelMode) this.exitPanelMode();
+            this.loadPage(this.currentPage + step);
         }
     }
 
@@ -843,7 +1127,7 @@ class ComicRenderer {
         if (!pageInfo) return;
         
         if (this.totalPages) {
-            const endPage = Math.min(this.currentPage + 1, this.totalPages);
+            const endPage = this.isSingle() ? this.currentPage : Math.min(this.currentPage + 1, this.totalPages);
             if (endPage > this.currentPage) {
                 pageInfo.textContent = `Pages ${this.currentPage}-${endPage} of ${this.totalPages}`;
             } else {
@@ -947,7 +1231,8 @@ class ComicRenderer {
         
         // Apply initial fullscreen page styles
         this.updateFullscreenPageStyles();
-        
+        this.refreshPanelView();
+
         window.logger.info('Comic entered fullscreen mode');
     }
 
@@ -1009,7 +1294,15 @@ class ComicRenderer {
         this.originalParent = null;
         this.isFullscreen = false;
         this.isTruncatedView = false;
+        this.refreshPanelView();
         window.logger.info('Comic exited fullscreen mode');
+    }
+
+    // Fullscreen changes reset the image inline styles, so re-apply the current panel zoom
+    refreshPanelView() {
+        if (this.panelMode && this.panels) {
+            setTimeout(() => this.showPanel(this.panelIndex), 0);
+        }
     }
 
     toggleTruncatedView() {
