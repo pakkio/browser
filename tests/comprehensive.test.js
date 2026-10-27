@@ -62,6 +62,25 @@ describe('Comprehensive Coverage Tests', () => {
       expect(response.headers['content-type']).toBe('image/png');
     });
 
+    test('should extract the page in-process when the unrar binary is unavailable', async () => {
+      mockRarFile([{ name: 'image1.jpg' }]);
+      jest.spyOn(fs.promises, 'readFile').mockResolvedValueOnce(Buffer.from('rar-bytes'));
+      exec.mockImplementationOnce((command, options, callback) => {
+        callback(new Error("'unrar' is not recognized"), Buffer.alloc(0), '');
+      });
+      const { createExtractorFromData } = require('node-unrar-js');
+      createExtractorFromData.mockResolvedValueOnce({
+        extract: () => ({ files: [{ fileHeader: { name: 'image1.jpg' }, extraction: Uint8Array.from([1, 2, 3]) }] })
+      });
+
+      const response = await request(app)
+        .get('/comic-preview?path=cbr-js.cbr&page=1')
+        .expect(200);
+
+      expect(response.headers['content-type']).toBe('image/jpeg');
+      fs.promises.readFile.mockRestore();
+    });
+
     test('should report a corrupted archive when unrar fails and the CBZ fallback fails too', async () => {
       mockRarFile([{ name: 'image1.jpg' }]);
       exec.mockImplementationOnce((command, options, callback) => {
