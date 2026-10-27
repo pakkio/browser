@@ -1,6 +1,9 @@
 require('dotenv').config();
 
 const express = require('express');
+// NOTE: Pinned to Express 4.x (was 5.1.0) because express-session and
+// express-rate-limit had compatibility issues with Express 5's async
+// error handling. Async route handlers must use try/catch explicitly.
 const fs = require('fs');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
@@ -32,8 +35,7 @@ const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, g
 const { getCacheStats, clearCache } = require('./lib/cache-handlers');
 const { openFile } = require('./lib/system-handlers');
 const AIFileAnalyzer = require('./lib/ai-file-analyzer');
-const { getHomogeneityModules } = require('./src/services/homogeneityService');
-const { updateEntity } = require('./src/services/orthogonalityService');
+const logger = require('./lib/logger');
 
 const app = express();
 
@@ -51,12 +53,12 @@ const memoryMonitor = {
         
         // Log memory usage every 10 minutes in production
         if (process.env.NODE_ENV === 'production') {
-            console.log(`📊 Memory: ${heapUsedMB}MB used, ${heapTotalMB}MB total, ${rssMB}MB RSS`);
+            logger.info(`Memory: ${heapUsedMB}MB used, ${heapTotalMB}MB total, ${rssMB}MB RSS`);
         }
-        
+
         // Warn if memory usage is high (>500MB heap or >1GB RSS)
         if (heapUsedMB > 500 || rssMB > 1024) {
-            console.warn(`⚠️ High memory usage: ${heapUsedMB}MB heap, ${rssMB}MB RSS`);
+            logger.warn(`High memory usage: ${heapUsedMB}MB heap, ${rssMB}MB RSS`);
         }
         
         return { heapUsedMB, heapTotalMB, rssMB };
@@ -77,23 +79,19 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Global error handling to prevent crashes
 process.on('uncaughtException', (error) => {
-    console.error('🚨 UNCAUGHT EXCEPTION - Server will attempt to continue:', error);
-    console.error('Stack trace:', error.stack);
+    logger.error('UNCAUGHT EXCEPTION - Server will attempt to continue:', { message: error.message, stack: error.stack });
     // Don't exit the process - try to continue serving other requests
 });
 
 process.on('unhandledRejection', (reason, promise) => {
-    console.error('🚨 UNHANDLED PROMISE REJECTION at:', promise, 'reason:', reason);
-    console.error('Stack trace:', reason?.stack || 'No stack trace available');
+    logger.error('UNHANDLED PROMISE REJECTION:', { reason: reason?.message || reason, stack: reason?.stack });
     // Don't exit the process - try to continue serving other requests
 });
 
-console.log('================================');
-console.log('🚀 File Browser Server Starting...');
-console.log(`📂 Base directory: ${baseDir}`);
-console.log(`🔧 Port: ${port}`);
-console.log(`🔐 Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
-console.log('================================');
+logger.info('File Browser Server Starting...');
+logger.info(`Base directory: ${baseDir}`);
+logger.info(`Port: ${port}`);
+logger.info(`Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
 
 // Security headers & CSP
 app.use(helmet({
@@ -116,8 +114,15 @@ app.use(helmet({
 }));
 
 // Session configuration (always enabled for browse state persistence)
+if (!process.env.SESSION_SECRET) {
+    if (process.env.NODE_ENV === 'production') {
+        logger.error('SESSION_SECRET environment variable is required. Generate one with: openssl rand -hex 32');
+        process.exit(1);
+    }
+    logger.warn('SESSION_SECRET not set. Using insecure default for development. Set SESSION_SECRET in .env for production.');
+}
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'your-fallback-secret-key-change-in-production',
+    secret: process.env.SESSION_SECRET || 'dev-insecure-secret-do-not-use-production',
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -169,7 +174,7 @@ app.get('/api/validate-pdf', requireAuth, validatePdf);
 app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cache));
 
 // File serving routes
-app.get('/files/list', serveFileList);
+app.get('/files/list', requireAuth, serveFileList);
 app.get('/files', requireAuth, serveFile);
 app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
 app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
@@ -197,7 +202,7 @@ app.get('/api/video-codec-check', requireAuth, async (req, res) => {
         const codecInfo = await checkVideoCodec(filePath);
         res.json(codecInfo);
     } catch (error) {
-        console.error('Error checking video codec:', error);
+        logger.error('Error checking video codec:', { message: error.message, stack: error.stack });
         res.status(500).json({
             error: 'Failed to check video codec',
             message: error.message
@@ -267,10 +272,88 @@ app.delete('/api/file', requireAuth, async (req, res) => {
         res.json({ success: true, message: 'File deleted successfully' });
         
     } catch (error) {
-        console.error('Error deleting file:', error);
+        logger.error('Error deleting file:', { message: error.message, stack: error.stack });
         res.status(500).json({ 
             error: 'Failed to delete file', 
             message: error.message 
+        });
+    }
+});
+
+// Move file to another directory
+app.post('/api/file/move', requireAuth, async (req, res) => {
+    try {
+        const { sourcePath, targetDir } = req.body;
+
+        if (!sourcePath || targetDir === undefined) {
+            return res.status(400).json({ error: 'Source path and target directory are required' });
+        }
+
+        // Resolve the full paths based on the baseDir
+        const normalizedSourcePath = sourcePath.startsWith('/') ? sourcePath.slice(1) : sourcePath;
+        const normalizedTargetDir = targetDir.startsWith('/') ? targetDir.slice(1) : targetDir;
+
+        const fullSourcePath = path.resolve(baseDir, normalizedSourcePath);
+        const fullTargetDir = path.resolve(baseDir, normalizedTargetDir);
+
+        // Security check - ensure paths are within baseDir
+        if (!fullSourcePath.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Source path outside allowed directory' });
+        }
+        if (!fullTargetDir.startsWith(baseDir)) {
+            return res.status(403).json({ error: 'Access denied: Target path outside allowed directory' });
+        }
+
+        const fs = require('fs').promises;
+
+        // Check if source exists
+        try {
+            await fs.access(fullSourcePath);
+        } catch (err) {
+            return res.status(404).json({ error: 'Source file not found' });
+        }
+
+        // Check if target directory exists
+        try {
+            const stat = await fs.stat(fullTargetDir);
+            if (!stat.isDirectory()) {
+                return res.status(400).json({ error: 'Target is not a directory' });
+            }
+        } catch (err) {
+            return res.status(404).json({ error: 'Target directory not found' });
+        }
+
+        // Calculate new path
+        const fileName = path.basename(fullSourcePath);
+        const fullNewPath = path.join(fullTargetDir, fileName);
+
+        // Check if file already exists in target
+        try {
+            await fs.access(fullNewPath);
+            return res.status(409).json({ error: 'File with that name already exists in target directory' });
+        } catch (err) {
+            // File doesn't exist, which is what we want
+        }
+
+        // Move the file
+        await fs.rename(fullSourcePath, fullNewPath);
+
+        // Preserve annotations: move annotation from old path to new path
+        const oldRelativePath = path.relative(baseDir, fullSourcePath);
+        const newRelativePath = path.relative(baseDir, fullNewPath);
+        renameAnnotation(oldRelativePath, newRelativePath);
+
+        res.json({
+            success: true,
+            message: 'File moved successfully',
+            newPath: path.relative(baseDir, fullNewPath)
+        });
+
+    } catch (error) {
+        logger.error('Error moving file:', { message: error.message, stack: error.stack });
+        res.status(500).json({
+            error: 'Failed to move file',
+            message: error.message
         });
     }
 });
@@ -321,87 +404,9 @@ app.post('/api/file/rename', requireAuth, async (req, res) => {
         res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(baseDir, fullNewPath) });
         
     } catch (error) {
-        console.error('Error renaming file:', error);
-        res.status(500).json({ 
-            error: 'Failed to rename file', 
-            message: error.message 
-        });
-    }
-});
-
-// Move file to another directory
-app.post('/api/file/move', requireAuth, async (req, res) => {
-    try {
-        const { sourcePath, targetDir } = req.body;
-        
-        if (!sourcePath || targetDir === undefined) {
-            return res.status(400).json({ error: 'Source path and target directory are required' });
-        }
-
-        // Resolve the full paths based on the baseDir
-        const normalizedSourcePath = sourcePath.startsWith('/') ? sourcePath.slice(1) : sourcePath;
-        const normalizedTargetDir = targetDir.startsWith('/') ? targetDir.slice(1) : targetDir;
-        
-        const fullSourcePath = path.resolve(baseDir, normalizedSourcePath);
-        const fullTargetDir = path.resolve(baseDir, normalizedTargetDir);
-        
-        // Security check - ensure paths are within baseDir
-        if (!fullSourcePath.startsWith(baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Source path outside allowed directory' });
-        }
-        if (!fullTargetDir.startsWith(baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Target path outside allowed directory' });
-        }
-
-        const fs = require('fs').promises;
-        
-        // Check if source exists
-        try {
-            await fs.access(fullSourcePath);
-        } catch (err) {
-            return res.status(404).json({ error: 'Source file not found' });
-        }
-        
-        // Check if target directory exists
-        try {
-            const stat = await fs.stat(fullTargetDir);
-            if (!stat.isDirectory()) {
-                return res.status(400).json({ error: 'Target is not a directory' });
-            }
-        } catch (err) {
-            return res.status(404).json({ error: 'Target directory not found' });
-        }
-
-        // Calculate new path
-        const fileName = path.basename(fullSourcePath);
-        const fullNewPath = path.join(fullTargetDir, fileName);
-        
-        // Check if file already exists in target
-        try {
-            await fs.access(fullNewPath);
-            return res.status(409).json({ error: 'File with that name already exists in target directory' });
-        } catch (err) {
-            // File doesn't exist, which is what we want
-        }
-        
-        // Move the file
-        await fs.rename(fullSourcePath, fullNewPath);
-        
-        // Preserve annotations: move annotation from old path to new path
-        const oldRelativePath = path.relative(baseDir, fullSourcePath);
-        const newRelativePath = path.relative(baseDir, fullNewPath);
-        renameAnnotation(oldRelativePath, newRelativePath);
-        
-        res.json({ 
-            success: true, 
-            message: 'File moved successfully', 
-            newPath: path.relative(baseDir, fullNewPath) 
-        });
-        
-    } catch (error) {
-        console.error('Error moving file:', error);
-        res.status(500).json({ 
-            error: 'Failed to move file', 
+        logger.error('Error renaming file:', { message: error.message, stack: error.stack });
+        res.status(500).json({
+            error: 'Failed to rename file',
             message: error.message 
         });
     }
@@ -445,7 +450,7 @@ app.get('/api/directories', requireAuth, async (req, res) => {
         res.json(result);
         
     } catch (error) {
-        console.error('Error listing directories:', error);
+        logger.error('Error listing directories:', { message: error.message, stack: error.stack });
         res.status(500).json({ 
             error: 'Failed to list directories', 
             message: error.message 
@@ -471,7 +476,7 @@ app.post('/api/summarize-file', requireAuth, async (req, res) => {
             stats: result.stats
         });
     } catch (error) {
-        console.error('Error summarizing file:', error);
+        logger.error('Error summarizing file:', { message: error.message, stack: error.stack });
         res.status(500).json({ 
             error: 'Failed to summarize file', 
             message: error.message 
@@ -507,7 +512,7 @@ app.post('/api/analyze-files', requireAuth, heavyLimiter, async (req, res) => {
         });
         
     } catch (error) {
-        console.error('Error in AI file analysis:', error);
+        logger.error('Error in AI file analysis:', { message: error.message, stack: error.stack });
         res.status(500).json({ 
             error: 'Failed to analyze files',
             message: error.message
@@ -536,7 +541,7 @@ function readLatestPath() {
             }
         }
     } catch (err) {
-        console.warn('Failed to read .latest file:', err.message);
+        logger.warn('Failed to read .latest file:', err.message);
     }
     return '';
 }
@@ -546,17 +551,17 @@ function saveLatestPath(pathToSave) {
     try {
         fs.writeFileSync(latestPathFile, pathToSave || '', 'utf-8');
     } catch (err) {
-        console.warn('Failed to save .latest file:', err.message);
+        logger.warn('Failed to save .latest file:', err.message);
     }
 }
 
-app.get('/api/current-path', (req, res) => {
+app.get('/api/current-path', requireAuth, (req, res) => {
     // Try session first, then .latest file
     const currentPath = req.session.currentPath || readLatestPath();
     res.json({ currentPath });
 });
 
-app.post('/api/current-path', (req, res) => {
+app.post('/api/current-path', requireAuth, (req, res) => {
     const { path: newPath } = req.body;
     req.session.currentPath = newPath || '';
     req.session.lastBrowsedPath = newPath || '';  // Sync both session keys
@@ -575,27 +580,13 @@ app.get('/api/server-info', (req, res) => {
     });
 });
 
-// Homogeneity endpoint
-app.get('/api/homogeneity', (req, res) => {
-  const modules = getHomogeneityModules();
-  res.json({ modules });
-});
-
-// Orthogonality endpoint
-app.post('/api/orthogonality', (req, res) => {
-  const { name, value } = req.body;
-  const result = updateEntity(name, value);
-  res.json({ updated: { name, value: result } });
-});
-
 // Global Express error handler - must be last middleware
 app.use((error, req, res, next) => {
-    console.error('🚨 EXPRESS ERROR HANDLER:', {
+    logger.error('Express error handler:', {
         error: error.message,
         stack: error.stack,
         url: req.url,
-        method: req.method,
-        timestamp: new Date().toISOString()
+        method: req.method
     });
     
     // Prevent sending response if headers already sent
@@ -616,7 +607,7 @@ app.use((error, req, res, next) => {
 
 // 404 handler for undefined routes
 app.use((req, res) => {
-    console.warn(`⚠️ 404 - Route not found: ${req.method} ${req.url}`);
+    logger.warn(`Route not found: ${req.method} ${req.url}`);
     res.status(404).json({
         error: 'Route not found',
         path: req.url,
@@ -626,9 +617,9 @@ app.use((req, res) => {
 
 if (require.main === module) {
     const server = app.listen(port, () => {
-        console.log(`🌐 Server running at http://localhost:${port}`);
-        console.log(`📂 Serving files from: ${baseDir}`);
-        console.log('✅ Server started successfully!');
+        logger.info(`Server running at http://localhost:${port}`);
+        logger.info(`Serving files from: ${baseDir}`);
+        logger.info('Server started successfully!');
     });
 
     // Set server timeout to prevent hanging connections
@@ -636,17 +627,17 @@ if (require.main === module) {
 
     // Graceful shutdown handling (must be after server is created)
     process.on('SIGTERM', () => {
-        console.log('🛑 SIGTERM received. Shutting down gracefully...');
+        logger.info('SIGTERM received. Shutting down gracefully...');
         server.close(() => {
-            console.log('✅ Server closed successfully');
+            logger.info('Server closed successfully');
             process.exit(0);
         });
     });
 
     process.on('SIGINT', () => {
-        console.log('🛑 SIGINT received. Shutting down gracefully...');
+        logger.info('SIGINT received. Shutting down gracefully...');
         server.close(() => {
-            console.log('✅ Server closed successfully');
+            logger.info('Server closed successfully');
             process.exit(0);
         });
     });

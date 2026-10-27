@@ -206,7 +206,7 @@ class VideoRenderer {
         errorDiv.style.display = 'none';
         
         video.addEventListener('error', async (e) => {
-            console.error('Video error:', e, video.error);
+            window.logger.error('Video error:', e, video.error);
             errorDiv.style.display = 'block';
 
             const errorCode = video.error?.code;
@@ -223,7 +223,7 @@ class VideoRenderer {
                 try {
                     const checkResponse = await fetch(`/files?path=${encodeURIComponent(filePath)}`, { method: 'HEAD' });
                     if (checkResponse.status === 404 || checkResponse.status === 410) {
-                        console.log('[VideoRenderer] File not found, triggering directory refresh');
+                        window.logger.info('[VideoRenderer] File not found, triggering directory refresh');
                         
                         // Show toast notification
                         if (typeof showToast === 'function') {
@@ -234,7 +234,7 @@ class VideoRenderer {
                         setTimeout(() => {
                             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                                 const currentPath = window.fileExplorer.currentPath();
-                                console.log(`[VideoRenderer] Refreshing directory: ${currentPath}`);
+                                window.logger.info(`[VideoRenderer] Refreshing directory: ${currentPath}`);
                                 window.fileExplorer.loadFiles(currentPath);
                             }
                         }, 500);
@@ -247,7 +247,7 @@ class VideoRenderer {
                         return;
                     }
                 } catch (checkError) {
-                    console.log('Error checking file existence:', checkError);
+                    window.logger.info('Error checking file existence:', checkError);
                 }
             }
 
@@ -305,7 +305,7 @@ class VideoRenderer {
         });
         
         video.addEventListener('loadedmetadata', () => {
-            console.log('Video loaded:', fileName, `${video.videoWidth}x${video.videoHeight}`);
+            window.logger.info('Video loaded:', fileName, `${video.videoWidth}x${video.videoHeight}`);
         });
         
         // Buffering indicator for seeking to unbuffered positions
@@ -354,28 +354,28 @@ class VideoRenderer {
         
         // Show buffering when waiting for data
         video.addEventListener('waiting', () => {
-            console.log('VIDEO EVENT: waiting at', video.currentTime);
+            window.logger.info('VIDEO EVENT: waiting at', video.currentTime);
             showBufferingIndicator(video.currentTime);
         });
         
         video.addEventListener('seeking', () => {
-            console.log('VIDEO EVENT: seeking to', video.currentTime);
+            window.logger.info('VIDEO EVENT: seeking to', video.currentTime);
             showBufferingIndicator(video.currentTime);
         });
         
         video.addEventListener('stalled', () => {
-            console.log('VIDEO EVENT: stalled at', video.currentTime);
+            window.logger.info('VIDEO EVENT: stalled at', video.currentTime);
             showBufferingIndicator(video.currentTime);
         });
         
         // Hide buffering when playback resumes
         video.addEventListener('playing', () => {
-            console.log('VIDEO EVENT: playing at', video.currentTime);
+            window.logger.info('VIDEO EVENT: playing at', video.currentTime);
             hideBufferingIndicator();
         });
         
         video.addEventListener('seeked', () => {
-            console.log('VIDEO EVENT: seeked to', video.currentTime, 'readyState:', video.readyState);
+            window.logger.info('VIDEO EVENT: seeked to', video.currentTime, 'readyState:', video.readyState);
             // Small delay to check if we're actually playing or still buffering
             setTimeout(() => {
                 if (!video.paused && video.readyState >= 3) {
@@ -385,13 +385,13 @@ class VideoRenderer {
         });
         
         video.addEventListener('canplaythrough', () => {
-            console.log('VIDEO EVENT: canplaythrough');
+            window.logger.info('VIDEO EVENT: canplaythrough');
             hideBufferingIndicator();
         });
         
         // Also hide on pause (user intentionally paused)
         video.addEventListener('pause', () => {
-            console.log('VIDEO EVENT: pause, readyState:', video.readyState);
+            window.logger.info('VIDEO EVENT: pause, readyState:', video.readyState);
             // Only hide if we were buffering, not if user paused
             if (bufferingOverlay && video.readyState >= 3) {
                 hideBufferingIndicator();
@@ -402,7 +402,7 @@ class VideoRenderer {
         let fullscreenAttempted = false;
         
         video.addEventListener('canplay', () => {
-            console.log('Video can play:', fileName, 'options:', JSON.stringify({
+            window.logger.info('Video can play:', fileName, 'options:', JSON.stringify({
                 autoPlay: options.autoPlay,
                 keyboardNavigation: options.keyboardNavigation,
                 restoreFullscreen: options.restoreFullscreen
@@ -410,21 +410,21 @@ class VideoRenderer {
             
             // Auto-play and auto-fullscreen if opened via keyboard navigation or restoring fullscreen
             const shouldAutoFullscreen = (options.autoPlay && options.keyboardNavigation) || options.restoreFullscreen;
-            console.log('shouldAutoFullscreen:', shouldAutoFullscreen, 'fullscreenAttempted:', fullscreenAttempted);
+            window.logger.info('shouldAutoFullscreen:', shouldAutoFullscreen, 'fullscreenAttempted:', fullscreenAttempted);
             
             if (shouldAutoFullscreen && !fullscreenAttempted) {
                 fullscreenAttempted = true;
-                console.log('Attempting auto-play and fullscreen for:', fileName);
+                window.logger.info('Attempting auto-play and fullscreen for:', fileName);
                 video.play().then(() => {
-                    console.log('Play started, requesting fullscreen');
+                    window.logger.info('Play started, requesting fullscreen');
                     // Enter fullscreen after play starts
                     return video.requestFullscreen();
                 }).then(() => {
-                    console.log('Fullscreen entered successfully');
+                    window.logger.info('Fullscreen entered successfully');
                     // Focus video for keyboard events in fullscreen
                     video.focus();
                 }).catch(err => {
-                    console.log('Auto-play/fullscreen error (may be due to browser policy):', err);
+                    window.logger.info('Auto-play/fullscreen error (may be due to browser policy):', err);
                 });
             }
             
@@ -474,7 +474,7 @@ class VideoRenderer {
             if (e._videoHandled) return;
             e._videoHandled = true;
             
-            console.log('Video keydown event:', e.code, e.key);
+            window.logger.info('Video keydown event:', e.code, e.key);
 
             if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
                 return;
@@ -561,7 +561,7 @@ class VideoRenderer {
                     
                     if (newTime !== undefined && newTime !== oldTime) {
                         video.currentTime = newTime;
-                        console.log('Seek:', oldTime.toFixed(1), '->', newTime.toFixed(1));
+                        window.logger.info('Seek:', oldTime.toFixed(1), '->', newTime.toFixed(1));
                         
                         // Show visual feedback for successful seek
                         const message = document.createElement('div');
@@ -634,11 +634,11 @@ class VideoRenderer {
     }
     
     navigateToAdjacentFile(keyCode) {
-        console.log('navigateToAdjacentFile called with keyCode:', keyCode);
+        window.logger.info('navigateToAdjacentFile called with keyCode:', keyCode);
 
         // Check if file explorer is available
         if (!window.fileExplorer || !window.fileExplorer.filteredFiles || !window.fileExplorer.selectFile) {
-            console.log('File explorer not available for navigation');
+            window.logger.info('File explorer not available for navigation');
             return;
         }
         
@@ -646,7 +646,7 @@ class VideoRenderer {
         const currentIndex = this.getCurrentFileIndex(filteredFiles);
         
         if (currentIndex === -1) {
-            console.log('Current file not found in directory listing');
+            window.logger.info('Current file not found in directory listing');
             return;
         }
         
@@ -703,18 +703,18 @@ class VideoRenderer {
     
     getCurrentFileIndex(filteredFiles) {
         if (!this.currentFileName) {
-            console.log('getCurrentFileIndex: No currentFileName set');
+            window.logger.info('getCurrentFileIndex: No currentFileName set');
             return -1;
         }
 
-        console.log('getCurrentFileIndex: Looking for', JSON.stringify(this.currentFileName));
-        console.log('getCurrentFileIndex: filteredFiles count:', filteredFiles.length);
+        window.logger.info('getCurrentFileIndex: Looking for', JSON.stringify(this.currentFileName));
+        window.logger.info('getCurrentFileIndex: filteredFiles count:', filteredFiles.length);
         if (filteredFiles.length > 0) {
-            console.log('getCurrentFileIndex: First few file names:', filteredFiles.slice(0, 3).map(f => f.name));
+            window.logger.info('getCurrentFileIndex: First few file names:', filteredFiles.slice(0, 3).map(f => f.name));
         }
 
         const index = filteredFiles.findIndex(file => file.name === this.currentFileName);
-        console.log('getCurrentFileIndex: Found index:', index);
+        window.logger.info('getCurrentFileIndex: Found index:', index);
         return index;
     }
     
@@ -868,7 +868,7 @@ class VideoRenderer {
             }
             this.updateAnnotationDisplay(annotation);
         } catch (error) {
-            console.error('Error loading annotations:', error);
+            window.logger.error('Error loading annotations:', error);
             this.updateAnnotationDisplay({});
         }
     }
@@ -915,7 +915,7 @@ class VideoRenderer {
     
     async saveAnnotationDirectly(type, value) {
         const filePath = this.currentFilePath;
-        console.log('saveAnnotationDirectly:', type, value, 'for file:', filePath);
+        window.logger.info('saveAnnotationDirectly:', type, value, 'for file:', filePath);
         
         if (type === 'comment') {
             // Show comment dialog
@@ -935,9 +935,9 @@ class VideoRenderer {
             } else if (data[filePath]) {
                 existingAnnotation = data[filePath];
             }
-            console.log('Existing annotation:', existingAnnotation);
+            window.logger.info('Existing annotation:', existingAnnotation);
         } catch (error) {
-            console.log('No existing annotations found');
+            window.logger.info('No existing annotations found');
         }
         
         // For color and stars, update annotation directly
@@ -947,7 +947,7 @@ class VideoRenderer {
             stars: type === 'stars' ? value : existingAnnotation.stars
         };
         
-        console.log('Saving annotation:', annotation);
+        window.logger.info('Saving annotation:', annotation);
         
         // Save annotation
         try {
@@ -963,7 +963,7 @@ class VideoRenderer {
             });
             
             const data = await response.json();
-            console.log('Save response:', data);
+            window.logger.info('Save response:', data);
             
             if (data.success) {
                 // Update cache
@@ -982,11 +982,11 @@ class VideoRenderer {
                 // Show feedback
                 this.showQuickAnnotationFeedback(type, value);
             } else {
-                console.error('Save failed:', data);
+                window.logger.error('Save failed:', data);
                 this.showQuickAnnotationFeedback('error', 'Save failed');
             }
         } catch (error) {
-            console.error('Error saving annotation:', error);
+            window.logger.error('Error saving annotation:', error);
             this.showQuickAnnotationFeedback('error', 'Network error');
         }
     }
@@ -1045,7 +1045,7 @@ class VideoRenderer {
         // User can double-click video controls or press F for fullscreen
         if (video.paused) {
             video.play().catch(err => {
-                console.error('Error attempting to play video:', err);
+                window.logger.error('Error attempting to play video:', err);
             });
         } else {
             video.pause();
@@ -1059,14 +1059,14 @@ class VideoRenderer {
         if (document.fullscreenElement) {
             // Exit fullscreen
             document.exitFullscreen().catch(err => {
-                console.log('Error exiting fullscreen:', err);
+                window.logger.info('Error exiting fullscreen:', err);
             });
         } else {
             // Enter fullscreen
             video.requestFullscreen().then(() => {
                 video.focus(); // Focus video for keyboard events
             }).catch(err => {
-                console.log('Error entering fullscreen:', err);
+                window.logger.info('Error entering fullscreen:', err);
             });
         }
     }
@@ -1075,7 +1075,7 @@ class VideoRenderer {
         // If in fullscreen, exit fullscreen first
         if (document.fullscreenElement) {
             document.exitFullscreen().catch(err => {
-                console.log('Error exiting fullscreen:', err);
+                window.logger.info('Error exiting fullscreen:', err);
             });
             return;
         }
@@ -1171,7 +1171,7 @@ class VideoRenderer {
             );
 
             if (!response.ok) {
-                console.log('Could not fetch directory listing for subtitle discovery');
+                window.logger.info('Could not fetch directory listing for subtitle discovery');
                 return;
             }
 
@@ -1189,16 +1189,16 @@ class VideoRenderer {
                     path: directoryPath ? `${directoryPath}/${file.name}` : file.name
                 }));
 
-            console.log(`Found ${this.availableSubtitles.length} subtitle files in directory`);
+            window.logger.info(`Found ${this.availableSubtitles.length} subtitle files in directory`);
         } catch (error) {
-            console.error('Error discovering subtitles:', error);
+            window.logger.error('Error discovering subtitles:', error);
             this.availableSubtitles = [];
         }
     }
     
     showSubtitleSearchDialog() {
         if (!this.currentVideo) {
-            console.log('No video element available');
+            window.logger.info('No video element available');
             return;
         }
         
@@ -1384,7 +1384,7 @@ class VideoRenderer {
     
     async loadSubtitleFile(subtitlePath, subtitleName) {
         if (!this.currentVideo) {
-            console.error('No video element available');
+            window.logger.error('No video element available');
             return;
         }
         
@@ -1419,11 +1419,11 @@ class VideoRenderer {
                 }
             }, 100);
             
-            console.log(`Loaded subtitle: ${subtitleName}`);
+            window.logger.info(`Loaded subtitle: ${subtitleName}`);
             this.showSubtitleNotification(`Subtitle loaded: ${subtitleName}`);
             
         } catch (error) {
-            console.error('Error loading subtitle file:', error);
+            window.logger.error('Error loading subtitle file:', error);
             this.showSubtitleNotification(`Error loading subtitle: ${error.message}`);
         }
     }
@@ -1632,7 +1632,7 @@ class VideoRenderer {
                 this.bookmarks = [];
             }
         } catch (error) {
-            console.error('Error loading bookmarks:', error);
+            window.logger.error('Error loading bookmarks:', error);
             this.bookmarks = [];
         }
     }
@@ -1655,7 +1655,7 @@ class VideoRenderer {
             }
             return false;
         } catch (error) {
-            console.error('Error saving bookmark:', error);
+            window.logger.error('Error saving bookmark:', error);
             return false;
         }
     }
@@ -1677,7 +1677,7 @@ class VideoRenderer {
             }
             return false;
         } catch (error) {
-            console.error('Error deleting bookmark:', error);
+            window.logger.error('Error deleting bookmark:', error);
             return false;
         }
     }
@@ -1693,7 +1693,7 @@ class VideoRenderer {
                 // Store flag to restore fullscreen after dialog closes
                 this._wasFullscreen = true;
                 document.exitFullscreen().catch(err => {
-                    console.log('Error exiting fullscreen for dialog:', err);
+                    window.logger.info('Error exiting fullscreen for dialog:', err);
                 });
             } else {
                 // For non-video fullscreen elements (like divs), we can add an overlay
@@ -1725,7 +1725,7 @@ class VideoRenderer {
         if (document.fullscreenElement && document.fullscreenElement.tagName === 'VIDEO') {
             this._wasFullscreen = true;
             await document.exitFullscreen().catch(err => {
-                console.log('Error exiting fullscreen for dialog:', err);
+                window.logger.info('Error exiting fullscreen for dialog:', err);
             });
             // Small delay to let fullscreen exit complete
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -1798,7 +1798,7 @@ class VideoRenderer {
         if (document.fullscreenElement && document.fullscreenElement.tagName === 'VIDEO') {
             this._wasFullscreen = true;
             await document.exitFullscreen().catch(err => {
-                console.log('Error exiting fullscreen for dialog:', err);
+                window.logger.info('Error exiting fullscreen for dialog:', err);
             });
             // Small delay to let fullscreen exit complete
             await new Promise(resolve => setTimeout(resolve, 100));
@@ -1992,7 +1992,7 @@ class VideoRenderer {
             }
             return false;
         } catch (error) {
-            console.error('Error renaming bookmark:', error);
+            window.logger.error('Error renaming bookmark:', error);
             return false;
         }
     }

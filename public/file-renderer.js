@@ -82,7 +82,8 @@ class FileRenderer {
         } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro', 'lsl', 'lua', 'pl', 'asm', 's', 'vb', 'pas', 'f90', 'f95', 'f03', 'f08', 'for', 'cobol', 'cob', 'zig', 'm', 'mm', 'groovy', 'gradle', 'cmake', 'dockerfile'].includes(extension)) {
             return 'text';
         } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(extension)) {
-            const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+            const response = await window.authManager.authenticatedFetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+            if (!response) return extension;
             const files = await response.json();
             const imageFiles = files.filter(file => {
                 // Strip .btpart from filename if present
@@ -126,7 +127,7 @@ class FileRenderer {
             try {
                 await document.exitFullscreen();
             } catch (err) {
-                console.log('Error exiting fullscreen:', err);
+                window.logger.info('Error exiting fullscreen:', err);
             }
         }
         
@@ -187,7 +188,7 @@ class FileRenderer {
             // Pass fullscreen state to the new renderer so it can restore it
             if (wasFullscreen && options.keyboardNavigation) {
                 options.restoreFullscreen = true;
-                console.log('FileRenderer: Will restore fullscreen for', fileName);
+                window.logger.info('FileRenderer: Will restore fullscreen for', fileName);
             }
 
             // Cleanup previous renderer's specific event listeners or states
@@ -195,7 +196,7 @@ class FileRenderer {
                 try {
                     this.currentHandler.cleanup();
                 } catch (cleanupError) {
-                    console.warn('Error during renderer cleanup:', cleanupError);
+                    window.logger.warn('Error during renderer cleanup:', cleanupError);
                 }
             }
 
@@ -204,7 +205,8 @@ class FileRenderer {
             this.currentHandler = handler; // Set the new handler
 
             if (fileType === 'image-pair') {
-                const response = await fetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+                const response = await window.authManager.authenticatedFetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
+                if (!response) return;
                 const files = await response.json();
                 options.images = files.filter(file => {
                     // Strip .btpart from filename if present
@@ -215,7 +217,7 @@ class FileRenderer {
                 });
             }
 
-            console.log(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
+            window.logger.info(`FileRenderer: ${fileName} -> ${fileType} -> ${handler?.constructor?.name || 'no handler'}`);
 
             // Show progress for file rendering
             if (window.debugConsole) {
@@ -241,7 +243,7 @@ class FileRenderer {
                         }, 300);
                     }
                 } catch (renderError) {
-                    console.error(`Error rendering ${fileType} file "${fileName}":`, renderError);
+                    window.logger.error(`Error rendering ${fileType} file "${fileName}":`, renderError);
                     this.showErrorMessage(contentOther, fileName, renderError, filePath);
                     if (window.debugConsole) {
                         window.debugConsole.hideProgress();
@@ -255,7 +257,7 @@ class FileRenderer {
                 }
             }
         } catch (fatalError) {
-            console.error(`Fatal error in FileRenderer for "${fileName}":`, fatalError);
+            window.logger.error(`Fatal error in FileRenderer for "${fileName}":`, fatalError);
             this.showErrorMessage(contentOther, fileName, fatalError, filePath);
             if (window.debugConsole) {
                 window.debugConsole.hideProgress();
@@ -362,7 +364,7 @@ class FileRenderer {
     }
 
     async handleFileNotFound(fileName) {
-        console.log(`[FileRenderer] File not found: ${fileName}, triggering directory refresh`);
+        window.logger.info(`[FileRenderer] File not found: ${fileName}, triggering directory refresh`);
         
         // Show toast notification
         if (typeof showToast === 'function') {
@@ -373,7 +375,7 @@ class FileRenderer {
         setTimeout(() => {
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 const currentPath = window.fileExplorer.currentPath();
-                console.log(`[FileRenderer] Refreshing directory: ${currentPath}`);
+                window.logger.info(`[FileRenderer] Refreshing directory: ${currentPath}`);
                 window.fileExplorer.loadFiles(currentPath);
             }
         }, 500);
@@ -382,7 +384,7 @@ class FileRenderer {
     async testRender(fileType, testFilePath, testFileName) {
         const handler = this.handlers.get(fileType);
         if (!handler) {
-            console.error(`No handler for file type: ${fileType}`);
+            window.logger.error(`No handler for file type: ${fileType}`);
             return false;
         }
 
@@ -396,13 +398,13 @@ class FileRenderer {
             testContainer.appendChild(mockContentCode);
             testContainer.appendChild(mockContentOther);
 
-            console.log(`Testing ${fileType} with file: ${testFileName}`);
+            window.logger.info(`Testing ${fileType} with file: ${testFileName}`);
             await handler.render(testFilePath, testFileName, mockContentCode, mockContentOther);
             
-            console.log(`✓ ${fileType} render completed successfully`);
+            window.logger.info(`✓ ${fileType} render completed successfully`);
             return true;
         } catch (error) {
-            console.error(`✗ ${fileType} render failed:`, error);
+            window.logger.error(`✗ ${fileType} render failed:`, error);
             return false;
         }
     }

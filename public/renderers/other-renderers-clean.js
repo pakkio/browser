@@ -75,7 +75,7 @@ class ArchiveRenderer {
             await this.loadArchiveContents(filePath, '', contentArea, pathDisplay, backBtn);
             this.setupKeyboardNavigation(filePath, contentArea, pathDisplay, backBtn);
         } catch (error) {
-            console.error('Archive load error:', error);
+            window.logger.error('Archive load error:', error);
             contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error loading archive: ${error.message}</div>`;
         }
     }
@@ -160,7 +160,7 @@ class ArchiveRenderer {
             const data = await response.json();
             this.renderFileList(data, archivePath, subPath, contentArea, pathDisplay, backBtn);
         } catch (error) {
-            console.error('Failed to load archive contents:', error);
+            window.logger.error('Failed to load archive contents:', error);
             contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
         }
     }
@@ -325,6 +325,6 @@ class ArchiveRenderer {
 
     async previewFile(archivePath, filePath, fileName, index) {
         // Implementation for file preview
-        console.log('Preview file:', fileName);
+        window.logger.info('Preview file:', fileName);
     }
 }

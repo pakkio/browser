@@ -140,7 +140,7 @@ class DocxRenderer {
             }, 100);
 
         } catch (error) {
-            console.error('DOCX render error:', error);
+            window.logger.error('DOCX render error:', error);
             contentOther.innerHTML = `<div style="color: red;">Error loading DOCX file: ${error.message}</div>`;
             contentOther.style.display = 'block';
         }
@@ -202,7 +202,7 @@ class XlsxRenderer {
             contentOther.appendChild(xlsxContainer);
             contentOther.style.display = 'block';
         } catch (error) {
-            console.error('XLSX render error:', error);
+            window.logger.error('XLSX render error:', error);
             contentOther.innerHTML = `<div style="color: red;">Error loading XLSX file: ${error.message}</div>`;
             contentOther.style.display = 'block';
         }
@@ -281,7 +281,7 @@ class PptxRenderer {
             contentOther.appendChild(pptxContainer);
             contentOther.style.display = 'block';
         } catch (error) {
-            console.error('PPTX render error:', error);
+            window.logger.error('PPTX render error:', error);
             contentOther.innerHTML = `<div style="color: red;">Error loading PPTX file: ${error.message}</div>`;
             contentOther.style.display = 'block';
         }
@@ -389,7 +389,7 @@ class ArchiveRenderer {
             await this.loadArchiveContents(filePath, '', contentArea, pathDisplay, backBtn);
             this.setupKeyboardNavigation(filePath, contentArea, pathDisplay, backBtn);
         } catch (error) {
-            console.error('Archive load error:', error);
+            window.logger.error('Archive load error:', error);
             contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error loading archive: ${error.message}</div>`;
         }
     }
@@ -407,7 +407,7 @@ class ArchiveRenderer {
             const data = await response.json();
             this.renderFileList(data, archivePath, subPath, contentArea, pathDisplay, backBtn);
         } catch (error) {
-            console.error('Failed to load archive contents:', error);
+            window.logger.error('Failed to load archive contents:', error);
             contentArea.innerHTML = `<div style="color: red; padding: 20px;">Error: ${error.message}</div>`;
         }
     }
@@ -759,7 +759,7 @@ class ArchiveRenderer {
             }
 
         } catch (error) {
-            console.error('Preview error:', error);
+            window.logger.error('Preview error:', error);
             alert(`Error previewing file: ${error.message}`);
         }
     }
@@ -1049,7 +1049,7 @@ class HtmlRenderer {
             document.addEventListener('keydown', this.handleKeyDown);
 
         } catch (error) {
-            console.error('HTML rendering error:', error);
+            window.logger.error('HTML rendering error:', error);
             contentOther.innerHTML = `<div style="padding: 20px; color: red;">Error rendering HTML: ${error.message}</div>`;
         }
     }
@@ -1092,11 +1092,11 @@ class HtmlRenderer {
 
                 if (autoScale < 1.0) {
                     this.setZoom(autoScale);
-                    console.log(`Auto-scaled to ${Math.round(autoScale * 100)}% to fit content`);
+                    window.logger.info(`Auto-scaled to ${Math.round(autoScale * 100)}% to fit content`);
                 }
             }
         } catch (error) {
-            console.warn('Auto-scaling failed (likely due to CORS):', error.message);
+            window.logger.warn('Auto-scaling failed (likely due to CORS):', error.message);
         }
     }
 
@@ -1156,7 +1156,7 @@ class HtmlRenderer {
             
             this.setZoom(fitScale);
         } catch (error) {
-            console.warn('Fit to window failed:', error.message);
+            window.logger.warn('Fit to window failed:', error.message);
             this.setZoom(1.0);
         }
     }

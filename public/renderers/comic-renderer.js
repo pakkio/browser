@@ -87,7 +87,7 @@ class ComicRenderer {
                     }, 500);
                 }
             } catch (error) {
-                console.error('Error loading comic:', error);
+                window.logger.error('Error loading comic:', error);
                 this.showComicError(controls, pagesContainer, error, fileName, filePath);
                 
                 // Hide loading popup on error
@@ -96,7 +96,7 @@ class ComicRenderer {
                 }
             }
         } catch (error) {
-            console.error(`Fatal error in ComicRenderer for ${fileName}:`, error);
+            window.logger.error(`Fatal error in ComicRenderer for ${fileName}:`, error);
             throw new Error(`Comic rendering failed: ${error.message}`);
         }
     }
@@ -266,7 +266,7 @@ class ComicRenderer {
     }
 
     handleFileNotFound(fileName, pagesContainer) {
-        console.log(`[ComicRenderer] File not found: ${fileName}, triggering directory refresh`);
+        window.logger.info(`[ComicRenderer] File not found: ${fileName}, triggering directory refresh`);
         
         // Show toast notification
         if (typeof showToast === 'function') {
@@ -301,7 +301,7 @@ class ComicRenderer {
         setTimeout(() => {
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 const currentPath = window.fileExplorer.currentPath();
-                console.log(`[ComicRenderer] Refreshing directory: ${currentPath}`);
+                window.logger.info(`[ComicRenderer] Refreshing directory: ${currentPath}`);
                 window.fileExplorer.loadFiles(currentPath);
             }
         }, 500);
@@ -489,7 +489,7 @@ class ComicRenderer {
 
     async loadComicInfo(filePath) {
         try {
-            console.log(`[ComicRenderer] Loading comic info for: ${filePath}`);
+            window.logger.info(`[ComicRenderer] Loading comic info for: ${filePath}`);
             
             if (window.debugConsole) {
                 window.debugConsole.updateProgress('Reading comic archive...', 30);
@@ -499,12 +499,12 @@ class ComicRenderer {
             
             if (!response.ok) {
                 const errorText = await response.text();
-                console.error(`[ComicRenderer] Comic info HTTP error: ${response.status} - ${errorText}`);
+                window.logger.error(`[ComicRenderer] Comic info HTTP error: ${response.status} - ${errorText}`);
                 throw new Error(`HTTP ${response.status}: ${errorText}`);
             }
             
             const info = await response.json();
-            console.log(`[ComicRenderer] Comic info received:`, info);
+            window.logger.info(`[ComicRenderer] Comic info received:`, info);
             
             if (window.debugConsole) {
                 window.debugConsole.updateProgress(`Comic loaded - ${info.pages} pages`, 60);
@@ -518,7 +518,7 @@ class ComicRenderer {
                 statusElement.textContent = `${info.format} - ${info.pages} pages`;
             }
         } catch (error) {
-            console.error('[ComicRenderer] Failed to load comic info:', error);
+            window.logger.error('[ComicRenderer] Failed to load comic info:', error);
             throw error;
         }
     }
@@ -526,7 +526,7 @@ class ComicRenderer {
     async loadPage(page) {
         // Check if we're in cleanup state
         if (this.isCleaningUp || !this.currentFilePath) {
-            console.log(`[ComicRenderer] Skipping loadPage(${page}) - renderer is cleaning up or no file path`);
+            window.logger.info(`[ComicRenderer] Skipping loadPage(${page}) - renderer is cleaning up or no file path`);
             return;
         }
         
@@ -542,7 +542,7 @@ class ComicRenderer {
         
         // Check if DOM elements exist (they may have been removed during cleanup)
         if (!pageImg1 || !pageImg2) {
-            console.log(`[ComicRenderer] Skipping loadPage(${page}) - page elements not found`);
+            window.logger.info(`[ComicRenderer] Skipping loadPage(${page}) - page elements not found`);
             return;
         }
         
@@ -565,17 +565,17 @@ class ComicRenderer {
             
             // Check if we're still valid after async operation
             if (this.isCleaningUp || !this.currentFilePath) {
-                console.log(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during fetch`);
+                window.logger.info(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during fetch`);
                 return;
             }
             
             if (leftUrl) {
                 pageImg1.onload = () => {
-                    console.log(`[ComicRenderer] Page ${leftPage} image loaded successfully`);
+                    window.logger.info(`[ComicRenderer] Page ${leftPage} image loaded successfully`);
                     pageImg1.style.opacity = '1';
                 };
                 pageImg1.onerror = (e) => {
-                    console.error(`[ComicRenderer] Failed to load image for page ${leftPage}`, e);
+                    window.logger.error(`[ComicRenderer] Failed to load image for page ${leftPage}`, e);
                     pageImg1.style.opacity = '0.3';
                     pageImg1.alt = `Failed to load page ${leftPage}`;
                     pageImg1.title = `Page ${leftPage} failed to load - may be corrupted`;
@@ -592,17 +592,17 @@ class ComicRenderer {
                 
                 // Check if we're still valid after async operation
                 if (this.isCleaningUp || !this.currentFilePath) {
-                    console.log(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during right page fetch`);
+                    window.logger.info(`[ComicRenderer] Aborting loadPage(${page}) - renderer cleaned up during right page fetch`);
                     return;
                 }
                 
                 if (rightUrl) {
                     pageImg2.onload = () => {
-                        console.log(`[ComicRenderer] Page ${rightPage} image loaded successfully`);
+                        window.logger.info(`[ComicRenderer] Page ${rightPage} image loaded successfully`);
                         pageImg2.style.opacity = '1';
                     };
                     pageImg2.onerror = (e) => {
-                        console.error(`[ComicRenderer] Failed to load image for page ${rightPage}`, e);
+                        window.logger.error(`[ComicRenderer] Failed to load image for page ${rightPage}`, e);
                         pageImg2.style.opacity = '0.3';
                         pageImg2.alt = `Failed to load page ${rightPage}`;
                         pageImg2.title = `Page ${rightPage} failed to load - may be corrupted`;
@@ -628,11 +628,11 @@ class ComicRenderer {
         } catch (error) {
             // Don't show error if we're cleaning up
             if (this.isCleaningUp) {
-                console.log(`[ComicRenderer] loadPage(${page}) error suppressed during cleanup`);
+                window.logger.info(`[ComicRenderer] loadPage(${page}) error suppressed during cleanup`);
                 return;
             }
             
-            console.error('Error loading page:', error);
+            window.logger.error('Error loading page:', error);
             if (statusElement) statusElement.textContent = `Error loading page: ${error?.message || 'Unknown error'}`;
             
             // Hide loading popup on error
@@ -646,28 +646,28 @@ class ComicRenderer {
         try {
             // Check if we've been cleaned up before starting
             if (this.isCleaningUp || !this.currentFilePath || !this.abortController || this.abortController.signal.aborted) {
-                console.log(`[ComicRenderer] Skipping fetch for page ${page} - renderer was cleaned up`);
+                window.logger.info(`[ComicRenderer] Skipping fetch for page ${page} - renderer was cleaned up`);
                 return null;
             }
             
             const filePath = this.getCurrentFilePath();
             if (!filePath) {
-                console.log(`[ComicRenderer] Skipping fetch for page ${page} - no file path`);
+                window.logger.info(`[ComicRenderer] Skipping fetch for page ${page} - no file path`);
                 return null;
             }
             
-            console.log(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
+            window.logger.info(`[ComicRenderer] Fetching page ${page} from file: ${filePath}`);
             
             const response = await fetch(`/comic-preview?path=${encodeURIComponent(filePath)}&page=${page}`, {
                 signal: this.abortController?.signal,
                 timeout: 30000 // 30 second timeout
             });
             
-            console.log(`[ComicRenderer] Response status: ${response.status}, Content-Type: ${response.headers.get('Content-Type')}`);
+            window.logger.info(`[ComicRenderer] Response status: ${response.status}, Content-Type: ${response.headers.get('Content-Type')}`);
             
             if (!response.ok) {
                 const errorText = await response.text().catch(() => 'Unknown error');
-                console.error(`[ComicRenderer] HTTP error: ${response.status} - ${errorText}`);
+                window.logger.error(`[ComicRenderer] HTTP error: ${response.status} - ${errorText}`);
                 
                 // Provide more specific error messages
                 let errorMessage;
@@ -688,7 +688,7 @@ class ComicRenderer {
             }
             
             const blob = await response.blob();
-            console.log(`[ComicRenderer] Received blob: size=${blob.size}, type=${blob.type}`);
+            window.logger.info(`[ComicRenderer] Received blob: size=${blob.size}, type=${blob.type}`);
             
             if (blob.size === 0) {
                 throw new Error(`Empty response received for page ${page} - may be corrupted or missing`);
@@ -696,24 +696,24 @@ class ComicRenderer {
             
             // Validate that we received an image blob
             if (!blob.type.startsWith('image/')) {
-                console.warn(`[ComicRenderer] Unexpected content type for page ${page}: ${blob.type}`);
+                window.logger.warn(`[ComicRenderer] Unexpected content type for page ${page}: ${blob.type}`);
                 // Still try to create URL in case the server didn't set the correct content type
             }
             
             const url = URL.createObjectURL(blob);
             this.pageCache.set(page, url);
-            console.log(`[ComicRenderer] Created object URL for page ${page}: ${url}`);
+            window.logger.info(`[ComicRenderer] Created object URL for page ${page}: ${url}`);
             return url;
             
         } catch (error) {
             if (error.name === 'AbortError') {
-                console.log(`[ComicRenderer] Page ${page} fetch aborted`);
+                window.logger.info(`[ComicRenderer] Page ${page} fetch aborted`);
                 return null;
             }
             
             // Check if we're cleaning up - if so, don't treat this as an error
             if (this.isCleaningUp) {
-                console.log(`[ComicRenderer] Page ${page} fetch cancelled during cleanup`);
+                window.logger.info(`[ComicRenderer] Page ${page} fetch cancelled during cleanup`);
                 return null;
             }
             
@@ -721,7 +721,7 @@ class ComicRenderer {
             const errorMessage = error?.message || error?.toString?.() || 'Unknown error occurred';
             
             // Enhanced error logging
-            console.error(`[ComicRenderer] Error fetching page ${page} from ${this.fileName || 'unknown file'}:`, {
+            window.logger.error(`[ComicRenderer] Error fetching page ${page} from ${this.fileName || 'unknown file'}:`, {
                 error: errorMessage,
                 page: page,
                 filePath: this.getCurrentFilePath(),
@@ -738,7 +738,7 @@ class ComicRenderer {
             if (isTimeoutError && !this.isCleaningUp) {
                 const currentFilePath = this.getCurrentFilePath();
                 if (!currentFilePath) {
-                    console.log(`[ComicRenderer] Skipping retry for page ${page} - no file path`);
+                    window.logger.info(`[ComicRenderer] Skipping retry for page ${page} - no file path`);
                     return null;
                 }
                 
@@ -746,7 +746,7 @@ class ComicRenderer {
                 const currentRetries = this.retryAttempts.get(retryKey) || 0;
                 
                 if (currentRetries < 2) {
-                    console.log(`[ComicRenderer] Retrying page ${page} (attempt ${currentRetries + 1}/2)`);
+                    window.logger.info(`[ComicRenderer] Retrying page ${page} (attempt ${currentRetries + 1}/2)`);
                     this.retryAttempts.set(retryKey, currentRetries + 1);
                     
                     // Wait briefly before retry
@@ -760,7 +760,7 @@ class ComicRenderer {
                     // Recursive retry
                     return this.fetchAndCachePage(page);
                 } else {
-                    console.error(`[ComicRenderer] Max retries reached for page ${page}`);
+                    window.logger.error(`[ComicRenderer] Max retries reached for page ${page}`);
                     this.retryAttempts.delete(retryKey);
                 }
             }
@@ -813,7 +813,7 @@ class ComicRenderer {
         } catch (error) {
             // Only log warning if we're not cleaning up
             if (!this.isCleaningUp) {
-                console.warn(`Preload failed for page ${page}:`, error?.message || error);
+                window.logger.warn(`Preload failed for page ${page}:`, error?.message || error);
             }
         }
         
@@ -948,7 +948,7 @@ class ComicRenderer {
         // Apply initial fullscreen page styles
         this.updateFullscreenPageStyles();
         
-        console.log('Comic entered fullscreen mode');
+        window.logger.info('Comic entered fullscreen mode');
     }
 
     exitFullscreen() {
@@ -1009,7 +1009,7 @@ class ComicRenderer {
         this.originalParent = null;
         this.isFullscreen = false;
         this.isTruncatedView = false;
-        console.log('Comic exited fullscreen mode');
+        window.logger.info('Comic exited fullscreen mode');
     }
 
     toggleTruncatedView() {
@@ -1017,7 +1017,7 @@ class ComicRenderer {
 
         this.isTruncatedView = !this.isTruncatedView;
         this.updateFullscreenPageStyles();
-        console.log(`Comic view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
+        window.logger.info(`Comic view mode: ${this.isTruncatedView ? 'truncated' : '100%'}`);
     }
 
     updateFullscreenPageStyles() {

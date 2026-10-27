@@ -7,7 +7,6 @@ const fs = require('fs');
 jest.mock('pdf2pic');
 jest.mock('yauzl');
 jest.mock('node-unrar-js');
-jest.mock('child_process');
 
 describe('File Browser Server', () => {
   let app;
@@ -27,16 +26,15 @@ describe('File Browser Server', () => {
 
   describe('GET /api/browse', () => {
     test('should return files in root directory', async () => {
-      // Mock fs.readdirSync
-      const mockFiles = [
+      // Mock fsp.readdir (async) — must return Dirent-like objects
+      jest.spyOn(fs.promises, 'readdir').mockResolvedValue([
         { name: 'test.txt', isDirectory: () => false },
         { name: 'folder', isDirectory: () => true }
-      ];
-      
-      jest.spyOn(fs, 'readdirSync').mockReturnValue(mockFiles);
-      jest.spyOn(fs, 'statSync').mockReturnValue({
+      ]);
+      jest.spyOn(fs.promises, 'stat').mockResolvedValue({
         size: 1024,
-        mtime: new Date('2023-01-01')
+        mtime: new Date('2023-01-01'),
+        isDirectory: () => false
       });
 
       const response = await request(app)
@@ -48,9 +46,7 @@ describe('File Browser Server', () => {
     });
 
     test('should handle directory read errors', async () => {
-      jest.spyOn(fs, 'readdirSync').mockImplementation(() => {
-        throw new Error('Permission denied');
-      });
+      jest.spyOn(fs.promises, 'readdir').mockRejectedValue(new Error('Permission denied'));
 
       await request(app)
         .get('/api/browse')
@@ -106,7 +102,7 @@ describe('File Browser Server', () => {
 
   describe('GET /subtitle', () => {
     test('should ignore leading slash in subtitle path', async () => {
-      jest.spyOn(fs, 'existsSync').mockImplementation((p) => String(p).endsWith('todo/my/sub.vtt'));
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs.promises, 'readFile').mockResolvedValue('WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nHi');
 
       const response = await request(app)
@@ -167,6 +163,8 @@ describe('File Browser Server', () => {
   describe('GET /comic-preview', () => {
     test('should extract comic page from CBZ', async () => {
       const yauzl = require('yauzl');
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4B, 0x03]));
       const mockZipfile = {
         readEntry: jest.fn(),
         on: jest.fn((event, callback) => {
@@ -203,6 +201,7 @@ describe('File Browser Server', () => {
     });
 
     test('should reject non-comic files', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       await request(app)
         .get('/comic-preview?path=test.txt&page=1')
         .expect(400);
@@ -212,7 +211,8 @@ describe('File Browser Server', () => {
   describe('GET /epub-preview', () => {
     test('should extract EPUB content', async () => {
       const yauzl = require('yauzl');
-      
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
+
       // Mock EPUB content
       const mockFiles = new Map();
       mockFiles.set('META-INF/container.xml', '<?xml version="1.0"?><container><rootfiles><rootfile full-path="content.opf"/></rootfiles></container>');
@@ -256,6 +256,7 @@ describe('File Browser Server', () => {
     });
 
     test('should reject non-EPUB files', async () => {
+      jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       await request(app)
         .get('/epub-preview?path=test.txt')
         .expect(400);

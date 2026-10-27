@@ -153,7 +153,7 @@ class ImagePairRenderer {
             pagesContainer.style.opacity = '1';
             
         } catch (error) {
-            console.warn('Error preloading images:', error);
+            window.logger.warn('Error preloading images:', error);
             // Fallback to immediate loading
             pagesContainer.innerHTML = '';
             const fallbackImages = [];

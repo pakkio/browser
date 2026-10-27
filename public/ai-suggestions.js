@@ -1,12 +1,12 @@
 // AI-powered file suggestions system
 class AISuggestionsManager {
     constructor() {
-        console.log('🧠 AI Suggestions constructor called');
+        window.logger.info('🧠 AI Suggestions constructor called');
         this.isVisible = false;
         this.currentSuggestions = [];
         this.currentPath = '';
         this.initializeUI();
-        console.log('🧠 AI Suggestions initialization complete');
+        window.logger.info('🧠 AI Suggestions initialization complete');
     }
 
     initializeUI() {
@@ -444,18 +444,18 @@ class AISuggestionsManager {
         this.triggerButton.className = 'ai-suggestions-trigger';
         this.triggerButton.innerHTML = '🧠';
         this.triggerButton.title = 'Get AI suggestions for interesting files';
-        console.log('🧠 Created trigger button:', this.triggerButton);
+        window.logger.info('🧠 Created trigger button:', this.triggerButton);
 
         // Add to document
         document.body.appendChild(this.backdrop);
         document.body.appendChild(this.triggerButton);
-        console.log('🧠 Added trigger button to document body');
+        window.logger.info('🧠 Added trigger button to document body');
         
         // Debug visibility
         setTimeout(() => {
             const rect = this.triggerButton.getBoundingClientRect();
             const style = window.getComputedStyle(this.triggerButton);
-            console.log('🧠 Brain icon position:', {
+            window.logger.info('🧠 Brain icon position:', {
                 rect,
                 display: style.display,
                 visibility: style.visibility,
@@ -476,7 +476,7 @@ class AISuggestionsManager {
         this.backdrop.addEventListener('click', (e) => {
             // Only close if clicking directly on the backdrop, not on the popup or its children
             if (e.target === this.backdrop && !this.popup.contains(e.target)) {
-                console.log('🧠 Closing AI popup due to backdrop click');
+                window.logger.info('🧠 Closing AI popup due to backdrop click');
                 this.hide();
             }
         });
@@ -502,7 +502,7 @@ class AISuggestionsManager {
     async analyzeWithCustomPrompt() {
         const promptInput = this.content.querySelector('#custom-prompt');
         if (!promptInput) {
-            console.error('Custom prompt input not found');
+            window.logger.error('Custom prompt input not found');
             return;
         }
         
@@ -513,7 +513,7 @@ class AISuggestionsManager {
             return;
         }
 
-        console.log('Analyzing with custom prompt:', customPrompt);
+        window.logger.info('Analyzing with custom prompt:', customPrompt);
         await this.loadSuggestions(this.currentPath, customPrompt);
     }
 
@@ -664,7 +664,7 @@ class AISuggestionsManager {
     }
 
     hide() {
-        console.log('🧠 AI popup hiding - called from:', new Error().stack);
+        window.logger.info('🧠 AI popup hiding - called from:', new Error().stack);
         this.isVisible = false;
         this.backdrop.style.display = 'none';
     }
@@ -719,7 +719,7 @@ class AISuggestionsManager {
             this.displaySuggestions(data);
             
         } catch (error) {
-            console.error('Error loading AI suggestions:', error);
+            window.logger.error('Error loading AI suggestions:', error);
             this.showError(error.message);
         }
     }
@@ -862,13 +862,13 @@ class AISuggestionsManager {
 
 // Initialize the AI suggestions manager when the page loads
 function initializeAISuggestions() {
-    console.log('🤖 Initializing AI Suggestions Manager...');
+    window.logger.info('🤖 Initializing AI Suggestions Manager...');
     try {
         window.aiSuggestions = new AISuggestionsManager();
-        console.log('✅ AI Suggestions Manager initialized successfully');
+        window.logger.info('✅ AI Suggestions Manager initialized successfully');
         return true;
     } catch (error) {
-        console.error('❌ Failed to initialize AI Suggestions Manager:', error);
+        window.logger.error('❌ Failed to initialize AI Suggestions Manager:', error);
         return false;
     }
 }
@@ -884,7 +884,7 @@ if (document.readyState === 'loading') {
 // Also try initializing after a delay in case DOM isn't fully ready
 setTimeout(() => {
     if (!window.aiSuggestions) {
-        console.log('🤖 Retrying AI Suggestions Manager initialization...');
+        window.logger.info('🤖 Retrying AI Suggestions Manager initialization...');
         initializeAISuggestions();
     }
 }, 2000);
@@ -897,7 +897,7 @@ setInterval(() => {
         const isVisible = rect.width > 0 && rect.height > 0;
         
         if (!isVisible) {
-            console.log('🔧 AI Suggestions button not visible, forcing visibility');
+            window.logger.info('🔧 AI Suggestions button not visible, forcing visibility');
             button.style.display = 'flex';
             button.style.visibility = 'visible';
             button.style.opacity = '1';

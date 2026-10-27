@@ -181,6 +181,10 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Logger fallback: ensure window.logger exists even if logger.js fails to load -->
+    <script>window.logger ||= { debug(){}, info(){}, warn(){}, error(){} };</script>
+    <!-- Logger (must load before all other local scripts) -->
+    <script src="logger.js"></script>
     <!-- Renderer modules -->
     <script src="renderers/text-renderer.js?v=2"></script>
     <script src="renderers/image-renderer.js?v=2"></script>
@@ -193,7 +197,7 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
     <script src="renderers/media-renderers.js?v=2"></script>
     <script src="renderers/other-renderers.js?v=2"></script>
     <script src="renderers/library-renderer.js?v=2"></script>
-    <!-- Global error handling (must be first) -->
+    <!-- Global error handling -->
     <script src="error-handler.js"></script>
     <!-- Debug console and progress tracking -->
     <script src="debug-console.js"></script>
