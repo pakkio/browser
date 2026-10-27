@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 
 const express = require('express');
 // NOTE: Pinned to Express 4.x (was 5.1.0) because express-session and
@@ -106,8 +107,10 @@ app.use(helmet({
             "media-src": ["'self'", "blob:"],
             "connect-src": ["'self'"],
             "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
-            "object-src": ["'none'"],
-            "frame-ancestors": ["'none'"]
+            // PDFs and HTML from archives are shown in same-origin iframes; the browser's
+            // PDF viewer needs object-src. Other sites still cannot frame the app.
+            "object-src": ["'self'"],
+            "frame-ancestors": ["'self'"]
         }
     },
     crossOriginEmbedderPolicy: false
@@ -626,21 +629,25 @@ if (require.main === module) {
     server.setTimeout(300000); // 5 minutes
 
     // Graceful shutdown handling (must be after server is created)
-    process.on('SIGTERM', () => {
-        logger.info('SIGTERM received. Shutting down gracefully...');
+    // server.close() alone waits for open video streams and keep-alive sockets,
+    // so drop them and force-exit if closing still takes too long
+    let shuttingDown = false;
+    const shutdown = (signal) => {
+        if (shuttingDown) {
+            logger.info('🛑 Forced exit');
+            process.exit(1);
+        }
+        shuttingDown = true;
+        logger.info(`🛑 ${signal} received. Shutting down...`);
         server.close(() => {
             logger.info('Server closed successfully');
             process.exit(0);
         });
-    });
-
-    process.on('SIGINT', () => {
-        logger.info('SIGINT received. Shutting down gracefully...');
-        server.close(() => {
-            logger.info('Server closed successfully');
-            process.exit(0);
-        });
-    });
+        server.closeAllConnections();
+        setTimeout(() => process.exit(0), 3000).unref();
+    };
+    process.on('SIGTERM', () => shutdown('SIGTERM'));
+    process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;

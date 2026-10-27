@@ -1643,6 +1643,34 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     
     // Event listeners
     document.addEventListener('keydown', handleKeyNavigation);
+
+    // Focus mode: 'H' (or the corner button) hides the file list and details panel
+    // ("wings") so the content fills the window. Works with any open file type.
+    const WINGS_KEY = 'browser.wingsHidden';
+    function setWingsHidden(hidden) {
+        document.body.classList.toggle('wings-hidden', hidden);
+        wingsToggleBtn.textContent = hidden ? '⇥' : '⇤';
+        wingsToggleBtn.title = hidden ? 'Show side panels (H)' : 'Hide side panels (H)';
+        try { localStorage.setItem(WINGS_KEY, hidden ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+    }
+    const wingsToggleBtn = document.createElement('button');
+    wingsToggleBtn.id = 'wings-toggle';
+    wingsToggleBtn.className = 'wings-toggle';
+    wingsToggleBtn.addEventListener('click', () => setWingsHidden(!document.body.classList.contains('wings-hidden')));
+    document.body.appendChild(wingsToggleBtn);
+    let wingsInitiallyHidden = false;
+    try { wingsInitiallyHidden = localStorage.getItem(WINGS_KEY) === '1'; } catch (e) { /* storage unavailable */ }
+    setWingsHidden(wingsInitiallyHidden);
+
+    // Capture phase so renderer key handlers cannot swallow it
+    document.addEventListener('keydown', (event) => {
+        if (event.key !== 'h' && event.key !== 'H') return;
+        if (event.ctrlKey || event.altKey || event.metaKey) return;
+        const tag = event.target && event.target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (event.target && event.target.isContentEditable)) return;
+        event.preventDefault();
+        setWingsHidden(!document.body.classList.contains('wings-hidden'));
+    }, true);
     
     fileTypeFilter.addEventListener('change', () => {
         // Show brief loading for filtering large directories

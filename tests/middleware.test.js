@@ -119,7 +119,8 @@ describe('Middleware and Application Tests', () => {
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       jest.spyOn(fs, 'createReadStream').mockImplementation(() => ({
         pipe: jest.fn((res) => res.end('test')),
-        on: jest.fn()
+        on: jest.fn(),
+        destroy: jest.fn()
       }));
       jest.spyOn(fs, 'statSync').mockReturnValue({ isDirectory: () => false, size: 4 });
 
