@@ -220,6 +220,16 @@ class ComicRenderer {
         this.showPanel(0);
     }
 
+    // Zoom in on the first panel of the page, or back out to the full page
+    async toggleZoom() {
+        if (this.panelMode) {
+            this.exitPanelMode();
+            await this.loadPage(this.currentPage);
+        } else {
+            await this.enterPanelMode();
+        }
+    }
+
     async previousPanel() {
         if (!this.panelMode) return;
         if (this.panelIndex > 0) {
@@ -248,7 +258,7 @@ class ComicRenderer {
         const boxRect = container.getBoundingClientRect();
         img.style.transition = previous;
 
-        const pad = 12;
+        const pad = 4;
         const availW = boxRect.width - pad * 2;
         const availH = boxRect.height - pad * 2;
         const panelW = panel.w * imgRect.width;
@@ -743,6 +753,11 @@ class ComicRenderer {
                 case '0':
                     e.preventDefault();
                     this.firstPanel();
+                    break;
+                case 'z':
+                case 'Z':
+                    e.preventDefault();
+                    this.toggleZoom();
                     break;
                 case 'r': case 'g': case 'y': case 'c':
                 case '2': case '3': case '4': case '5':
