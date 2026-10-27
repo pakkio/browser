@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { mockFileHeader, restoreFileHeader } = require('./helpers/file-header');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
@@ -128,7 +129,7 @@ describe('Integration Tests', () => {
 
       // Handlers check existence and the ZIP signature before extracting
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      mockFileHeader();
 
       // Test comic preview
       const response = await request(app)
@@ -222,7 +223,7 @@ describe('Integration Tests', () => {
         callback(new Error('Corrupted archive'));
       });
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      mockFileHeader();
 
       await request(app)
         .get('/comic-preview?path=corrupted.cbz&page=1')

@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { mockFileHeader, restoreFileHeader } = require('./helpers/file-header');
 const fs = require('fs');
 const path = require('path');
 
@@ -102,12 +103,12 @@ describe('Error Path Coverage Tests', () => {
     beforeEach(() => {
       // Handlers check existence and the ZIP signature before extracting
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      mockFileHeader();
     });
 
     afterEach(() => {
       fs.existsSync.mockRestore();
-      fs.readFileSync.mockRestore();
+      restoreFileHeader();
     });
 
     test('should handle CBZ extraction errors', async () => {

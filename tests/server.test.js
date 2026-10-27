@@ -1,4 +1,5 @@
 const request = require('supertest');
+const { mockFileHeader, restoreFileHeader } = require('./helpers/file-header');
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
@@ -170,7 +171,7 @@ describe('File Browser Server', () => {
       // Handlers check existence before validating the extension
       jest.spyOn(fs, 'existsSync').mockReturnValue(true);
       // ZIP magic bytes ("PK\x03\x04") pass the format validation
-      jest.spyOn(fs, 'readFileSync').mockReturnValue(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
+      mockFileHeader();
       const yauzl = require('yauzl');
       const mockZipfile = {
         readEntry: jest.fn(),
