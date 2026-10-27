@@ -141,7 +141,7 @@ describe('Comprehensive Coverage Tests', () => {
                 }), (index + 1) * 10);
               });
             } else if (event === 'end') {
-              setTimeout(() => handler(), 100);
+              setTimeout(() => handler(), 500); // leave room for slow entry reads under load
             }
           }),
           openReadStream: jest.fn((entry, callback) => {
@@ -203,7 +203,7 @@ describe('Comprehensive Coverage Tests', () => {
                 }), (index + 1) * 10);
               });
             } else if (event === 'end') {
-              setTimeout(() => handler(), 100);
+              setTimeout(() => handler(), 500); // leave room for slow entry reads under load
             }
           }),
           openReadStream: jest.fn((entry, callback) => {

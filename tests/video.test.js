@@ -1,8 +1,26 @@
 const request = require('supertest');
+const fs = require('fs');
 const { spawn } = require('child_process');
 
 // Mock child_process spawn for video transcoding tests
 jest.mock('child_process');
+
+// Run assertions after a delay, then abort the request. Failures are reported through the
+// returned promise: a throw inside a bare timer callback would crash the whole jest process.
+function abortAfter(req, ms, check) {
+  return new Promise((resolve, reject) => {
+    setTimeout(() => {
+      try {
+        check();
+        resolve();
+      } catch (err) {
+        reject(err);
+      } finally {
+        req.abort();
+      }
+    }, ms);
+  });
+}
 
 describe('Video Transcoding Tests', () => {
   let app;
@@ -13,6 +31,8 @@ describe('Video Transcoding Tests', () => {
   });
 
   beforeEach(() => {
+    // The handler checks the source file exists before spawning ffmpeg
+    jest.spyOn(fs, 'existsSync').mockImplementation((p) => String(p).endsWith('test.avi'));
     jest.clearAllMocks();
   });
 
@@ -63,24 +83,26 @@ describe('Video Transcoding Tests', () => {
       const req = request(app).get('/video-transcode?path=test.avi');
       
       // Don't wait for full response, just check spawn was called
-      setTimeout(() => {
+      const checked = abortAfter(req, 100, () => {
         expect(spawn).toHaveBeenCalledWith('ffmpeg', [
           '-i', expect.stringContaining('test.avi'),
           '-c:v', 'libvpx-vp9',
           '-preset', 'fast',
           '-crf', '30',
+          '-b:v', '1M',
           '-c:a', 'libopus',
+          '-b:a', '128k',
           '-f', 'webm',
           '-'
         ]);
-        req.abort();
-      }, 100);
+      });
       
       try {
         await req;
       } catch (error) {
         // Expected due to abort
       }
+      await checked;
     }, 10000);
 
     test('should handle FFmpeg process completion', async () => {
@@ -104,16 +126,16 @@ describe('Video Transcoding Tests', () => {
 
       const req = request(app).get('/video-transcode?path=test.avi');
       
-      setTimeout(() => {
+      const checked = abortAfter(req, 100, () => {
         expect(mockProcess.on).toHaveBeenCalledWith('close', expect.any(Function));
-        req.abort();
-      }, 100);
+      });
       
       try {
         await req;
       } catch (error) {
         // Expected due to abort
       }
+      await checked;
     }, 10000);
 
     test('should handle FFmpeg process errors', async () => {
@@ -136,16 +158,16 @@ describe('Video Transcoding Tests', () => {
 
       const req = request(app).get('/video-transcode?path=test.avi');
       
-      setTimeout(() => {
+      const checked = abortAfter(req, 100, () => {
         expect(mockProcess.on).toHaveBeenCalledWith('error', expect.any(Function));
-        req.abort();
-      }, 100);
+      });
       
       try {
         await req;
       } catch (error) {
         // Expected due to abort
       }
+      await checked;
     }, 10000);
 
     test('should handle client disconnect by killing FFmpeg', async () => {
@@ -169,16 +191,16 @@ describe('Video Transcoding Tests', () => {
       const req = request(app).get('/video-transcode?path=test.avi');
       
       // Check that process was created
-      setTimeout(() => {
+      const checked = abortAfter(req, 50, () => {
         expect(spawn).toHaveBeenCalled();
-        req.abort();
-      }, 50);
+      });
       
       try {
         await req;
       } catch (error) {
         // Expected due to abort
       }
+      await checked;
     }, 5000);
 
     test('should handle FFmpeg stderr logging', async () => {
@@ -206,16 +228,16 @@ describe('Video Transcoding Tests', () => {
       const req = request(app).get('/video-transcode?path=test.avi');
       
       // Don't wait for response, just check that stderr.on was called
-      setTimeout(() => {
+      const checked = abortAfter(req, 100, () => {
         expect(mockProcess.stderr.on).toHaveBeenCalledWith('data', expect.any(Function));
-        req.abort();
-      }, 100);
+      });
       
       try {
         await req;
       } catch (error) {
         // Expected due to abort
       }
+      await checked;
     }, 10000);
   });
 });
