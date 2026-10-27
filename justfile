@@ -25,7 +25,8 @@ run folder="":
         elif [ "$(powershell.exe -NoProfile -Command 'Test-Path Z:\' 2>/dev/null | tr -d '\r')" = "True" ]; then
             echo "File Browser -> http://localhost:$port  (serving Z:\ via Windows node)"
             echo "  stop: Ctrl+C | other folder: just run PATH | other port: PORT=4000 just run"
-            exec powershell.exe -NoProfile -Command "Set-Location '$(wslpath -w "$PWD")'; \$env:PORT='$port'; node server.js 'Z:\'"
+            # reload PATH from the registry so tools installed after WSL started are found
+            exec powershell.exe -NoProfile -Command "\$env:Path=[Environment]::GetEnvironmentVariable('Path','Machine')+';'+[Environment]::GetEnvironmentVariable('Path','User'); Set-Location '$(wslpath -w "$PWD")'; \$env:PORT='$port'; node server.js 'Z:\'"
         else
             echo "Z:\\ not available, falling back to {{fallback}}"
             dir="{{fallback}}"
