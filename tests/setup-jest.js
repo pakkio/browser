@@ -44,7 +44,22 @@ jest.mock('child_process', () => {
   }
 
   // jest.fn wrappers keep the default behaviour but let tests override it
-  return { spawn: jest.fn(mockSpawn), exec: jest.fn(mockExec) };
+  // No native unrar in tests: probing it fails, so the handlers use the mocked node-unrar-js
+  function mockSpawnSync() {
+    return { error: Object.assign(new Error('spawnSync ENOENT'), { code: 'ENOENT' }), status: null };
+  }
+
+  function mockExecFile(cmd, args, options, cb) {
+    cb = [args, options, cb].find((arg) => typeof arg === 'function');
+    return cb && cb(Object.assign(new Error('execFile ENOENT'), { code: 'ENOENT' }), '', '');
+  }
+
+  return {
+    spawn: jest.fn(mockSpawn),
+    exec: jest.fn(mockExec),
+    execFile: jest.fn(mockExecFile),
+    spawnSync: jest.fn(mockSpawnSync)
+  };
 });
 
 
