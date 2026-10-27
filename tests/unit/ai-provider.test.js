@@ -3,7 +3,7 @@ const { EventEmitter } = require('events');
 
 jest.mock('pdf-parse', () => jest.fn(), { virtual: true });
 
-const ENV_KEYS = ['AI_PROVIDER', 'LMSTUDIO_URL', 'OPENROUTER_API_KEY', 'OPENCODEGO_API_KEY', 'OPENCODEGO_MODEL'];
+const ENV_KEYS = ['AI_PROVIDER', 'LMSTUDIO_URL', 'OPENROUTER_API_KEY', 'OPENCODEGO_API_KEY', 'OPENCODEGO_MODEL', 'OPENCODEGO_FALLBACK_MODELS'];
 
 function load(env) {
     ENV_KEYS.forEach(k => delete process.env[k]);
@@ -66,6 +66,38 @@ describe('AIFileAnalyzer providers', () => {
         const res = await a.makeAIRequest([], { response_format: { type: 'json_object' } });
         expect(res.success).toBe(true);
         expect(sent().response_format).toEqual({ type: 'json_object' });
+    });
+
+    test('retries with a fallback model when the content filter blocks a request', async () => {
+        const bodies = [];
+        jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
+            const req = new EventEmitter();
+            req.write = d => { bodies.push(JSON.parse(d)); };
+            req.setTimeout = jest.fn();
+            req.destroy = jest.fn();
+            req.end = () => {
+                const filtered = bodies.length === 1;
+                const res = new EventEmitter();
+                cb(res);
+                res.emit('data', JSON.stringify({ choices: [filtered
+                    ? { finish_reason: 'content_filter', message: { content: '' } }
+                    : { finish_reason: 'stop', message: { content: '{}' } }] }));
+                res.emit('end');
+            };
+            return req;
+        });
+        const a = load({ AI_PROVIDER: 'opencodego', OPENCODEGO_API_KEY: 'k', OPENCODEGO_FALLBACK_MODELS: 'grok-4.7' });
+        const res = await a.makeAIRequest([]);
+        expect(res.success).toBe(true);
+        expect(bodies.map(b => b.model)).toEqual(['deepseek-v4.1-flash', 'grok-4.7']);
+    });
+
+    test('reports the content filter when every model refuses', async () => {
+        mockResponse({ choices: [{ finish_reason: 'content_filter', message: { content: '' } }] });
+        const a = load({ AI_PROVIDER: 'opencodego', OPENCODEGO_API_KEY: 'k', OPENCODEGO_FALLBACK_MODELS: '' });
+        const res = await a.makeAIRequest([]);
+        expect(res.success).toBe(false);
+        expect(res.error).toMatch(/content filter/);
     });
 
     test('treats null content as failure', async () => {
