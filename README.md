@@ -49,9 +49,9 @@ A sleek, modern web-based file browser with support for multiple file types incl
 | Program | Needed for | Package (Debian/Ubuntu) |
 |---|---|---|
 | **FFmpeg** (`ffmpeg`, `ffprobe`) | video thumbnails, AVI/WMV/etc. transcoding, codec checks | `ffmpeg` |
-| **Poppler** (`pdfinfo`) | PDF page count | `poppler-utils` |
-| **Ghostscript** (`gs`) | PDF validation and page rendering | `ghostscript` |
-| **GraphicsMagick** (`gm`) | PDF page images (used by `pdf2pic`) | `graphicsmagick` |
+| **Poppler** (`pdfinfo`, `pdftoppm`) | PDF page count and PDF page images | `poppler-utils` |
+| **Ghostscript** (`gs`) | PDF validation; also needed by the GraphicsMagick fallback | `ghostscript` |
+| **GraphicsMagick** (`gm`) | optional fallback for PDF page images when `pdftoppm` is missing (used by `pdf2pic`) | `graphicsmagick` |
 | **Pandoc** | DOCX text preview, EPUB to PDF | `pandoc` |
 | **ImageMagick** (`identify`) | EPUB image info | `imagemagick` |
 | **zip** | rebuilding EPUB files | `zip` |
@@ -99,11 +99,11 @@ The server runs on Windows Node. Install the programs from the table above (for 
 Notes:
 *   `.cbr` comic pages work without `unrar`: they are extracted in-process with `node-unrar-js`.
 *   On Windows `convert.exe` is a disk-conversion system tool, not ImageMagick, so ImageMagick's older `convert` / `identify` commands are not usable unless you install ImageMagick with the legacy utilities option.
-*   Without Ghostscript and GraphicsMagick, PDF page images will not render; the PDF page count only needs Poppler.
+*   PDF page images and the page count only need Poppler (`pdftoppm`, `pdfinfo`). Ghostscript and GraphicsMagick are only a fallback; Ghostscript is still used for PDF validation.
 
 #### Shortcut: `just run`
 
-`just run` starts the server on port 3000. With no argument it serves Z:\ when it can (mounted at `/mnt/z` in WSL, or through Windows Node when WSL cannot see the drive) and otherwise falls back to `test-files`. `just run PATH` serves any folder and `PORT=4000 just run` changes the port.
+`just run` starts the server on port 3000. When it launches Windows Node from WSL it reloads the Windows `PATH` first, so programs installed after WSL started are found without restarting WSL. With no argument it serves Z:\ when it can (mounted at `/mnt/z` in WSL, or through Windows Node when WSL cannot see the drive) and otherwise falls back to `test-files`. `just run PATH` serves any folder and `PORT=4000 just run` changes the port.
 
 The application will be available at `http://localhost:3000`
 
