@@ -43,35 +43,36 @@ A sleek, modern web-based file browser with support for multiple file types incl
 ## 🚀 Quick Start
 
 ### Prerequisites
-- Node.js 14+
-- ImageMagick or GraphicsMagick (for PDF support)
-- FFmpeg (for AVI video transcoding)
+- Node.js 18+
+- The external programs below. The server starts without them, but each one a feature needs must be on the `PATH` of the machine running Node.
+
+| Program | Needed for | Package (Debian/Ubuntu) |
+|---|---|---|
+| **FFmpeg** (`ffmpeg`, `ffprobe`) | video thumbnails, AVI/WMV/etc. transcoding, codec checks | `ffmpeg` |
+| **Poppler** (`pdfinfo`) | PDF page count | `poppler-utils` |
+| **Ghostscript** (`gs`) | PDF validation and page rendering | `ghostscript` |
+| **GraphicsMagick** (`gm`) | PDF page images (used by `pdf2pic`) | `graphicsmagick` |
+| **Pandoc** | DOCX text preview, EPUB to PDF | `pandoc` |
+| **ImageMagick** (`identify`) | EPUB image info | `imagemagick` |
+| **zip** | rebuilding EPUB files | `zip` |
+| **unrar** (optional) | faster `.cbr` extraction and videos inside `.cbr`; comic pages fall back to the built-in `node-unrar-js` when it is missing | `unrar` (non-free) |
+| **just** (optional) | `just run` / `just test` shortcuts | see [just](https://github.com/casey/just) |
+
+Plain images, text, Markdown, JSON, audio and video that browsers can play need nothing extra.
 
 ### Installation
 
 #### System Dependencies (Linux/Ubuntu/Debian)
 ```bash
-# Install ImageMagick for PDF processing
 sudo apt update
-sudo apt install imagemagick
-
-# Install FFmpeg for AVI video transcoding
-sudo apt install ffmpeg
-
-# Alternative: Install GraphicsMagick
-# sudo apt install graphicsmagick
+sudo apt install ffmpeg poppler-utils ghostscript graphicsmagick pandoc imagemagick zip
+# optional: sudo apt install unrar
 ```
 
 #### System Dependencies (macOS)
 ```bash
-# Using Homebrew
-brew install imagemagick
-
-# Install FFmpeg for AVI video transcoding
-brew install ffmpeg
-
-# Alternative: Install GraphicsMagick
-# brew install graphicsmagick
+brew install ffmpeg poppler ghostscript graphicsmagick pandoc imagemagick zip
+# optional: brew install rar
 ```
 
 #### Application Setup
@@ -91,21 +92,18 @@ cp .env.example .env
 npm start
 ```
 
-### Windows Compatibility
+### Windows
 
-This project is partially runnable on Windows. The core file browsing and viewing of most file types will work. However, the following features will likely fail without manual intervention:
+The server runs on Windows Node. Install the programs from the table above (for example with `winget`; check names with `winget search <name>`, e.g. `winget install oschwartz10612.Poppler` for `pdfinfo`) and make sure their folders are on `PATH`. Open a new terminal afterwards so the updated `PATH` is picked up.
 
-*   **PDF page count:** The server won't be able to determine the number of pages in a PDF.
-*   **CBR (RAR) comic book viewing:** The server won't be able to extract pages from `.cbr` files.
-*   **Video transcoding:** The server won't be able to transcode `.avi` and `.wmv` files.
+Notes:
+*   `.cbr` comic pages work without `unrar`: they are extracted in-process with `node-unrar-js`.
+*   On Windows `convert.exe` is a disk-conversion system tool, not ImageMagick, so ImageMagick's older `convert` / `identify` commands are not usable unless you install ImageMagick with the legacy utilities option.
+*   Without Ghostscript and GraphicsMagick, PDF page images will not render; the PDF page count only needs Poppler.
 
-To make the project fully runnable on Windows, you will need to install the following dependencies and ensure they are available in your system's `PATH`:
+#### Shortcut: `just run`
 
-*   **`pdfinfo`:** Part of the [Xpdf](https://www.xpdfreader.com/download.html) command-line tools.
-*   **`unrar`:** The command-line version of WinRAR. You can find it on the [RARLAB website](https://www.rarlab.com/rar_add.htm).
-*   **`ffmpeg`:** A powerful multimedia framework. You can download it from the [official FFmpeg website](https://ffmpeg.org/download.html).
-
-After installing these tools, make sure to add their installation directories to your system's `PATH` environment variable.
+`just run` starts the server on port 3000. With no argument it serves Z:\ when it can (mounted at `/mnt/z` in WSL, or through Windows Node when WSL cannot see the drive) and otherwise falls back to `test-files`. `just run PATH` serves any folder and `PORT=4000 just run` changes the port.
 
 The application will be available at `http://localhost:3000`
 
