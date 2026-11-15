@@ -96,6 +96,7 @@ class VideoRenderer {
         this.handleWheel = null;
         this.handleFullscreenChange = null;
         this.bookmarks = []; // Store bookmarks for current video
+        this.stream = null; // MseStream while a transcoded video plays
     }
 
     async render(filePath, fileName, contentCode, contentOther, options = {}) {
@@ -160,8 +161,12 @@ class VideoRenderer {
             const forceTranscode = options.forceTranscode || false;
 
             if (needsTranscoding || forceTranscode) {
-                // Use transcoding endpoint
-                video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
+                // Stream through Media Source Extensions (seekable, nothing stored on the server);
+                // browsers without them get the plain whole-file stream
+                this.stream = await MseStream.attach(video, filePath);
+                if (!this.stream) {
+                    video.src = `/video-transcode?path=${encodeURIComponent(filePath)}`;
+                }
 
                 // Add loading indicator for transcoding
                 const loadingDiv = document.createElement('div');
@@ -1561,6 +1566,10 @@ class VideoRenderer {
     }
     
     cleanup() {
+        if (this.stream) {
+            this.stream.destroy();
+            this.stream = null;
+        }
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
             // Also remove from video element if it exists

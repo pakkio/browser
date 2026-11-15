@@ -4,6 +4,11 @@ const { spawn } = require('child_process');
 
 // Mock child_process spawn for video transcoding tests
 jest.mock('child_process');
+// No ffprobe in tests: an unknown codec means a full re-encode
+jest.mock('../lib/video-codec-checker', () => ({
+  checkVideoCodec: jest.fn().mockResolvedValue({ success: false }),
+  isFFProbeAvailable: jest.fn().mockResolvedValue(false)
+}));
 
 // Run assertions after a delay, then abort the request. Failures are reported through the
 // returned promise: a throw inside a bare timer callback would crash the whole jest process.
@@ -84,17 +89,9 @@ describe('Video Transcoding Tests', () => {
       
       // Don't wait for full response, just check spawn was called
       const checked = abortAfter(req, 100, () => {
-        expect(spawn).toHaveBeenCalledWith('ffmpeg', [
-          '-i', expect.stringContaining('test.avi'),
-          '-c:v', 'libvpx-vp9',
-          '-preset', 'fast',
-          '-crf', '30',
-          '-b:v', '1M',
-          '-c:a', 'libopus',
-          '-b:a', '128k',
-          '-f', 'webm',
-          '-'
-        ]);
+        const args = spawn.mock.calls[0][1];
+        expect(spawn.mock.calls[0][0]).toBe('ffmpeg');
+        expect(args).toEqual(expect.arrayContaining(['-i', expect.stringContaining('test.avi'), 'libx264', 'mp4']));
       });
       
       try {

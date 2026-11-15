@@ -23,6 +23,8 @@ const {
     getPdfInfo,
     servePdfPreview,
     serveVideoTranscode,
+    serveVideoStream,
+    serveVideoStreamInfo,
     serveSubtitle,
     validatePdf,
     serveVideoThumbnail,
@@ -187,6 +189,8 @@ app.get('/files/list', requireAuth, serveFileList);
 app.get('/files', requireAuth, serveFile);
 app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
 app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
+app.get('/video-stream', requireAuth, serveVideoStream);
+app.get('/api/video-stream-info', requireAuth, previewLimiter, serveVideoStreamInfo);
 app.get('/subtitle', requireAuth, serveSubtitle);
 app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
 
