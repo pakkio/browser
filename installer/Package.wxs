@@ -1,0 +1,52 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="File Browser" Manufacturer="Pakkio" Version="$(var.Version)"
+           UpgradeCode="7d3f5c1e-2b8a-4e6f-9a41-0c5b7e2d8f13" Scope="perUser">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of File Browser is already installed." />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsDir" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="FileBrowser">
+          <Files Include="$(var.Stage)\**" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="StartDir" Name="File Browser" />
+    </StandardDirectory>
+
+    <!-- `filebrowser` available in any new terminal -->
+    <Component Id="PathEntry" Directory="INSTALLFOLDER" Guid="a3c9e1f4-6d27-4b85-8e0a-91f2c47d5b36">
+      <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="PathEntry" Type="integer" Value="1" KeyPath="yes" />
+      <Environment Id="PathEnv" Name="PATH" Value="[INSTALLFOLDER]" Action="set" Part="last" System="no" Permanent="no" />
+    </Component>
+
+    <!-- Start menu: asks which folder to serve -->
+    <Component Id="StartShortcut" Directory="StartDir" Guid="5e8b2d70-1a94-4c3f-b6d8-e47a0f93c215">
+      <Shortcut Id="StartLnk" Name="File Browser" Target="[INSTALLFOLDER]filebrowser-start.cmd"
+                WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+      <RemoveFolder Id="RmStartDir" On="uninstall" />
+      <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="StartShortcut" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <!-- Explorer: right-click a folder, a drive, or empty space inside a folder -->
+    <Component Id="ExplorerVerbs" Directory="INSTALLFOLDER" Guid="c41d7a92-8e3b-4f06-a5d1-3b6e9f28c704">
+      <RegistryKey Root="HKCU" Key="Software\Classes\Directory\shell\FileBrowser">
+        <RegistryValue Type="string" Value="Open with File Browser" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%1&quot;" /></RegistryKey>
+      </RegistryKey>
+      <RegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\FileBrowser">
+        <RegistryValue Type="string" Value="Open File Browser here" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%V&quot;" /></RegistryKey>
+      </RegistryKey>
+      <RegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\FileBrowser">
+        <RegistryValue Type="string" Value="Open with File Browser" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%1&quot;" /></RegistryKey>
+      </RegistryKey>
+      <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="ExplorerVerbs" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+
+    <Icon Id="AppIcon" SourceFile="$(var.Stage)\runtime\node.exe" />
+  </Package>
+</Wix>

@@ -157,3 +157,5 @@ sample.*
 session.json
 sesssion
 .latest
+installer/stage/
+installer/out/
