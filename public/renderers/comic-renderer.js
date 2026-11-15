@@ -81,7 +81,7 @@ class ComicRenderer {
         if (blocking) {
             const hint = document.createElement('div');
             hint.className = 'comic-wait-hint';
-            hint.textContent = 'Navigation is paused until it finishes · Esc to skip the AI check';
+            hint.textContent = 'Page turns are paused until it finishes · n/p step through the panels found so far · Esc to skip the AI check';
             wait.appendChild(hint);
         }
         badge.style.display = badge.childNodes.length ? 'block' : 'none';
@@ -365,7 +365,9 @@ class ComicRenderer {
 
     exitPanelMode() {
         const img = document.getElementById('page-left');
-        if (img) img.style.transform = '';
+        if (img) { img.style.transform = ''; img.style.cursor = ''; }
+        this.drag = null;
+        this.panView = null;
         this.cancelAIPanels();
         this.panelMode = false;
         this.panels = null;
@@ -460,6 +462,8 @@ class ComicRenderer {
         const centerY = (panel.y + panel.h / 2) * imgRect.height;
         const tx = boxRect.left + boxRect.width / 2 - imgRect.left - centerX * scale;
         const ty = boxRect.top + boxRect.height / 2 - imgRect.top - centerY * scale;
+        this.panView = { tx, ty, scale };
+        img.style.cursor = 'grab';
         img.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
 
         const statusElement = document.querySelector('#comic-status');
@@ -479,6 +483,12 @@ class ComicRenderer {
         if (this.handleWheel) {
             document.removeEventListener('wheel', this.handleWheel);
             this.handleWheel = null;
+        }
+        if (this.handleMouseDown) {
+            document.removeEventListener('mousedown', this.handleMouseDown);
+            document.removeEventListener('mousemove', this.handleMouseMove);
+            document.removeEventListener('mouseup', this.handleMouseUp);
+            this.handleMouseDown = this.handleMouseMove = this.handleMouseUp = null;
         }
         
         // Exit fullscreen if active
@@ -906,7 +916,9 @@ class ComicRenderer {
             if (e.target.tagName === 'INPUT') return;
 
             // While the AI checks a page nothing else may run; Esc gives up on the check
-            if (this.isLocked()) {
+            // ...except stepping through the panels already found by the built-in detection
+            const panelKey = ['n', 'N', 'p', 'P'].includes(e.key) && this.panelMode && this.panels;
+            if (this.isLocked() && !panelKey) {
                 if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '0', 'z', 'Z', '1'].includes(e.key)) {
                     e.preventDefault();
                     if (e.key === 'Escape') this.cancelAIPanels();
@@ -995,8 +1007,39 @@ class ComicRenderer {
             }
         };
 
+        // Drag with the mouse to pan the zoomed panel; n/p snap back to the next panel
+        this.handleMouseDown = (e) => {
+            if (e.button !== 0 || !this.panelMode || !this.panView || this.isLocked()) return;
+            const img = document.getElementById('page-left');
+            if (!img || !img.parentElement || !img.parentElement.contains(e.target)) return;
+            e.preventDefault();
+            this.drag = { x: e.clientX, y: e.clientY, tx: this.panView.tx, ty: this.panView.ty };
+            img.style.transition = 'none';
+            img.style.cursor = 'grabbing';
+        };
+        this.handleMouseMove = (e) => {
+            if (!this.drag) return;
+            const img = document.getElementById('page-left');
+            if (!img) return;
+            this.panView.tx = this.drag.tx + e.clientX - this.drag.x;
+            this.panView.ty = this.drag.ty + e.clientY - this.drag.y;
+            img.style.transform = `translate(${this.panView.tx}px, ${this.panView.ty}px) scale(${this.panView.scale})`;
+        };
+        this.handleMouseUp = () => {
+            if (!this.drag) return;
+            this.drag = null;
+            const img = document.getElementById('page-left');
+            if (img) {
+                img.style.transition = '';
+                img.style.cursor = this.panelMode ? 'grab' : '';
+            }
+        };
+
         document.addEventListener('keydown', this.handleKeyDown);
         document.addEventListener('wheel', this.handleWheel);
+        document.addEventListener('mousedown', this.handleMouseDown);
+        document.addEventListener('mousemove', this.handleMouseMove);
+        document.addEventListener('mouseup', this.handleMouseUp);
     }
 
     async loadComicInfo(filePath) {
