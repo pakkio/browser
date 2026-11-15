@@ -118,6 +118,9 @@ app.use(helmet({
     crossOriginEmbedderPolicy: false
 }));
 
+// Browsers ask for /favicon.ico on every page; answer it before session and auth run
+app.get('/favicon.ico', (req, res) => res.status(204).end());
+
 // Session configuration (always enabled for browse state persistence)
 if (!process.env.SESSION_SECRET) {
     if (process.env.NODE_ENV === 'production') {
