@@ -487,6 +487,9 @@ class VideoRenderer {
 
             if (e.code === 'Space') {
                 e.preventDefault();
+                // A focused video with native controls toggles play again on keyup (Chrome
+                // ignores preventDefault there), undoing this toggle; move focus off it first
+                if (e.target === this.currentVideo) this.currentVideo.blur();
                 this.togglePlayAndFullscreen(this.currentVideo);
             } else if (e.key === 'f' || e.key === 'F') {
                 // Toggle fullscreen with 'f' key
@@ -528,8 +531,7 @@ class VideoRenderer {
         // Attach to video element directly for proper user gesture recognition
         // This is especially important for fullscreen API in Chrome
         video.addEventListener('keydown', this.handleKeyDown);
-        video.tabIndex = 0; // Make video focusable for keyboard events
-        
+        video.tabIndex = 0; // Make video focusable for keyboard events        
         // Also attach to document for when video isn't focused
         document.addEventListener('keydown', this.handleKeyDown);
 
