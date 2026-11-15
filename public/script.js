@@ -2038,6 +2038,15 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         selectFile: selectFile,
         showContent: showContent,
         quickAnnotate: quickAnnotate,
+        // Focus view (video 'z'): hides the side panels and enters/leaves browser full screen
+        setFocusView: (on) => {
+            setWingsHidden(on);
+            if (on && !document.fullscreenElement && document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen().catch(() => { /* needs a user gesture */ });
+            } else if (!on && document.fullscreenElement) {
+                document.exitFullscreen().catch(() => { /* already leaving */ });
+            }
+        },
         autoDisplayFolderContents: autoDisplayFolderContents,
         clearContentView: clearContentView,
         goToParent: goToParent
