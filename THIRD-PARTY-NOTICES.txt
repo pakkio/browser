@@ -13,12 +13,12 @@ Bundled programs
 Node.js 25.9.0                          MIT
     https://nodejs.org/   |   license: https://github.com/nodejs/node/blob/main/LICENSE
 
-FFmpeg 8.0.1 (gyan.dev "full" build)    GPL-3.0 (built with --enable-gpl --enable-version3)
+FFmpeg 9.0.1 (gyan.dev "full" build)    GPL-3.0 (built with --enable-gpl --enable-version3)
     Used as ffmpeg.exe and ffprobe.exe for video streaming and thumbnails.
     The full build links many libraries (x264, x265, ...); their notices are in
     licenses\ffmpeg\README.txt.
     Binaries: https://www.gyan.dev/ffmpeg/builds/
-    Source:   https://ffmpeg.org/releases/ffmpeg-8.0.1.tar.xz
+    Source:   https://ffmpeg.org/releases/ffmpeg-9.0.1.tar.xz
 
 Poppler 25.07.0 (Windows build)         GPL-2.0-or-later
     Used as pdftoppm.exe for PDF page rendering.
