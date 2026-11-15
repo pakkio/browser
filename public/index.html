@@ -4,7 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>File Browser</title>
+    <script>try{document.documentElement.dataset.theme=localStorage.getItem('fb-theme')||'dark';}catch(e){}</script>
     <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="theme.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script>
@@ -71,7 +73,10 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
     <div class="container">
         <div class="browser">
             <div class="controls-section">
-                <h2>File Browser</h2>
+                <div class="controls-title">
+                    <h2>File Browser</h2>
+                    <button id="config-btn" class="config-btn" title="Settings" aria-label="Settings">⚙️</button>
+                </div>
                 <input type="text" id="search-input" class="search-input" placeholder="Search files...">
                 <button id="bookmarks-btn" class="bookmarks-btn" title="View Bookmarks (.browser)">📚</button>
                 <select id="file-type-filter" class="filter-select">
@@ -209,5 +214,6 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
     <script src="ai-summary.js"></script>
     <script src="auth.js"></script>
     <script src="script.js?v=2"></script>
+    <script src="config-panel.js"></script>
 </body>
 </html>

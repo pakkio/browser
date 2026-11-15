@@ -14,7 +14,8 @@ const session = require('express-session');
 const { passport, requireAuth, optionalAuth } = require('./auth');
 const FileCache = require('./cache');
 
-const { AUTH_ENABLED, port, baseDir } = require('./lib/config');
+const { AUTH_ENABLED, port } = require('./lib/config');
+const config = require('./lib/config');
 const { setupAuthRoutes } = require('./lib/auth-routes');
 const {
     serveBrowseRequest,
@@ -94,7 +95,7 @@ process.on('unhandledRejection', (reason, promise) => {
 });
 
 logger.info('File Browser Server Starting...');
-logger.info(`Base directory: ${baseDir}`);
+logger.info(`Base directory: ${config.baseDir}`);
 logger.info(`Port: ${port}`);
 logger.info(`Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
 
@@ -207,8 +208,8 @@ app.get('/api/video-codec-check', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'File path is required' });
         }
 
-        const filePath = path.join(baseDir, requestedFile);
-        if (!filePath.startsWith(baseDir)) {
+        const filePath = path.join(config.baseDir, requestedFile);
+        if (!filePath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Forbidden' });
         }
 
@@ -264,12 +265,12 @@ app.delete('/api/file', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'File path is required' });
         }
 
-        // Resolve the full path based on the baseDir
+        // Resolve the full path based on the config.baseDir
         const normalizedPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-        const fullPath = path.resolve(baseDir, normalizedPath);
+        const fullPath = path.resolve(config.baseDir, normalizedPath);
         
-        // Security check - ensure the path is within baseDir
-        if (!fullPath.startsWith(baseDir)) {
+        // Security check - ensure the path is within config.baseDir
+        if (!fullPath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
         }
 
@@ -302,18 +303,18 @@ app.post('/api/file/move', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Source path and target directory are required' });
         }
 
-        // Resolve the full paths based on the baseDir
+        // Resolve the full paths based on the config.baseDir
         const normalizedSourcePath = sourcePath.startsWith('/') ? sourcePath.slice(1) : sourcePath;
         const normalizedTargetDir = targetDir.startsWith('/') ? targetDir.slice(1) : targetDir;
 
-        const fullSourcePath = path.resolve(baseDir, normalizedSourcePath);
-        const fullTargetDir = path.resolve(baseDir, normalizedTargetDir);
+        const fullSourcePath = path.resolve(config.baseDir, normalizedSourcePath);
+        const fullTargetDir = path.resolve(config.baseDir, normalizedTargetDir);
 
-        // Security check - ensure paths are within baseDir
-        if (!fullSourcePath.startsWith(baseDir)) {
+        // Security check - ensure paths are within config.baseDir
+        if (!fullSourcePath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Source path outside allowed directory' });
         }
-        if (!fullTargetDir.startsWith(baseDir)) {
+        if (!fullTargetDir.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Target path outside allowed directory' });
         }
 
@@ -352,14 +353,14 @@ app.post('/api/file/move', requireAuth, async (req, res) => {
         await fs.rename(fullSourcePath, fullNewPath);
 
         // Preserve annotations: move annotation from old path to new path
-        const oldRelativePath = path.relative(baseDir, fullSourcePath);
-        const newRelativePath = path.relative(baseDir, fullNewPath);
+        const oldRelativePath = path.relative(config.baseDir, fullSourcePath);
+        const newRelativePath = path.relative(config.baseDir, fullNewPath);
         renameAnnotation(oldRelativePath, newRelativePath);
 
         res.json({
             success: true,
             message: 'File moved successfully',
-            newPath: path.relative(baseDir, fullNewPath)
+            newPath: path.relative(config.baseDir, fullNewPath)
         });
 
     } catch (error) {
@@ -379,12 +380,12 @@ app.post('/api/file/rename', requireAuth, async (req, res) => {
             return res.status(400).json({ error: 'Old path and new name are required' });
         }
 
-        // Resolve the full paths based on the baseDir
+        // Resolve the full paths based on the config.baseDir
         const normalizedOldPath = oldPath.startsWith('/') ? oldPath.slice(1) : oldPath;
-        const fullOldPath = path.resolve(baseDir, normalizedOldPath);
+        const fullOldPath = path.resolve(config.baseDir, normalizedOldPath);
         
-        // Security check - ensure the old path is within baseDir
-        if (!fullOldPath.startsWith(baseDir)) {
+        // Security check - ensure the old path is within config.baseDir
+        if (!fullOldPath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
         }
 
@@ -392,8 +393,8 @@ app.post('/api/file/rename', requireAuth, async (req, res) => {
         const dir = path.dirname(fullOldPath);
         const fullNewPath = path.join(dir, newName);
         
-        // Security check - ensure the new path is also within baseDir
-        if (!fullNewPath.startsWith(baseDir)) {
+        // Security check - ensure the new path is also within config.baseDir
+        if (!fullNewPath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: New path outside allowed directory' });
         }
 
@@ -410,11 +411,11 @@ app.post('/api/file/rename', requireAuth, async (req, res) => {
         await fs.rename(fullOldPath, fullNewPath);
         
         // Preserve annotations: rename the annotation from old path to new path
-        const oldRelativePath = path.relative(baseDir, fullOldPath);
-        const newRelativePath = path.relative(baseDir, fullNewPath);
+        const oldRelativePath = path.relative(config.baseDir, fullOldPath);
+        const newRelativePath = path.relative(config.baseDir, fullNewPath);
         renameAnnotation(oldRelativePath, newRelativePath);
         
-        res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(baseDir, fullNewPath) });
+        res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(config.baseDir, fullNewPath) });
         
     } catch (error) {
         logger.error('Error renaming file:', { message: error.message, stack: error.stack });
@@ -430,10 +431,10 @@ app.get('/api/directories', requireAuth, async (req, res) => {
     try {
         const currentDir = req.query.path || '';
         const normalizedDir = currentDir.startsWith('/') ? currentDir.slice(1) : currentDir;
-        const fullDir = path.resolve(baseDir, normalizedDir);
+        const fullDir = path.resolve(config.baseDir, normalizedDir);
         
         // Security check
-        if (!fullDir.startsWith(baseDir)) {
+        if (!fullDir.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
         }
 
@@ -506,13 +507,13 @@ app.post('/api/analyze-files', requireAuth, heavyLimiter, async (req, res) => {
             return res.status(400).json({ error: 'Directory path is required' });
         }
 
-        // Resolve the full path based on the baseDir
+        // Resolve the full path based on the config.baseDir
         // Handle empty string as root path
         const normalizedPath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
-        const fullPath = path.resolve(baseDir, normalizedPath);
+        const fullPath = path.resolve(config.baseDir, normalizedPath);
         
-        // Security check - ensure the path is within baseDir
-        if (!fullPath.startsWith(baseDir)) {
+        // Security check - ensure the path is within config.baseDir
+        if (!fullPath.startsWith(config.baseDir)) {
             return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
         }
 
@@ -547,9 +548,9 @@ function readLatestPath() {
     try {
         if (fs.existsSync(latestPathFile)) {
             const content = fs.readFileSync(latestPathFile, 'utf-8').trim();
-            // Validate that the path exists within baseDir
-            const fullPath = path.resolve(baseDir, content);
-            if (content && fullPath.startsWith(path.resolve(baseDir)) && fs.existsSync(fullPath)) {
+            // Validate that the path exists within config.baseDir
+            const fullPath = path.resolve(config.baseDir, content);
+            if (content && fullPath.startsWith(path.resolve(config.baseDir)) && fs.existsSync(fullPath)) {
                 return content;
             }
         }
@@ -588,9 +589,57 @@ app.get('/api/server-info', (req, res) => {
     // Try session first, then .latest file
     const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
     res.json({ 
-        rootDir: baseDir,
+        rootDir: config.baseDir,
         currentPath: currentPath
     });
+});
+
+// Changing the served root exposes other folders of this machine, so only
+// the machine itself may do it (the socket address, not a spoofable header).
+function localOnly(req, res, next) {
+    const addr = req.socket.remoteAddress;
+    if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return next();
+    res.status(403).json({ error: 'Changing the root is only allowed from this machine' });
+}
+
+// Sub-folders of any directory (drives when path is empty on Windows), for the root picker
+app.get('/api/config/dirs', requireAuth, localOnly, async (req, res) => {
+    try {
+        const requested = typeof req.query.path === 'string' ? req.query.path : '';
+        if (!requested && process.platform === 'win32') {
+            const drives = [];
+            for (let c = 65; c <= 90; c++) {
+                const drive = `${String.fromCharCode(c)}:\\`;
+                if (fs.existsSync(drive)) drives.push(drive);
+            }
+            return res.json({ path: '', parent: null, dirs: drives });
+        }
+        const dir = path.resolve(config.toNativePath(requested || config.baseDir));
+        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
+        const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.'))
+            .map(e => e.name).sort((a, b) => a.localeCompare(b));
+        const parent = path.dirname(dir);
+        res.json({ path: dir, parent: parent === dir ? (process.platform === 'win32' ? '' : null) : parent, dirs });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
+});
+
+// Switch the served root at runtime
+app.post('/api/config/root', requireAuth, localOnly, (req, res) => {
+    const requested = req.body && req.body.path;
+    if (!requested || typeof requested !== 'string') {
+        return res.status(400).json({ error: 'path is required' });
+    }
+    try {
+        const rootDir = config.setBaseDir(requested);
+        req.session.currentPath = '';
+        req.session.lastBrowsedPath = '';
+        saveLatestPath('');
+        res.json({ success: true, rootDir });
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 // Global Express error handler - must be last middleware
@@ -631,7 +680,7 @@ app.use((req, res) => {
 if (require.main === module) {
     const server = app.listen(port, () => {
         logger.info(`Server running at http://localhost:${port}`);
-        logger.info(`Serving files from: ${baseDir}`);
+        logger.info(`Serving files from: ${config.baseDir}`);
         logger.info('Server started successfully!');
     });
 
