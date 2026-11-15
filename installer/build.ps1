@@ -47,6 +47,22 @@ Stage-Tool graphicsmagick $GraphicsMagick $null
 Stage-Tool ghostscript $Ghostscript $null
 Copy-Item "$PSScriptRoot\filebrowser.cmd", "$PSScriptRoot\filebrowser-start.cmd" $stage
 
+# license texts + notice
+function Stage-License($name, $src) {
+    $dst = "$stage\licenses\$name"; New-Item -ItemType Directory $dst -Force | Out-Null
+    foreach ($f in $src) { Copy-Item $f $dst }
+}
+$ffmpegRoot = Split-Path $Ffmpeg
+Stage-License ffmpeg @("$ffmpegRoot\LICENSE", "$ffmpegRoot\README.txt")
+Stage-License poppler @("$Poppler\..\..\share\poppler\COPYING", "$Poppler\..\..\share\poppler\COPYING.gpl2", "$Poppler\..\..\share\poppler\COPYING.adobe")
+Stage-License pandoc @("$Pandoc\COPYRIGHT.txt")
+Stage-License ghostscript @("$Ghostscript\..\doc\COPYING")
+Stage-License graphicsmagick @("$GraphicsMagick\Copyright.txt")
+Stage-License unrar @("$Unrar\license.txt")
+& "$stage\tools\zip\zip.exe" -L | Set-Content "$stage\licenses\Info-ZIP.txt"
+node "$PSScriptRoot\list-npm-licenses.js" "$stage\app\node_modules" "$stage\licenses\npm-packages.txt"
+Copy-Item "$root\THIRD-PARTY-NOTICES.txt" $stage
+
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) { dotnet tool install --global wix --version 5.0.2 }
 $msi = "$out\FileBrowser-$version.msi"
 wix build "$PSScriptRoot\Package.wxs" -arch x64 -d Version=$version -d Stage=$stage -o $msi
