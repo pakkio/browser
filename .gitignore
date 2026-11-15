@@ -159,3 +159,6 @@ sesssion
 .latest
 installer/stage/
 installer/out/
+
+# Installer icon (ships in the MSI)
+!installer/filebrowser.ico

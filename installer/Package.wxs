@@ -22,9 +22,10 @@
       <Environment Id="PathEnv" Name="PATH" Value="[INSTALLFOLDER]" Action="set" Part="last" System="no" Permanent="no" />
     </Component>
 
-    <!-- Start menu: asks which folder to serve -->
+    <!-- Start menu: asks which folder to serve; runs with a taskbar icon to stop it -->
     <Component Id="StartShortcut" Directory="StartDir" Guid="5e8b2d70-1a94-4c3f-b6d8-e47a0f93c215">
-      <Shortcut Id="StartLnk" Name="File Browser" Target="[INSTALLFOLDER]filebrowser-start.cmd"
+      <Shortcut Id="StartLnk" Name="File Browser" Target="[SystemFolder]wscript.exe"
+                Arguments="&quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot;"
                 WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
       <RemoveFolder Id="RmStartDir" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="StartShortcut" Type="integer" Value="1" KeyPath="yes" />
@@ -34,19 +35,23 @@
     <Component Id="ExplorerVerbs" Directory="INSTALLFOLDER" Guid="c41d7a92-8e3b-4f06-a5d1-3b6e9f28c704">
       <RegistryKey Root="HKCU" Key="Software\Classes\Directory\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open with File Browser" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%1&quot;" /></RegistryKey>
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%1&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open File Browser here" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%V&quot;" /></RegistryKey>
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%V&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open with File Browser" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]filebrowser.cmd&quot; &quot;%1&quot;" /></RegistryKey>
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%1&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="ExplorerVerbs" Type="integer" Value="1" KeyPath="yes" />
     </Component>
 
-    <Icon Id="AppIcon" SourceFile="$(var.Stage)\runtime\node.exe" />
+    <Icon Id="AppIcon" SourceFile="$(var.Stage)\filebrowser.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
   </Package>
 </Wix>
