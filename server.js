@@ -5,708 +5,180 @@ require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 const express = require('express');
 // NOTE: Pinned to Express 4.x (was 5.1.0) because express-session and
 // express-rate-limit had compatibility issues with Express 5's async
-// error handling. Async route handlers must use try/catch explicitly.
-const fs = require('fs');
-const helmet = require('helmet');
-const rateLimit = require('express-rate-limit');
+// error handling. Async route handlers are wrapped with asyncHandler.
 const path = require('path');
+const helmet = require('helmet');
 const session = require('express-session');
-const { passport, requireAuth, optionalAuth } = require('./auth');
+const { passport, requireAuth } = require('./auth');
 const FileCache = require('./cache');
 
-const { AUTH_ENABLED, port } = require('./lib/config');
 const config = require('./lib/config');
-const { setupAuthRoutes } = require('./lib/auth-routes');
-const {
-    serveBrowseRequest,
-    serveFileList,
-    serveFile,
-    getPdfInfo,
-    servePdfPreview,
-    serveVideoTranscode,
-    serveVideoStream,
-    serveVideoStreamInfo,
-    serveSubtitle,
-    validatePdf,
-    serveVideoThumbnail,
-    serveDirectoryLibrary,
-    serveDocxPreview
-} = require('./lib/file-handlers');
-const { checkVideoCodec, isFFProbeAvailable } = require('./lib/video-codec-checker');
-const { serveComicPreview, getComicInfo, serveArchiveVideo } = require('./lib/comic-handlers');
-const { detectComicPanels } = require('./lib/comic-panels');
-const { serveArchiveContents, serveArchiveFile } = require('./lib/archive-handlers');
-const { serveEpubCover, serveEpubPreview, serveCoverImageFallback, serveEpubAsPdf } = require('./lib/epub-handlers');
-const { getAnnotations, postAnnotations, deleteAnnotations, searchAnnotations, getBookmarksApi, postBookmarkApi, renameBookmarkApi, deleteBookmarkApi, renameAnnotation, migrateToSparseApi } = require('./lib/annotation-handlers');
-const { getCacheStats, clearCache } = require('./lib/cache-handlers');
-const { openFile } = require('./lib/system-handlers');
-const AIFileAnalyzer = require('./lib/ai-file-analyzer');
+const { AUTH_ENABLED, port, validateEnv } = config;
+const errorHandler = require('./middleware/errorHandler');
 const logger = require('./lib/logger');
 
-const app = express();
+const isProduction = process.env.NODE_ENV === 'production';
+const isTest = process.env.NODE_ENV === 'test';
 
-// Request size limits to prevent memory exhaustion
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-// Memory monitoring and protection
-const memoryMonitor = {
-    checkMemory() {
-        const usage = process.memoryUsage();
-        const heapUsedMB = Math.round(usage.heapUsed / 1024 / 1024);
-        const heapTotalMB = Math.round(usage.heapTotal / 1024 / 1024);
-        const rssMB = Math.round(usage.rss / 1024 / 1024);
-        
-        // Log memory usage every 10 minutes in production
-        if (process.env.NODE_ENV === 'production') {
-            logger.info(`Memory: ${heapUsedMB}MB used, ${heapTotalMB}MB total, ${rssMB}MB RSS`);
-        }
-
-        // Warn if memory usage is high (>500MB heap or >1GB RSS)
-        if (heapUsedMB > 500 || rssMB > 1024) {
-            logger.warn(`High memory usage: ${heapUsedMB}MB heap, ${rssMB}MB RSS`);
-        }
-        
-        return { heapUsedMB, heapTotalMB, rssMB };
-    },
-    
-    startMonitoring() {
-        // Check memory every 10 minutes
-        setInterval(() => this.checkMemory(), 10 * 60 * 1000);
-        // Initial check
-        this.checkMemory();
-    }
-};
-
-// Start memory monitoring (skip during tests)
-if (process.env.NODE_ENV !== 'test') {
-    memoryMonitor.startMonitoring();
-}
-
-// Global error handling to prevent crashes
-process.on('uncaughtException', (error) => {
-    logger.error('UNCAUGHT EXCEPTION - Server will attempt to continue:', { message: error.message, stack: error.stack });
-    // Don't exit the process - try to continue serving other requests
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-    logger.error('UNHANDLED PROMISE REJECTION:', { reason: reason?.message || reason, stack: reason?.stack });
-    // Don't exit the process - try to continue serving other requests
-});
+// --- Validate environment ---
+validateEnv().forEach(w => logger.warn(`Environment: ${w}`));
 
 logger.info('File Browser Server Starting...');
 logger.info(`Base directory: ${config.baseDir}`);
 logger.info(`Port: ${port}`);
 logger.info(`Authentication: ${AUTH_ENABLED ? 'ENABLED' : 'DISABLED'}`);
 
-// Security headers & CSP
-app.use(helmet({
-    contentSecurityPolicy: {
-        useDefaults: true,
-        directives: {
-            "default-src": ["'self'"],
-            "script-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            "script-src-elem": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            "style-src": ["'self'", "'unsafe-inline'", "https://cdnjs.cloudflare.com"],
-            "img-src": ["'self'", "data:", "blob:"],
-            "media-src": ["'self'", "blob:"],
-            "connect-src": ["'self'"],
-            "worker-src": ["'self'", "blob:", "https://cdnjs.cloudflare.com"],
-            // PDFs and HTML from archives are shown in same-origin iframes; the browser's
-            // PDF viewer needs object-src. Other sites still cannot frame the app.
-            "object-src": ["'self'"],
-            "frame-ancestors": ["'self'"]
-        }
+const app = express();
+
+// --- Memory monitoring (skip during tests) ---
+if (!isTest) {
+  const monitor = {
+    check() {
+      const { heapUsed, rss } = process.memoryUsage();
+      const heapMB = Math.round(heapUsed / 1024 / 1024);
+      const rssMB = Math.round(rss / 1024 / 1024);
+      if (heapMB > 500 || rssMB > 1024) {
+        logger.warn(`High memory usage: ${heapMB}MB heap, ${rssMB}MB RSS`);
+      }
     },
-    crossOriginEmbedderPolicy: false
+    start() {
+      this.check();
+      setInterval(() => this.check(), 10 * 60 * 1000).unref();
+    },
+  };
+  monitor.start();
+}
+
+// --- Global crash guards ---
+process.on('uncaughtException', (err) => {
+  logger.error('UNCAUGHT EXCEPTION - Server will attempt to continue:', { message: err.message, stack: err.stack });
+});
+process.on('unhandledRejection', (reason) => {
+  logger.error('UNHANDLED PROMISE REJECTION:', { reason: reason?.message || reason, stack: reason?.stack });
+});
+
+// --- Request parsing ---
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ limit: '10mb', extended: true }));
+
+// --- Security headers ---
+app.use(helmet({
+  contentSecurityPolicy: {
+    useDefaults: true,
+    directives: {
+      'default-src': ["'self'"],
+      'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
+      'script-src-elem': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
+      'style-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
+      'img-src': ["'self'", 'data:', 'blob:'],
+      'media-src': ["'self'", 'blob:'],
+      'connect-src': ["'self'"],
+      'worker-src': ["'self'", 'blob:', 'https://cdnjs.cloudflare.com'],
+      // PDFs and HTML from archives are shown in same-origin iframes; the browser's
+      // PDF viewer needs object-src. Other sites still cannot frame the app.
+      'object-src': ["'self'"],
+      'frame-ancestors': ["'self'"],
+    },
+  },
+  crossOriginEmbedderPolicy: false,
 }));
 
 // Browsers ask for /favicon.ico on every page; answer it before session and auth run
 app.get('/favicon.ico', (req, res) => res.status(204).end());
 
-// Session configuration (always enabled for browse state persistence)
+// --- Session ---
 if (!process.env.SESSION_SECRET) {
-    if (process.env.NODE_ENV === 'production') {
-        logger.error('SESSION_SECRET environment variable is required. Generate one with: openssl rand -hex 32');
-        process.exit(1);
-    }
-    logger.warn('SESSION_SECRET not set. Using insecure default for development. Set SESSION_SECRET in .env for production.');
+  if (isProduction) {
+    logger.error('SESSION_SECRET environment variable is required. Generate one with: openssl rand -hex 32');
+    process.exit(1);
+  }
+  logger.warn('SESSION_SECRET not set. Using insecure default for development. Set SESSION_SECRET in .env for production.');
 }
 app.use(session({
-    secret: process.env.SESSION_SECRET || 'dev-insecure-secret-do-not-use-production',
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        secure: process.env.NODE_ENV === 'production',
-        httpOnly: true,
-        sameSite: 'lax',
-        maxAge: 24 * 60 * 60 * 1000
-    }
+  secret: process.env.SESSION_SECRET || 'dev-insecure-secret-do-not-use-production',
+  resave: false,
+  saveUninitialized: false,
+  cookie: {
+    secure: isProduction,
+    httpOnly: true,
+    sameSite: 'lax',
+    maxAge: 24 * 60 * 60 * 1000,
+  },
 }));
 
-// Passport initialization (only if auth is enabled)
+// --- Authentication ---
 if (AUTH_ENABLED) {
-    app.use(passport.initialize());
-    app.use(passport.session());
+  app.use(passport.initialize());
+  app.use(passport.session());
 }
 
-// Initialize disk-based cache system
+// --- Cache (disk-based, shared via app.locals) ---
 const cache = new FileCache({
-    maxAge: 24 * 60 * 60 * 1000,
-    maxSize: 500 * 1024 * 1024
+  maxAge: 24 * 60 * 60 * 1000,
+  maxSize: 500 * 1024 * 1024,
 });
+app.locals.cache = cache;
 
-// Rate limiting costose
-const heavyLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 100,
-    standardHeaders: true,
-    legacyHeaders: false
-});
-
-const previewLimiter = rateLimit({
-    windowMs: 60 * 1000,
-    max: 30,
-    standardHeaders: true,
-    legacyHeaders: false
-});
-
-// Setup routes
+// --- Static files ---
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(express.json());
 
-// Authentication routes
-setupAuthRoutes(app, passport);
+// --- Route modules ---
+const createAuthRouter = require('./routes/auth.routes');
+app.use(createAuthRouter(passport));
 
-// API routes
-app.get('/api/browse', requireAuth, serveBrowseRequest);
-app.get('/api/pdf-info', requireAuth, getPdfInfo);
-app.get('/api/validate-pdf', requireAuth, validatePdf);
-app.get('/api/comic-info', requireAuth, (req, res) => getComicInfo(req, res, cache));
-app.post('/api/comic-panels', requireAuth, express.raw({ type: 'image/jpeg', limit: '6mb' }), detectComicPanels);
+// Server info is public; root switching inside applies its own auth
+app.use(require('./routes/config.routes'));
 
-// File serving routes
-app.get('/files/list', requireAuth, serveFileList);
-app.get('/files', requireAuth, serveFile);
-app.get('/pdf-preview', requireAuth, previewLimiter, servePdfPreview);
-app.get('/video-transcode', requireAuth, previewLimiter, serveVideoTranscode);
-app.get('/video-stream', requireAuth, serveVideoStream);
-app.get('/api/video-stream-info', requireAuth, previewLimiter, serveVideoStreamInfo);
-app.get('/subtitle', requireAuth, serveSubtitle);
-app.get('/comic-preview', requireAuth, (req, res) => serveComicPreview(req, res, cache));
+// All API routes below this point require authentication
+app.use(requireAuth);
 
-// Video thumbnail and library view routes
-app.get('/video-thumbnail', requireAuth, previewLimiter, serveVideoThumbnail);
-app.get('/docx-preview', requireAuth, serveDocxPreview);
-app.get('/api/library', requireAuth, serveDirectoryLibrary);
+app.use(require('./routes/browse.routes'));
+app.use(require('./routes/file-ops.routes'));
+app.use(require('./routes/documents.routes'));
+app.use(require('./routes/comics.routes'));
+app.use(require('./routes/media.routes'));
+app.use(require('./routes/annotations.routes'));
+app.use(require('./routes/ai.routes'));
+app.use(require('./routes/cache.routes'));
 
-// Video codec check endpoint
-app.get('/api/video-codec-check', requireAuth, async (req, res) => {
-    try {
-        const requestedFile = req.query.path;
-        if (!requestedFile) {
-            return res.status(400).json({ error: 'File path is required' });
-        }
+// --- Error handling (must be last) ---
+app.use(errorHandler);
 
-        const filePath = path.join(config.baseDir, requestedFile);
-        if (!filePath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Forbidden' });
-        }
-
-        const codecInfo = await checkVideoCodec(filePath);
-        res.json(codecInfo);
-    } catch (error) {
-        logger.error('Error checking video codec:', { message: error.message, stack: error.stack });
-        res.status(500).json({
-            error: 'Failed to check video codec',
-            message: error.message
-        });
-    }
-});
-
-// Archive routes
-app.get('/archive-video', requireAuth, (req, res) => serveArchiveVideo(req, res, cache));
-app.get('/archive-contents', requireAuth, (req, res) => serveArchiveContents(req, res, cache));
-app.get('/archive-file', requireAuth, serveArchiveFile);
-
-// EPUB routes
-app.get('/epub-cover', requireAuth, serveEpubCover);
-app.get('/epub-preview', requireAuth, serveEpubPreview);
-app.get('/epub-pdf', requireAuth, serveEpubAsPdf);
-app.get('/cover.jpeg', serveCoverImageFallback);
-app.get('/cover.jpg', serveCoverImageFallback);
-
-// Annotation routes
-app.get('/api/annotations', requireAuth, getAnnotations);
-app.post('/api/annotations', requireAuth, postAnnotations);
-app.delete('/api/annotations', requireAuth, deleteAnnotations);
-app.get('/api/search-annotations', requireAuth, searchAnnotations);
-app.post('/api/annotations/migrate-sparse', requireAuth, migrateToSparseApi);
-
-// Bookmark routes
-app.get('/bookmarks', requireAuth, getBookmarksApi);
-app.post('/bookmarks', requireAuth, postBookmarkApi);
-app.put('/bookmarks', requireAuth, renameBookmarkApi);
-app.delete('/bookmarks', requireAuth, deleteBookmarkApi);
-
-// Cache management routes
-app.get('/api/cache/stats', requireAuth, (req, res) => getCacheStats(req, res, cache));
-app.post('/api/cache/clear', requireAuth, (req, res) => clearCache(req, res, cache));
-
-// System routes
-app.post('/api/open-file', requireAuth, openFile);
-
-// File operation routes
-app.delete('/api/file', requireAuth, async (req, res) => {
-    try {
-        const { path: filePath } = req.body;
-        
-        if (!filePath) {
-            return res.status(400).json({ error: 'File path is required' });
-        }
-
-        // Resolve the full path based on the config.baseDir
-        const normalizedPath = filePath.startsWith('/') ? filePath.slice(1) : filePath;
-        const fullPath = path.resolve(config.baseDir, normalizedPath);
-        
-        // Security check - ensure the path is within config.baseDir
-        if (!fullPath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
-        }
-
-        const fs = require('fs').promises;
-        const stats = await fs.stat(fullPath);
-        
-        if (stats.isDirectory()) {
-            await fs.rmdir(fullPath, { recursive: true });
-        } else {
-            await fs.unlink(fullPath);
-        }
-        
-        res.json({ success: true, message: 'File deleted successfully' });
-        
-    } catch (error) {
-        logger.error('Error deleting file:', { message: error.message, stack: error.stack });
-        res.status(500).json({ 
-            error: 'Failed to delete file', 
-            message: error.message 
-        });
-    }
-});
-
-// Move file to another directory
-app.post('/api/file/move', requireAuth, async (req, res) => {
-    try {
-        const { sourcePath, targetDir } = req.body;
-
-        if (!sourcePath || targetDir === undefined) {
-            return res.status(400).json({ error: 'Source path and target directory are required' });
-        }
-
-        // Resolve the full paths based on the config.baseDir
-        const normalizedSourcePath = sourcePath.startsWith('/') ? sourcePath.slice(1) : sourcePath;
-        const normalizedTargetDir = targetDir.startsWith('/') ? targetDir.slice(1) : targetDir;
-
-        const fullSourcePath = path.resolve(config.baseDir, normalizedSourcePath);
-        const fullTargetDir = path.resolve(config.baseDir, normalizedTargetDir);
-
-        // Security check - ensure paths are within config.baseDir
-        if (!fullSourcePath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Source path outside allowed directory' });
-        }
-        if (!fullTargetDir.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Target path outside allowed directory' });
-        }
-
-        const fs = require('fs').promises;
-
-        // Check if source exists
-        try {
-            await fs.access(fullSourcePath);
-        } catch (err) {
-            return res.status(404).json({ error: 'Source file not found' });
-        }
-
-        // Check if target directory exists
-        try {
-            const stat = await fs.stat(fullTargetDir);
-            if (!stat.isDirectory()) {
-                return res.status(400).json({ error: 'Target is not a directory' });
-            }
-        } catch (err) {
-            return res.status(404).json({ error: 'Target directory not found' });
-        }
-
-        // Calculate new path
-        const fileName = path.basename(fullSourcePath);
-        const fullNewPath = path.join(fullTargetDir, fileName);
-
-        // Check if file already exists in target
-        try {
-            await fs.access(fullNewPath);
-            return res.status(409).json({ error: 'File with that name already exists in target directory' });
-        } catch (err) {
-            // File doesn't exist, which is what we want
-        }
-
-        // Move the file
-        await fs.rename(fullSourcePath, fullNewPath);
-
-        // Preserve annotations: move annotation from old path to new path
-        const oldRelativePath = path.relative(config.baseDir, fullSourcePath);
-        const newRelativePath = path.relative(config.baseDir, fullNewPath);
-        renameAnnotation(oldRelativePath, newRelativePath);
-
-        res.json({
-            success: true,
-            message: 'File moved successfully',
-            newPath: path.relative(config.baseDir, fullNewPath)
-        });
-
-    } catch (error) {
-        logger.error('Error moving file:', { message: error.message, stack: error.stack });
-        res.status(500).json({
-            error: 'Failed to move file',
-            message: error.message
-        });
-    }
-});
-
-app.post('/api/file/rename', requireAuth, async (req, res) => {
-    try {
-        const { oldPath, newName } = req.body;
-        
-        if (!oldPath || !newName) {
-            return res.status(400).json({ error: 'Old path and new name are required' });
-        }
-
-        // Resolve the full paths based on the config.baseDir
-        const normalizedOldPath = oldPath.startsWith('/') ? oldPath.slice(1) : oldPath;
-        const fullOldPath = path.resolve(config.baseDir, normalizedOldPath);
-        
-        // Security check - ensure the old path is within config.baseDir
-        if (!fullOldPath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
-        }
-
-        // Calculate new path (same directory, new name)
-        const dir = path.dirname(fullOldPath);
-        const fullNewPath = path.join(dir, newName);
-        
-        // Security check - ensure the new path is also within config.baseDir
-        if (!fullNewPath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: New path outside allowed directory' });
-        }
-
-        const fs = require('fs').promises;
-        
-        // Check if new name already exists
-        try {
-            await fs.access(fullNewPath);
-            return res.status(409).json({ error: 'File with that name already exists' });
-        } catch (err) {
-            // File doesn't exist, which is what we want
-        }
-        
-        await fs.rename(fullOldPath, fullNewPath);
-        
-        // Preserve annotations: rename the annotation from old path to new path
-        const oldRelativePath = path.relative(config.baseDir, fullOldPath);
-        const newRelativePath = path.relative(config.baseDir, fullNewPath);
-        renameAnnotation(oldRelativePath, newRelativePath);
-        
-        res.json({ success: true, message: 'File renamed successfully', newPath: path.relative(config.baseDir, fullNewPath) });
-        
-    } catch (error) {
-        logger.error('Error renaming file:', { message: error.message, stack: error.stack });
-        res.status(500).json({
-            error: 'Failed to rename file',
-            message: error.message 
-        });
-    }
-});
-
-// List directories for folder picker
-app.get('/api/directories', requireAuth, async (req, res) => {
-    try {
-        const currentDir = req.query.path || '';
-        const normalizedDir = currentDir.startsWith('/') ? currentDir.slice(1) : currentDir;
-        const fullDir = path.resolve(config.baseDir, normalizedDir);
-        
-        // Security check
-        if (!fullDir.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
-        }
-
-        const fs = require('fs').promises;
-        const entries = await fs.readdir(fullDir, { withFileTypes: true });
-        
-        const directories = entries
-            .filter(entry => entry.isDirectory())
-            .map(entry => ({
-                name: entry.name,
-                path: normalizedDir ? `${normalizedDir}/${entry.name}` : entry.name
-            }))
-            .sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-
-        // Build response with parent directory info
-        const result = {
-            currentPath: normalizedDir,
-            parentPath: normalizedDir ? path.dirname(normalizedDir) : null,
-            directories
-        };
-        
-        // If parent path is ".", set it to empty string (root)
-        if (result.parentPath === '.') {
-            result.parentPath = '';
-        }
-        
-        res.json(result);
-        
-    } catch (error) {
-        logger.error('Error listing directories:', { message: error.message, stack: error.stack });
-        res.status(500).json({ 
-            error: 'Failed to list directories', 
-            message: error.message 
-        });
-    }
-});
-
-// AI File Summary route
-app.post('/api/summarize-file', requireAuth, async (req, res) => {
-    try {
-        const { path: filePath, content, fullPdf } = req.body;
-        
-        if (!filePath && !content) {
-            return res.status(400).json({ error: 'File path or content is required' });
-        }
-
-        const analyzer = new AIFileAnalyzer();
-        const result = await analyzer.summarizeFileContent(filePath, content, fullPdf);
-        
-        res.json({
-            success: true,
-            summary: result.summary,
-            stats: result.stats
-        });
-    } catch (error) {
-        logger.error('Error summarizing file:', { message: error.message, stack: error.stack });
-        res.status(500).json({ 
-            error: 'Failed to summarize file', 
-            message: error.message 
-        });
-    }
-});
-
-// AI File Analysis route
-app.post('/api/analyze-files', requireAuth, heavyLimiter, async (req, res) => {
-    try {
-        const { path: dirPath, context } = req.body;
-        
-        if (dirPath === undefined || dirPath === null) {
-            return res.status(400).json({ error: 'Directory path is required' });
-        }
-
-        // Resolve the full path based on the config.baseDir
-        // Handle empty string as root path
-        const normalizedPath = dirPath.startsWith('/') ? dirPath.slice(1) : dirPath;
-        const fullPath = path.resolve(config.baseDir, normalizedPath);
-        
-        // Security check - ensure the path is within config.baseDir
-        if (!fullPath.startsWith(config.baseDir)) {
-            return res.status(403).json({ error: 'Access denied: Path outside allowed directory' });
-        }
-
-        const analyzer = new AIFileAnalyzer();
-        const result = await analyzer.analyzeDirectory(fullPath, context);
-        
-        res.json({
-            success: true,
-            ...result
-        });
-        
-    } catch (error) {
-        logger.error('Error in AI file analysis:', { message: error.message, stack: error.stack });
-        res.status(500).json({ 
-            error: 'Failed to analyze files',
-            message: error.message
-        });
-    }
-});
-
-// Image serving route for EPUB content
-app.get('/images/:filename', requireAuth, async (req, res) => {
-    // This endpoint needs special handling for EPUB images - keeping as placeholder
-    res.status(404).json({ error: 'Image endpoint not fully implemented yet' });
-});
-
-// Session-based current path persistence with .latest file backup
-const latestPathFile = path.join(__dirname, '.latest');
-
-// Helper to read the latest path from file
-function readLatestPath() {
-    try {
-        if (fs.existsSync(latestPathFile)) {
-            const content = fs.readFileSync(latestPathFile, 'utf-8').trim();
-            // Validate that the path exists within config.baseDir
-            const fullPath = path.resolve(config.baseDir, content);
-            if (content && fullPath.startsWith(path.resolve(config.baseDir)) && fs.existsSync(fullPath)) {
-                return content;
-            }
-        }
-    } catch (err) {
-        logger.warn('Failed to read .latest file:', err.message);
-    }
-    return '';
-}
-
-// Helper to save the latest path to file
-function saveLatestPath(pathToSave) {
-    try {
-        fs.writeFileSync(latestPathFile, pathToSave || '', 'utf-8');
-    } catch (err) {
-        logger.warn('Failed to save .latest file:', err.message);
-    }
-}
-
-app.get('/api/current-path', requireAuth, (req, res) => {
-    // Try session first, then .latest file
-    const currentPath = req.session.currentPath || readLatestPath();
-    res.json({ currentPath });
-});
-
-app.post('/api/current-path', requireAuth, (req, res) => {
-    const { path: newPath } = req.body;
-    req.session.currentPath = newPath || '';
-    req.session.lastBrowsedPath = newPath || '';  // Sync both session keys
-    // Also save to .latest file for persistence across restarts
-    saveLatestPath(newPath || '');
-    res.json({ success: true, currentPath: req.session.currentPath });
-});
-
-// Endpoint to get server root info
-app.get('/api/server-info', (req, res) => {
-    // Try session first, then .latest file
-    const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
-    res.json({ 
-        rootDir: config.baseDir,
-        currentPath: currentPath
-    });
-});
-
-// Changing the served root exposes other folders of this machine, so only
-// the machine itself may do it (the socket address, not a spoofable header).
-function localOnly(req, res, next) {
-    const addr = req.socket.remoteAddress;
-    if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return next();
-    res.status(403).json({ error: 'Changing the root is only allowed from this machine' });
-}
-
-// Sub-folders of any directory (drives when path is empty on Windows), for the root picker
-app.get('/api/config/dirs', requireAuth, localOnly, async (req, res) => {
-    try {
-        const requested = typeof req.query.path === 'string' ? req.query.path : '';
-        if (!requested && process.platform === 'win32') {
-            const drives = [];
-            for (let c = 65; c <= 90; c++) {
-                const drive = `${String.fromCharCode(c)}:\\`;
-                if (fs.existsSync(drive)) drives.push(drive);
-            }
-            return res.json({ path: '', parent: null, dirs: drives });
-        }
-        const dir = path.resolve(config.toNativePath(requested || config.baseDir));
-        const entries = await fs.promises.readdir(dir, { withFileTypes: true });
-        const dirs = entries.filter(e => e.isDirectory() && !e.name.startsWith('.'))
-            .map(e => e.name).sort((a, b) => a.localeCompare(b));
-        const parent = path.dirname(dir);
-        res.json({ path: dir, parent: parent === dir ? (process.platform === 'win32' ? '' : null) : parent, dirs });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-});
-
-// Switch the served root at runtime
-app.post('/api/config/root', requireAuth, localOnly, (req, res) => {
-    const requested = req.body && req.body.path;
-    if (!requested || typeof requested !== 'string') {
-        return res.status(400).json({ error: 'path is required' });
-    }
-    try {
-        const rootDir = config.setBaseDir(requested);
-        req.session.currentPath = '';
-        req.session.lastBrowsedPath = '';
-        saveLatestPath('');
-        res.json({ success: true, rootDir });
-    } catch (err) {
-        res.status(400).json({ error: err.message });
-    }
-});
-
-// Global Express error handler - must be last middleware
-app.use((error, req, res, next) => {
-    logger.error('Express error handler:', {
-        error: error.message,
-        stack: error.stack,
-        url: req.url,
-        method: req.method
-    });
-    
-    // Prevent sending response if headers already sent
-    if (res.headersSent) {
-        return next(error);
-    }
-    
-    // Send user-friendly error response
-    const statusCode = error.status || error.statusCode || 500;
-    const message = statusCode === 500 ? 'Internal server error' : error.message;
-    
-    res.status(statusCode).json({
-        error: message,
-        timestamp: new Date().toISOString(),
-        ...(process.env.NODE_ENV === 'development' && { stack: error.stack })
-    });
-});
-
-// 404 handler for undefined routes
+// --- 404 catch-all ---
 app.use((req, res) => {
-    logger.warn(`Route not found: ${req.method} ${req.url}`);
-    res.status(404).json({
-        error: 'Route not found',
-        path: req.url,
-        method: req.method
-    });
+  logger.warn(`Route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ error: 'Route not found', path: req.url, method: req.method });
 });
 
+// --- Start server ---
 if (require.main === module) {
-    const server = app.listen(port, () => {
-        logger.info(`Server running at http://localhost:${port}`);
-        logger.info(`Serving files from: ${config.baseDir}`);
-        logger.info('Server started successfully!');
+  const server = app.listen(port, () => {
+    logger.info(`Server running at http://localhost:${port}`);
+    logger.info(`Serving files from: ${config.baseDir}`);
+    logger.info('Server started successfully!');
+  });
+
+  server.setTimeout(300000); // 5 minutes
+
+  // server.close() alone waits for open video streams and keep-alive sockets,
+  // so drop them and force-exit if closing still takes too long
+  let shuttingDown = false;
+  const shutdown = (signal) => {
+    if (shuttingDown) {
+      logger.info('Forced exit');
+      process.exit(1);
+    }
+    shuttingDown = true;
+    logger.info(`${signal} received. Shutting down...`);
+    server.close(() => {
+      logger.info('Server closed successfully');
+      process.exit(0);
     });
-
-    // Set server timeout to prevent hanging connections
-    server.setTimeout(300000); // 5 minutes
-
-    // Graceful shutdown handling (must be after server is created)
-    // server.close() alone waits for open video streams and keep-alive sockets,
-    // so drop them and force-exit if closing still takes too long
-    let shuttingDown = false;
-    const shutdown = (signal) => {
-        if (shuttingDown) {
-            logger.info('🛑 Forced exit');
-            process.exit(1);
-        }
-        shuttingDown = true;
-        logger.info(`🛑 ${signal} received. Shutting down...`);
-        server.close(() => {
-            logger.info('Server closed successfully');
-            process.exit(0);
-        });
-        server.closeAllConnections();
-        setTimeout(() => process.exit(0), 3000).unref();
-    };
-    process.on('SIGTERM', () => shutdown('SIGTERM'));
-    process.on('SIGINT', () => shutdown('SIGINT'));
+    server.closeAllConnections();
+    setTimeout(() => process.exit(0), 3000).unref();
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 }
 
 module.exports = app;
