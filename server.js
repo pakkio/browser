@@ -1,5 +1,6 @@
-require('dotenv').config();
+// ../.env takes precedence; a local .env only fills in what it leaves unset
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
+require('dotenv').config({ path: require('path').join(__dirname, '.env') });
 
 const express = require('express');
 // NOTE: Pinned to Express 4.x (was 5.1.0) because express-session and
