@@ -504,6 +504,11 @@ class VideoRenderer {
                 const navKey = (e.key === 'PageUp' || e.code === 'PageUp' || e.code === 'ArrowUp') ? 'PageUp' :
                                (e.key === 'PageDown' || e.code === 'PageDown' || e.code === 'ArrowDown') ? 'PageDown' : e.code;
                 this.navigateToAdjacentFile(navKey);
+            } else if (e.key === 'z' || e.key === 'Z') {
+                // Fill the screen: crops black bars baked into the picture (and any overflow)
+                e.preventDefault();
+                const video = this.currentVideo;
+                if (video) video.style.objectFit = video.style.objectFit === 'cover' ? '' : 'cover';
             } else if (e.key === 's' || e.key === 'S') {
                 e.preventDefault();
                 this.showSubtitleSearchDialog();
