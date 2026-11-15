@@ -50,7 +50,8 @@ npm packages (production dependencies)
 The application bundles the npm packages listed in licenses\npm-packages.txt
 (name, version, license, repository), generated from node_modules when the
 installer is built. Their license files stay inside each package folder under
-app\node_modules.
+app\node_modules. The package "pause" has no license field in its package.json;
+its Readme states the MIT License.
 
 Source code for GPL/AGPL components
 -----------------------------------
