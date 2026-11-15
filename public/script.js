@@ -49,6 +49,17 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">f</td><td>Toggle full screen</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">h</td><td>Hide/show side panels</td></tr>
         </table>
+        <h3 style="margin:18px 0 0 0;color:#00aacc;font-size:1.05rem;">Comic viewer</h3>
+        <table style="width:100%;margin:8px 0 0 0;font-size:1rem;border-collapse:collapse;">
+            <tr><td style="padding:4px 12px 4px 0;">← / a, → / d</td><td>Previous / next page</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Home / End</td><td>First / last page</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">1</td><td>Toggle single-page view</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">n / p</td><td>Next / previous panel</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">0</td><td>First panel</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">z</td><td>Zoom on the panel</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">f</td><td>Full screen</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Esc</td><td>Leave full screen / panel mode</td></tr>
+        </table>
         <button id="close-shortcut-help" style="position:absolute;top:12px;right:16px;background:#444;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:1.1rem;">×</button>
         <div style="margin-top:18px;font-size:0.95rem;color:#aaa;">Press <b>Esc</b> or click outside to close</div>
     `;
@@ -913,11 +924,12 @@ function initializeFileExplorer() {
         return [...directories, ...regularFiles];
     }
 
-    function loadFiles(path) {
+    function loadFiles(path, { keepContent = false } = {}) {
         window.logger.info('Loading files for path:', path);
-        
-        // Stop any playing media before loading new content
-        clearContentView();
+
+        // Stop any playing media before loading new content (not when the list is only being
+        // filled in behind a file that was just opened from the URL)
+        if (!keepContent) clearContentView();
         
         // Track browsed folder for quick move access
         addRecentBrowsedFolder(path);
@@ -937,7 +949,7 @@ function initializeFileExplorer() {
         // Clear current file list
         fileList.innerHTML = '<li style="color: #666;">Loading...</li>';
         
-        window.authManager.authenticatedFetch(`/api/browse?path=${encodeURIComponent(path)}`)
+        return window.authManager.authenticatedFetch(`/api/browse?path=${encodeURIComponent(path)}`)
             .then(response => {
                 if (!response) {
                     // Authentication failed, handled by authManager
@@ -1489,6 +1501,14 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             return;
         }
         
+        // In the comic viewer these keys belong to the comic (p = previous panel, 1-5 / r g y c
+        // annotate the open comic); they must not also label the file selected in the list
+        const comicKeys = ['b', 'r', 'g', 'w', 'l', 'o', 'p', 'y', 's', 'c', '1', '2', '3', '4', '5'];
+        const comicContainer = document.querySelector('.comic-container');
+        if (comicContainer && contentOther.style.display !== 'none' && comicKeys.includes(event.key)) {
+            return;
+        }
+
         // Don't interfere when specific renderers are active that handle their own navigation
         const archiveContainer = document.querySelector('.archive-container');
         const pdfContainer = document.querySelector('.pdf-container');
@@ -1610,10 +1630,6 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                     quickAnnotate(filteredFiles[selectedIndex], 'color', '');
                 }
                 return;
-            case '?': // show help popup
-                event.preventDefault();
-                showShortcutHelpPopup();
-                return;
             case 'c':
                 event.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredFiles.length) {
@@ -1663,6 +1679,17 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     let wingsInitiallyHidden = false;
     try { wingsInitiallyHidden = localStorage.getItem(WINGS_KEY) === '1'; } catch (e) { /* storage unavailable */ }
     setWingsHidden(wingsInitiallyHidden);
+
+    // '?' opens the shortcut help from anywhere. Registered on window in the capture phase so
+    // no renderer, modal or annotation handler can swallow it before it gets here.
+    window.addEventListener('keydown', (event) => {
+        if (event.key !== '?' || event.ctrlKey || event.altKey || event.metaKey) return;
+        const tag = event.target && event.target.tagName;
+        if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (event.target && event.target.isContentEditable)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        showShortcutHelpPopup();
+    }, true);
 
     // Capture phase so renderer key handlers cannot swallow it
     document.addEventListener('keydown', (event) => {
@@ -2038,9 +2065,12 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         showContent(dirPath, fileName, { autoPlay: true, keyboardNavigation: true });
 
         // Load directory in background (for file list / navigation)
+        // The flag must stay set until the listing has been handled, otherwise the
+        // auto-display opens the folder's first file over the requested one
         setTimeout(() => {
-            loadFiles(currentPath);
-            skipAutoDisplay = false;
+            Promise.resolve(loadFiles(currentPath, { keepContent: true })).finally(() => {
+                skipAutoDisplay = false;
+            });
         }, 0);
     }
 }

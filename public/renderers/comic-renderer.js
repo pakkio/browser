@@ -20,6 +20,72 @@ class ComicRenderer {
         this.panelIndex = -1;
         this.panelsFromAI = false;
         this.aiPanelCache = new Map(); // "path:page" -> panels the AI found
+        this.busyTasks = new Map(); // id -> { text, since }: what the hourglass badge is showing
+        this.busyTimer = null;
+    }
+
+    /** Show (or update) one running task in the hourglass badge, with its elapsed time. */
+    setBusy(id, text, { blocking = false, icon = null } = {}) {
+        if (this.isCleaningUp) return;
+        const previous = this.busyTasks.get(id);
+        this.busyTasks.set(id, { text, blocking, icon, since: previous ? previous.since : Date.now() });
+        this.renderBusy();
+        if (!this.busyTimer) this.busyTimer = setInterval(() => this.renderBusy(), 1000);
+    }
+
+    clearBusy(id) {
+        this.busyTasks.delete(id);
+        this.renderBusy();
+        if (this.busyTasks.size === 0 && this.busyTimer) {
+            clearInterval(this.busyTimer);
+            this.busyTimer = null;
+        }
+    }
+
+    /** True while a task that must finish before the reader moves on (an AI page check) is running. */
+    isLocked() {
+        for (const task of this.busyTasks.values()) {
+            if (task.blocking) return true;
+        }
+        return false;
+    }
+
+    renderBusy() {
+        const badge = document.getElementById('comic-busy');
+        const wait = document.getElementById('comic-wait');
+        if (!badge || !wait) return;
+        badge.textContent = '';
+        wait.textContent = '';
+        const now = Date.now();
+        const buildRow = ({ text, since, icon }, className) => {
+            const row = document.createElement('div');
+            row.className = className;
+            const glass = document.createElement('span');
+            // A notice (icon set) is shown as is; only a running task gets the flipping hourglass and a timer
+            if (!icon) glass.className = 'comic-busy-glass';
+            glass.textContent = icon || '⏳';
+            row.appendChild(glass);
+            row.appendChild(document.createTextNode(icon ? ` ${text}` : ` ${text} · ${Math.floor((now - since) / 1000)}s`));
+            return row;
+        };
+
+        let blocking = false;
+        for (const task of this.busyTasks.values()) {
+            if (task.blocking) {
+                blocking = true;
+                wait.appendChild(buildRow(task, 'comic-wait-row'));
+            } else {
+                badge.appendChild(buildRow(task, ''));
+            }
+        }
+        if (blocking) {
+            const hint = document.createElement('div');
+            hint.className = 'comic-wait-hint';
+            hint.textContent = 'Navigation is paused until it finishes · Esc to skip the AI check';
+            wait.appendChild(hint);
+        }
+        badge.style.display = badge.childNodes.length ? 'block' : 'none';
+        wait.style.display = blocking ? 'flex' : 'none';
     }
 
     isSingle() {
@@ -35,6 +101,17 @@ class ComicRenderer {
             .comic-container.comic-single #page-left { max-width: 100% !important; flex: none !important; }
             .comic-container.comic-panel .pages-container { overflow: hidden !important; }
             .comic-container.comic-panel #page-left { transform-origin: 0 0; transition: transform 0.25s ease; }
+            #comic-busy { position: absolute; top: 48px; right: 12px; z-index: 20; display: none; pointer-events: none;
+                background: rgba(0,0,0,0.8); color: #fff; padding: 8px 12px; border-radius: 8px; font-size: 14px; line-height: 1.6; }
+            #comic-wait { position: absolute; inset: 0; z-index: 30; display: none; flex-direction: column; align-items: center;
+                justify-content: center; gap: 10px; background: rgba(0,0,0,0.45); color: #fff; text-align: center;
+                animation: comic-wait-in 0.2s ease 0.4s both; }
+            .comic-wait-row { background: rgba(0,0,0,0.85); padding: 14px 22px; border-radius: 10px; font-size: 20px; }
+            .comic-wait-row .comic-busy-glass { font-size: 28px; }
+            .comic-wait-hint { background: rgba(0,0,0,0.85); padding: 6px 14px; border-radius: 8px; font-size: 13px; opacity: 0.85; }
+            @keyframes comic-wait-in { from { opacity: 0; } to { opacity: 1; } }
+            .comic-busy-glass { display: inline-block; animation: comic-busy-flip 1.6s ease-in-out infinite; }
+            @keyframes comic-busy-flip { 0% { transform: rotate(0deg); } 50%, 100% { transform: rotate(180deg); } }
         `;
         document.head.appendChild(style);
     }
@@ -196,41 +273,82 @@ class ComicRenderer {
      * straight away; when the AI answers for the same page it replaces it and the view is
      * refreshed. Any failure keeps the gutter-based panels.
      */
+    /** "page 5/306", or just "page 5" while the total is still unknown. */
+    pageLabel(page) {
+        return this.totalPages ? `page ${page}/${this.totalPages}` : `page ${page}`;
+    }
+
     async requestAIPanels(img) {
         const page = this.currentPage;
         const filePath = this.currentFilePath;
         const key = `${filePath}:${page}`;
 
+        // Only the page being read needs an answer: drop the request of the page we left
+        this.cancelAIPanels();
+        const aiAbort = new AbortController();
+        this.aiPanelAbort = aiAbort;
+        // A superseded request must not lift the lock of the one that replaced it
+        const clearBusy = () => {
+            if (!this.aiPanelAbort || this.aiPanelAbort === aiAbort) this.clearBusy('ai');
+        };
+
         let panels = this.aiPanelCache.get(key);
         if (!panels) {
+            // The AI quota ran out a moment ago: don't make the reader wait for a certain failure
+            if (this.aiPausedUntil > Date.now()) return;
+            this.setBusy('ai',`Asking the AI to find the panels of ${this.pageLabel(page)}`, { blocking: true });
+            // A stuck request must not lock the reader out for good
+            const giveUp = setTimeout(() => aiAbort.abort('timeout'), 120000);
             try {
                 const blob = await this.pageToJpeg(img);
                 const response = await fetch('/api/comic-panels', {
                     method: 'POST',
                     headers: { 'Content-Type': 'image/jpeg' },
                     body: blob,
-                    signal: this.abortController?.signal
+                    signal: aiAbort.signal
                 });
                 if (!response.ok) {
+                    clearBusy();
                     window.logger.warn(`[ComicRenderer] AI panels unavailable (HTTP ${response.status})`);
+                    // Quota spent (429) or key rejected (503) lasts: stop asking for a few minutes
+                    if (response.status === 429 || response.status === 503) {
+                        this.aiPausedUntil = Date.now() + 5 * 60 * 1000;
+                    }
+                    const { error } = await response.json().catch(() => ({}));
+                    this.setBusy('ai-note', `${error || 'AI panel detection failed'}. Using the built-in panel detection`, { icon: '⚠️' });
+                    setTimeout(() => this.clearBusy('ai-note'), 10000);
                     return;
                 }
                 panels = (await response.json()).panels;
-                if (!Array.isArray(panels) || panels.length === 0) return;
+                if (!Array.isArray(panels) || panels.length === 0) {
+                    clearBusy();
+                    return;
+                }
                 this.aiPanelCache.set(key, panels);
             } catch (error) {
+                clearBusy();
                 if (error.name !== 'AbortError') {
                     window.logger.warn(`[ComicRenderer] AI panels failed: ${error.message}`);
                 }
                 return;
+            } finally {
+                clearTimeout(giveUp);
             }
         }
+        clearBusy();
 
         // Only apply the answer if the reader is still on the same page in panel mode
         if (this.isCleaningUp || !this.panelMode || this.currentPage !== page || this.currentFilePath !== filePath) return;
         this.panels = panels;
         this.panelsFromAI = true;
         this.showPanel(Math.min(Math.max(this.panelIndex, 0), panels.length - 1));
+    }
+
+    cancelAIPanels() {
+        if (this.aiPanelAbort) {
+            this.aiPanelAbort.abort('superseded');
+            this.aiPanelAbort = null;
+        }
     }
 
     /** Downscale the page image to a JPEG small enough to send to the AI. */
@@ -248,6 +366,7 @@ class ComicRenderer {
     exitPanelMode() {
         const img = document.getElementById('page-left');
         if (img) img.style.transform = '';
+        this.cancelAIPanels();
         this.panelMode = false;
         this.panels = null;
         this.panelIndex = -1;
@@ -265,9 +384,16 @@ class ComicRenderer {
         }
         // Past the last panel: continue on the next page, starting at its first panel
         if (this.totalPages && this.currentPage >= this.totalPages) return;
-        await this.loadPage(this.currentPage + 1);
-        await this.preparePanels();
-        this.showPanel(0);
+        // Extra key presses while the next page is loading must not queue more page changes
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            await this.loadPage(this.currentPage + 1);
+            await this.preparePanels();
+            this.showPanel(0);
+        } finally {
+            this.panelNavBusy = false;
+        }
     }
 
     async firstPanel() {
@@ -296,9 +422,15 @@ class ComicRenderer {
         }
         // Before the first panel: go to the last panel of the previous page
         if (this.currentPage <= 1) return;
-        await this.loadPage(this.currentPage - 1);
-        await this.preparePanels();
-        this.showPanel(this.panels.length - 1);
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            await this.loadPage(this.currentPage - 1);
+            await this.preparePanels();
+            this.showPanel(this.panels.length - 1);
+        } finally {
+            this.panelNavBusy = false;
+        }
     }
 
     showPanel(index) {
@@ -356,7 +488,13 @@ class ComicRenderer {
         
         // Clear preload queue first to prevent new fetch attempts
         this.preloadQueue = [];
-        
+        this.cancelAIPanels();
+        this.busyTasks.clear();
+        if (this.busyTimer) {
+            clearInterval(this.busyTimer);
+            this.busyTimer = null;
+        }
+
         if (this.abortController) {
             this.abortController.abort('cleanup');
             this.abortController = null;
@@ -401,7 +539,12 @@ class ComicRenderer {
             }
             
             try {
-                await this.loadComicInfo(filePath);
+                this.setBusy('info', 'Reading the archive (counting pages)');
+                try {
+                    await this.loadComicInfo(filePath);
+                } finally {
+                    this.clearBusy('info');
+                }
                 await this.loadPage(1);
                 
                 // Hide loading popup on success
@@ -429,7 +572,15 @@ class ComicRenderer {
     createComicContainer() {
         const comicContainer = document.createElement('div');
         comicContainer.className = 'comic-container';
-        comicContainer.style.cssText = `height: 100%; display: flex; flex-direction: column;`;
+        comicContainer.style.cssText = `height: 100%; display: flex; flex-direction: column; position: relative;`;
+        const busyBadge = document.createElement('div');
+        busyBadge.id = 'comic-busy';
+        busyBadge.setAttribute('role', 'status');
+        comicContainer.appendChild(busyBadge);
+        const waitOverlay = document.createElement('div');
+        waitOverlay.id = 'comic-wait';
+        waitOverlay.setAttribute('role', 'status');
+        comicContainer.appendChild(waitOverlay);
         return comicContainer;
     }
 
@@ -736,7 +887,7 @@ class ComicRenderer {
         
         jumpBtn.addEventListener('click', () => {
             const page = parseInt(jumpInput.value);
-            if (page && page > 0) {
+            if (page && page > 0 && !this.isLocked()) {
                 this.loadPage(page);
             }
         });
@@ -753,7 +904,16 @@ class ComicRenderer {
     setupKeyboardNavigation() {
         this.handleKeyDown = (e) => {
             if (e.target.tagName === 'INPUT') return;
-            
+
+            // While the AI checks a page nothing else may run; Esc gives up on the check
+            if (this.isLocked()) {
+                if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '0', 'z', 'Z', '1'].includes(e.key)) {
+                    e.preventDefault();
+                    if (e.key === 'Escape') this.cancelAIPanels();
+                }
+                return;
+            }
+
             switch (e.key) {
                 case 'ArrowLeft':
                 case 'a':
@@ -827,6 +987,7 @@ class ComicRenderer {
         };
 
         this.handleWheel = (e) => {
+            if (this.isLocked()) return;
             if (e.deltaY > 0) {
                 this.nextPage();
             } else if (e.deltaY < 0) {
@@ -901,18 +1062,18 @@ class ComicRenderer {
         const rightPage = page + 1;
         
         try {
-            if (statusElement) statusElement.innerHTML = `⏳ Loading page ${leftPage}...`;
+            if (statusElement) statusElement.innerHTML = `⏳ Loading ${this.pageLabel(leftPage)}...`;
             pageImg1.style.opacity = '0.5';
             pageImg2.style.opacity = '0.5';
             
             // Show brief loading popup for page navigation (only if not initial load)
             if (window.debugConsole && page > 1) {
-                window.debugConsole.showProgress(`Loading page ${leftPage}...`, 40);
+                window.debugConsole.showProgress(`Loading ${this.pageLabel(leftPage)}...`, 40);
             }
             
             const leftUrl = this.pageCache.has(leftPage) ? 
                 this.pageCache.get(leftPage) : 
-                await this.fetchAndCachePage(leftPage);
+                await this.fetchPageWithBadge(leftPage);
             
             // Check if we're still valid after async operation
             if (this.isCleaningUp || !this.currentFilePath) {
@@ -936,10 +1097,10 @@ class ComicRenderer {
             }
             
             if (!this.isSingle() && this.totalPages && rightPage <= this.totalPages) {
-                if (statusElement) statusElement.innerHTML = `⏳ Loading page ${rightPage}...`;
+                if (statusElement) statusElement.innerHTML = `⏳ Loading ${this.pageLabel(rightPage)}...`;
                 const rightUrl = this.pageCache.has(rightPage) ? 
                     this.pageCache.get(rightPage) : 
-                    await this.fetchAndCachePage(rightPage);
+                    await this.fetchPageWithBadge(rightPage);
                 
                 // Check if we're still valid after async operation
                 if (this.isCleaningUp || !this.currentFilePath) {
@@ -990,6 +1151,17 @@ class ComicRenderer {
             if (window.debugConsole && page > 1) {
                 window.debugConsole.hideProgress();
             }
+        }
+    }
+
+    /** Fetch a page the reader is waiting for, showing it in the hourglass badge meanwhile. */
+    async fetchPageWithBadge(page) {
+        const id = `page-${page}`;
+        this.setBusy(id, `Extracting ${this.pageLabel(page)} from the archive`);
+        try {
+            return await this.fetchAndCachePage(page);
+        } finally {
+            this.clearBusy(id);
         }
     }
 
@@ -1177,6 +1349,7 @@ class ComicRenderer {
     }
 
     previousPage() {
+        if (this.isLocked()) return;
         if (this.currentPage > 1) {
             const step = this.isSingle() ? 1 : 2;
             if (this.panelMode) this.exitPanelMode();
@@ -1185,6 +1358,7 @@ class ComicRenderer {
     }
 
     nextPage() {
+        if (this.isLocked()) return;
         if (!this.totalPages || this.currentPage < this.totalPages) {
             const step = this.isSingle() ? 1 : 2;
             if (this.panelMode) this.exitPanelMode();

@@ -157,7 +157,7 @@ class DebugConsole {
         const progressFill = document.getElementById('progress-fill');
 
         if (progressContainer && progressText && progressPercentage && progressFill) {
-            progressText.textContent = message;
+            progressText.textContent = `⏳ ${message}`;
             progressPercentage.textContent = `${percentage}%`;
             progressFill.style.width = `${percentage}%`;
             progressContainer.style.display = 'flex';
@@ -170,7 +170,7 @@ class DebugConsole {
         const progressFill = document.getElementById('progress-fill');
 
         if (progressText && progressPercentage && progressFill) {
-            progressText.textContent = message;
+            progressText.textContent = `⏳ ${message}`;
             progressPercentage.textContent = `${percentage}%`;
             progressFill.style.width = `${percentage}%`;
         }
