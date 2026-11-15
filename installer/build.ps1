@@ -27,7 +27,7 @@ New-Item -ItemType Directory $stage, "$stage\app", "$stage\runtime", $out -Force
 
 # app (no tests/specs/dev data), then production dependencies only
 Copy-Item "$root\server.js", "$root\auth.js", "$root\cache.js", "$root\package.json", "$root\package-lock.json" "$stage\app" -ErrorAction SilentlyContinue
-Copy-Item "$root\lib", "$root\public" "$stage\app" -Recurse
+Copy-Item "$root\lib", "$root\routes", "$root\middleware", "$root\utils", "$root\public" "$stage\app" -Recurse
 Push-Location "$stage\app"; npm install --omit=dev --no-audit --no-fund; Pop-Location
 if ($LASTEXITCODE) { throw 'npm install failed' }
 
@@ -45,7 +45,7 @@ Stage-Tool unrar $Unrar @('UnRAR.exe')
 Stage-Tool zip $Zip @('zip.exe', 'bzip2.dll', 'zip32z64.dll')
 Stage-Tool graphicsmagick $GraphicsMagick $null
 Stage-Tool ghostscript $Ghostscript $null
-Copy-Item "$PSScriptRoot\filebrowser.cmd", "$PSScriptRoot\filebrowser-start.cmd" $stage
+Copy-Item "$PSScriptRoot\filebrowser.cmd", "$PSScriptRoot\filebrowser-tray.ps1", "$PSScriptRoot\filebrowser-tray.vbs", "$PSScriptRoot\filebrowser.ico" $stage
 
 # license texts + notice
 function Stage-License($name, $src) {
