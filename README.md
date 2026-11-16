@@ -52,9 +52,6 @@ A sleek, modern web-based file browser with support for multiple file types incl
 | **Poppler** (`pdfinfo`, `pdftoppm`) | PDF page count and PDF page images | `poppler-utils` |
 | **Ghostscript** (`gs`) | PDF validation; also needed by the GraphicsMagick fallback | `ghostscript` |
 | **GraphicsMagick** (`gm`) | optional fallback for PDF page images when `pdftoppm` is missing (used by `pdf2pic`) | `graphicsmagick` |
-| **Pandoc** | DOCX text preview, EPUB to PDF | `pandoc` |
-| **ImageMagick** (`identify`) | EPUB image info | `imagemagick` |
-| **zip** | rebuilding EPUB files | `zip` |
 | **unrar** (optional, recommended) | fast `.cbr` listing and extraction, and videos inside `.cbr`; used whenever it is found (on `PATH`, or WinRAR's `UnRAR.exe`), otherwise comic pages fall back to the built-in `node-unrar-js` | `unrar` (non-free) |
 | **just** (optional) | `just run` / `just test` shortcuts | see [just](https://github.com/casey/just) |
 
@@ -65,13 +62,13 @@ Plain images, text, Markdown, JSON, audio and video that browsers can play need 
 #### System Dependencies (Linux/Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install ffmpeg poppler-utils ghostscript graphicsmagick pandoc imagemagick zip
+sudo apt install ffmpeg poppler-utils ghostscript graphicsmagick
 # optional: sudo apt install unrar
 ```
 
 #### System Dependencies (macOS)
 ```bash
-brew install ffmpeg poppler ghostscript graphicsmagick pandoc imagemagick zip
+brew install ffmpeg poppler ghostscript graphicsmagick
 # optional: brew install rar
 ```
 
@@ -96,6 +93,17 @@ npm start
 
 The server runs on Windows Node. Install the programs from the table above and make sure their folders are on `PATH`. Open a new terminal afterwards so the updated `PATH` is picked up.
 
+#### MSI installer
+
+`installeruild.ps1` builds a small (about 5 MB) per-user MSI. On first launch it downloads Node.js,
+FFmpeg and the PDF tools (Poppler, GraphicsMagick, Ghostscript; about 190 MB, internet needed once) into
+`%LOCALAPPDATA%FileBrowser	ools`, checking each against the pinned SHA-256 in
+`installer	ools-manifest.json`. Node is required; if FFmpeg or the PDF tools cannot be fetched the server
+still starts, without video or PDF previews. Uninstalling removes the downloaded tools.
+
+When the PDF tools change, run `installerpack-pdf-tools.ps1` and upload `installeroutpdf-tools-win64.zip`
+as the `tools-1` release asset named in the manifest.
+
 #### Quick install (PowerShell)
 
 Run these once. `D:\Tools` is only an example install folder; drop `--location` to use winget's default.
@@ -103,11 +111,8 @@ Run these once. `D:\Tools` is only an example install folder; drop `--location` 
 ```powershell
 New-Item -ItemType Directory -Force D:\Tools | Out-Null
 
-winget install JohnMacFarlane.Pandoc                                  # or use the portable zip from github.com/jgm/pandoc/releases
 winget install Gyan.FFmpeg                                            # ffmpeg, ffprobe
 winget install oschwartz10612.Poppler --location D:\Tools\Poppler    # pdfinfo, pdftoppm
-winget install ImageMagick.Q16 --custom '/MERGETASKS="install_devel,legacy_support"'   # identify (legacy utilities)
-winget install GnuWin32.Zip --location D:\Tools\GnuWin32Zip           # zip
 winget install Casey.Just                                             # optional: just run
 ```
 
@@ -122,7 +127,6 @@ Not available through winget, install them by hand:
 Then add the install folders to your user `PATH`, for example:
 
 ```powershell
-$dirs = 'D:\Tools\Poppler\poppler-25.07.0\Library\bin','D:\Tools\Ghostscript\bin','D:\Tools\GraphicsMagick','D:\Tools\GnuWin32Zip\bin','D:\Tools\UnRAR'
 $p = [Environment]::GetEnvironmentVariable('Path','User')
 foreach ($d in $dirs) { if ($p -notlike "*$d*") { $p = $p.TrimEnd(';') + ';' + $d } }
 [Environment]::SetEnvironmentVariable('Path', $p, 'User')
@@ -131,7 +135,6 @@ foreach ($d in $dirs) { if ($p -notlike "*$d*") { $p = $p.TrimEnd(';') + ';' + $
 Notes:
 *   Install a native `unrar` (or WinRAR) for fast `.cbr` handling. When one is found, the server lists and extracts `.cbr` files with it; without it, `.cbr` comic pages still work through the slower in-process `node-unrar-js`.
 *   Over a slow network drive (for example a cloud mount such as RaiDrive) `unrar` can still need a long time for the first page, because it reads the archive in many small pieces.
-*   On Windows `convert.exe` is a disk-conversion system tool, not ImageMagick, so ImageMagick's older `convert` / `identify` commands are not usable unless you install ImageMagick with the legacy utilities option.
 *   PDF page images and the page count only need Poppler (`pdftoppm`, `pdfinfo`). Ghostscript and GraphicsMagick are only a fallback; Ghostscript is still used for PDF validation.
 
 #### Shortcut: `just run`

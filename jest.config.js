@@ -3,7 +3,6 @@ module.exports = {
   testEnvironment: "node",
   verbose: true,
   moduleNameMapper: {
-    '^pdfjs-dist/legacy/build/pdf\\.mjs$': '<rootDir>/tests/__mocks__/pdfjs-mock.js',
     '^pdf2pic$': '<rootDir>/tests/__mocks__/pdf2pic.js',
     '^node-unrar-js$': '<rootDir>/tests/__mocks__/node-unrar-js.js'
   },

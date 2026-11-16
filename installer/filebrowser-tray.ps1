@@ -41,12 +41,13 @@ try {
     exit
 } catch { }
 
-$tools = 'ffmpeg', 'poppler', 'pandoc', 'unrar', 'zip', 'graphicsmagick', 'ghostscript' |
-    ForEach-Object { Join-Path $fb "tools\$_" }
-$env:PATH = ($tools -join ';') + ';' + $env:PATH
+# First run: download Node and the media tools (shows a progress window)
+try { $tools = & (Join-Path $fb 'fetch-tools.ps1') -Gui }
+catch { Show-Error "Could not set up File Browser's tools. Check your internet connection and try again.`n`n$($_.Exception.Message)"; exit 1 }
+$env:PATH = $tools.Path + ';' + $env:PATH
 $env:PORT = $port
 
-$server = Start-Process (Join-Path $fb 'runtime\node.exe') -ArgumentList "`"$(Join-Path $fb 'app\server.js')`"" `
+$server = Start-Process $tools.Node -ArgumentList "`"$(Join-Path $fb 'app\server.js')`"" `
     -WorkingDirectory $Dir -WindowStyle Hidden -PassThru `
     -RedirectStandardOutput $log -RedirectStandardError "$log.err"
 
@@ -78,7 +79,7 @@ $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyl
 $open.add_Click({ Start-Process $url })
 $stop = $menu.Items.Add('Stop File Browser')
 $stop.add_Click({
-    # /T also ends ffmpeg/pdftoppm children still working for the server
+    # /T also ends ffmpeg/gm children still working for the server
     if (-not $server.HasExited) { & taskkill /T /F /PID $server.Id | Out-Null }
     $icon.Visible = $false
     [System.Windows.Forms.Application]::Exit()
