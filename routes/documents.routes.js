@@ -10,7 +10,6 @@ const {
   serveEpubCover,
   serveEpubPreview,
   serveCoverImageFallback,
-  serveEpubAsPdf,
 } = require('../lib/epub-handlers');
 const {
   serveArchiveContents,
@@ -34,7 +33,6 @@ router.get('/pdf-preview', previewLimiter, asyncHandler(servePdfPreview));
 // --- EPUB ---
 router.get('/epub-cover', asyncHandler(serveEpubCover));
 router.get('/epub-preview', asyncHandler(serveEpubPreview));
-router.get('/epub-pdf', asyncHandler(serveEpubAsPdf));
 router.get('/cover.jpeg', serveCoverImageFallback);
 router.get('/cover.jpg', serveCoverImageFallback);
 

@@ -1,0 +1,36 @@
+{
+  "tools": [
+    {
+      "name": "node",
+      "version": "25.9.0",
+      "required": true,
+      "url": "https://nodejs.org/dist/v25.9.0/node-v25.9.0-win-x64.zip",
+      "sha256": "929552b8305effac843ba7b4270c437aefb702fc3fbd73fcd1bffd35d4ac284e",
+      "dirs": [
+        ""
+      ]
+    },
+    {
+      "name": "ffmpeg",
+      "version": "9.0.2",
+      "required": false,
+      "url": "https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip",
+      "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
+      "dirs": [
+        "bin"
+      ]
+    },
+    {
+      "name": "pdf-tools",
+      "version": "1",
+      "required": false,
+      "url": "https://github.com/pakkio/browser/releases/download/tools-1/pdf-tools-win64.zip",
+      "sha256": "8AE840CDE208449B5F83AAEDD1733586B7357CD92153D9A91EF0D7B0649827F3",
+      "dirs": [
+        "poppler",
+        "graphicsmagick",
+        "ghostscript\\bin"
+      ]
+    }
+  ]
+}
