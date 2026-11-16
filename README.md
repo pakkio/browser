@@ -170,6 +170,14 @@ Browse a specific directory:
 node server.js /path/to/your/directory
 ```
 
+### Updating an existing clone
+
+The repository history was rewritten, so every commit hash changed. If you cloned before the rewrite, resync with:
+```bash
+git fetch && git reset --hard origin/master
+```
+This discards local commits and uncommitted changes, so save any local work first.
+
 ## 🧪 Testing
 
 The application includes a comprehensive test suite with unit tests, integration tests, and security validation.
