@@ -307,6 +307,7 @@ class ArchiveRenderer {
         this.previewPane = null;
         this.bodyArea = null;
         this.subPdfRenderer = null;
+        this.thumbAbortController = null;
     }
 
     cleanup() {
@@ -320,6 +321,10 @@ class ArchiveRenderer {
         this.backBtn = null;
         this.previewPane = null;
         this.bodyArea = null;
+        if (this.thumbAbortController) {
+            this.thumbAbortController.abort();
+            this.thumbAbortController = null;
+        }
         if (this.subPdfRenderer) {
             this.subPdfRenderer.cleanup();
             this.subPdfRenderer = null;
@@ -566,6 +571,10 @@ class ArchiveRenderer {
     }
 
     async loadArchiveContents(archivePath, subPath, contentArea, pathDisplay, backBtn) {
+        if (this.thumbAbortController) {
+            this.thumbAbortController.abort();
+            this.thumbAbortController = null;
+        }
         contentArea.innerHTML = '<div style="padding: 20px;">⏳ Loading archive contents...</div>';
         
         try {
@@ -779,6 +788,13 @@ class ArchiveRenderer {
     }
 
     async loadShelfThumbnails(shelf, loadingBar, archivePath, currentPath) {
+        if (this.thumbAbortController) {
+            this.thumbAbortController.abort();
+        }
+        const abortController = new AbortController();
+        this.thumbAbortController = abortController;
+        const { signal } = abortController;
+
         const items = Array.from(shelf.querySelectorAll('.library-thumbnail'));
         const total = items.length;
         let loaded = 0;
@@ -800,16 +816,18 @@ class ArchiveRenderer {
 
         updateProgress();
 
-        // Concurrency-limited thumbnail rendering (4 at a time so PDF.js / network stay smooth)
+        // Concurrency-limited thumbnail rendering (2 at a time; skip PDFs > 8MB so network drives don't saturate)
+        const MAX_INLINE_PDF_THUMB_BYTES = 8 * 1024 * 1024;
         let nextIdx = 0;
         const worker = async () => {
             while (nextIdx < items.length) {
-                const thumbEl = items[nextIdx++];
-                // Stop if user navigated away
-                if (!shelf.isConnected) return;
+                const idx = nextIdx++;
+                const thumbEl = items[idx];
+                if (signal.aborted || !shelf.isConnected) return;
 
                 const type = thumbEl.dataset.type;
                 const fileName = thumbEl.dataset.file;
+                const fileMeta = this.archiveFiles[idx];
                 const entryPath = currentPath ? `${currentPath}/${fileName}` : fileName;
                 const rawUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(entryPath)}`;
 
@@ -832,14 +850,15 @@ class ArchiveRenderer {
                             img.src = rawUrl;
                             thumbEl.insertBefore(img, thumbEl.firstChild);
                         });
-                    } else if (type === 'pdf') {
+                    } else if (type === 'pdf' && (!fileMeta || !fileMeta.size || fileMeta.size <= MAX_INLINE_PDF_THUMB_BYTES)) {
                         if (window.pdfJsLoaded) {
                             await window.pdfJsLoaded.catch(() => {});
                         }
-                        if (typeof pdfjsLib !== 'undefined') {
-                            const resp = await window.authManager.authenticatedFetch(rawUrl);
-                            if (resp && resp.ok) {
+                        if (typeof pdfjsLib !== 'undefined' && !signal.aborted) {
+                            const resp = await window.authManager.authenticatedFetch(rawUrl, { signal });
+                            if (resp && resp.ok && !signal.aborted) {
                                 const buf = await resp.arrayBuffer();
+                                if (signal.aborted) return;
                                 const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
                                 const page = await pdf.getPage(1);
                                 const baseVp = page.getViewport({ scale: 1 });
@@ -866,7 +885,9 @@ class ArchiveRenderer {
                         }
                     }
                 } catch (err) {
-                    window.logger.debug?.('Archive thumb error:', fileName, err);
+                    if (err?.name !== 'AbortError') {
+                        window.logger.debug?.('Archive thumb error:', fileName, err);
+                    }
                 } finally {
                     loaded++;
                     updateProgress();
@@ -874,7 +895,7 @@ class ArchiveRenderer {
             }
         };
 
-        await Promise.all(Array.from({ length: Math.min(4, items.length) }, () => worker()));
+        await Promise.all(Array.from({ length: Math.min(2, items.length) }, () => worker()));
     }
 
     getBaseName(path) {
