@@ -16,7 +16,7 @@ router.get('/api/browse', asyncHandler(serveBrowseRequest));
 router.get('/api/library', asyncHandler(serveDirectoryLibrary));
 
 // File listing & serving
-router.get('/files/list', serveFileList);
+router.get('/files/list', asyncHandler(serveFileList));
 router.get('/files', asyncHandler(serveFile));
 
 // Current path persistence (session + .latest file)
