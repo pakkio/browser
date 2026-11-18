@@ -297,6 +297,14 @@ class ArchiveRenderer {
         this.keydownHandler = null;
         this.previewKeydownHandler = null;
         this.previewIndex = -1;
+        this.viewMode = localStorage.getItem('archiveViewMode') || 'shelf'; // 'shelf' | 'split'
+        this.sortField = localStorage.getItem('librarySortField') || 'name';
+        this.sortAsc = (localStorage.getItem('librarySortAsc') || 'true') === 'true';
+        this.contentArea = null;
+        this.pathDisplay = null;
+        this.backBtn = null;
+        this.previewPane = null;
+        this.bodyArea = null;
     }
 
     cleanup() {
@@ -305,6 +313,11 @@ class ArchiveRenderer {
         this.selectedIndex = -1;
         this.archiveFiles = [];
         this.previewIndex = -1;
+        this.contentArea = null;
+        this.pathDisplay = null;
+        this.backBtn = null;
+        this.previewPane = null;
+        this.bodyArea = null;
         
         // Remove keyboard event listener
         if (this.keydownHandler) {
@@ -317,70 +330,221 @@ class ArchiveRenderer {
         }
     }
 
+    getFileType(file) {
+        if (file.isDirectory) return 'directory';
+        const ext = (file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
+        if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv'].includes(ext)) return 'video';
+        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
+        if (ext === 'pdf') return 'pdf';
+        if (['cbz', 'cbr'].includes(ext)) return 'comic';
+        if (ext === 'epub') return 'epub';
+        if (['docx', 'doc'].includes(ext)) return 'docx';
+        return 'generic';
+    }
+
+    getTypeIcon(type) {
+        const icons = {
+            directory: '📁',
+            video: '🎬',
+            image: '🖼️',
+            pdf: '📄',
+            comic: '📚',
+            epub: '📖',
+            docx: '📝',
+            generic: '📄'
+        };
+        return icons[type] || icons.generic;
+    }
+
+    sortArchiveFiles(files) {
+        return [...files].sort((a, b) => {
+            if (a.isDirectory !== b.isDirectory) {
+                return a.isDirectory ? -1 : 1;
+            }
+            let cmp = 0;
+            switch (this.sortField) {
+                case 'name':
+                    cmp = a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    break;
+                case 'date': {
+                    const da = a.modified ? new Date(a.modified).getTime() : 0;
+                    const db = b.modified ? new Date(b.modified).getTime() : 0;
+                    cmp = da - db;
+                    break;
+                }
+                case 'size':
+                    cmp = (a.size || 0) - (b.size || 0);
+                    break;
+                case 'type': {
+                    const ea = (a.name.includes('.') ? a.name.split('.').pop() : '').toLowerCase();
+                    const eb = (b.name.includes('.') ? b.name.split('.').pop() : '').toLowerCase();
+                    cmp = ea.localeCompare(eb) || a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                    break;
+                }
+            }
+            return this.sortAsc ? cmp : -cmp;
+        });
+    }
+
     async render(filePath, fileName, contentCode, contentOther) {
         this.cleanup();
         
         const archiveContainer = document.createElement('div');
         archiveContainer.className = 'archive-container';
         archiveContainer.style.cssText = `
-            background: white;
-            border: 1px solid #ccc;
-            border-radius: 4px;
+            background: #2a2a2a;
+            border: 1px solid #444;
+            border-radius: 8px;
             font-family: Arial, sans-serif;
             max-width: 100%;
-            height: 70vh;
+            height: 85vh;
             display: flex;
             flex-direction: column;
+            overflow: hidden;
         `;
 
         // Navigation bar
         const navBar = document.createElement('div');
         navBar.className = 'archive-nav';
         navBar.style.cssText = `
-            background: #f5f5f5;
-            border-bottom: 1px solid #ccc;
-            padding: 10px;
+            background: #333;
+            border-bottom: 1px solid #555;
+            padding: 10px 14px;
             display: flex;
             align-items: center;
             gap: 10px;
+            flex-wrap: wrap;
         `;
 
         const backBtn = document.createElement('button');
         backBtn.textContent = '← Back';
-        backBtn.style.cssText = `
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            background: white;
-            cursor: pointer;
-            border-radius: 3px;
-        `;
         backBtn.disabled = true;
 
         const pathDisplay = document.createElement('span');
         pathDisplay.style.cssText = `
             font-family: monospace;
-            background: white;
-            padding: 5px 10px;
-            border: 1px solid #ccc;
-            border-radius: 3px;
+            background: #2a2a2a;
+            color: #4ecdc4;
+            padding: 6px 12px;
+            border: 1px solid #555;
+            border-radius: 4px;
             flex: 1;
+            min-width: 160px;
         `;
         pathDisplay.textContent = fileName;
 
+        // Sort controls (matching LibraryRenderer)
+        const sortSelect = document.createElement('select');
+        sortSelect.className = 'library-sort-field';
+        sortSelect.innerHTML = `
+            <option value="name">Name</option>
+            <option value="date">Date</option>
+            <option value="size">Size</option>
+            <option value="type">Type</option>
+        `;
+        sortSelect.value = this.sortField;
+
+        const sortDirBtn = document.createElement('button');
+        sortDirBtn.className = 'library-sort-direction';
+        sortDirBtn.textContent = this.sortAsc ? '↑' : '↓';
+        sortDirBtn.title = this.sortAsc ? 'Sorted ascending' : 'Sorted descending';
+
+        // View mode toggle: Library Shelf vs Split List
+        const viewToggleBtn = document.createElement('button');
+        const updateViewBtnLabel = () => {
+            viewToggleBtn.textContent = this.viewMode === 'shelf' ? '☰ Split List' : '📚 Shelf View';
+            viewToggleBtn.title = this.viewMode === 'shelf' ? 'Switch to Split List + Live Preview' : 'Switch to Library Shelf View (collage)';
+        };
+        updateViewBtnLabel();
+
         navBar.appendChild(backBtn);
         navBar.appendChild(pathDisplay);
+        navBar.appendChild(sortSelect);
+        navBar.appendChild(sortDirBtn);
+        navBar.appendChild(viewToggleBtn);
 
-        // Content area
-        const contentArea = document.createElement('div');
-        contentArea.className = 'archive-content';
-        contentArea.style.cssText = `
+        const bodyArea = document.createElement('div');
+        bodyArea.className = 'archive-body';
+        bodyArea.style.cssText = `
             flex: 1;
-            overflow-y: auto;
-            padding: 10px;
+            display: flex;
+            min-height: 0;
+            overflow: hidden;
         `;
 
+        const contentArea = document.createElement('div');
+        contentArea.className = 'archive-content';
+
+        const previewPane = document.createElement('div');
+        previewPane.className = 'archive-inline-preview';
+
+        this.contentArea = contentArea;
+        this.pathDisplay = pathDisplay;
+        this.backBtn = backBtn;
+        this.previewPane = previewPane;
+        this.bodyArea = bodyArea;
+
+        const applyLayoutMode = () => {
+            bodyArea.innerHTML = '';
+            if (this.viewMode === 'shelf') {
+                contentArea.style.cssText = `
+                    flex: 1;
+                    width: 100%;
+                    height: 100%;
+                    overflow-y: auto;
+                    padding: 0;
+                `;
+                bodyArea.appendChild(contentArea);
+            } else {
+                contentArea.style.cssText = `
+                    width: 38%;
+                    min-width: 260px;
+                    max-width: 480px;
+                    overflow-y: auto;
+                    padding: 10px;
+                    border-right: 1px solid #444;
+                `;
+                previewPane.style.cssText = `
+                    flex: 1;
+                    min-width: 0;
+                    height: 100%;
+                    overflow: auto;
+                    padding: 10px;
+                    display: flex;
+                    flex-direction: column;
+                    background: #1e1e1e;
+                `;
+                previewPane.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">Select a file to preview</div>';
+                bodyArea.appendChild(contentArea);
+                bodyArea.appendChild(previewPane);
+            }
+        };
+
+        applyLayoutMode();
+
+        sortSelect.addEventListener('change', () => {
+            this.sortField = sortSelect.value;
+            localStorage.setItem('librarySortField', this.sortField);
+            this.renderFileList(this.archiveFiles, this.currentArchive, this.currentPath, contentArea, pathDisplay, backBtn);
+        });
+
+        sortDirBtn.addEventListener('click', () => {
+            this.sortAsc = !this.sortAsc;
+            localStorage.setItem('librarySortAsc', String(this.sortAsc));
+            sortDirBtn.textContent = this.sortAsc ? '↑' : '↓';
+            this.renderFileList(this.archiveFiles, this.currentArchive, this.currentPath, contentArea, pathDisplay, backBtn);
+        });
+
+        viewToggleBtn.addEventListener('click', () => {
+            this.viewMode = this.viewMode === 'shelf' ? 'split' : 'shelf';
+            localStorage.setItem('archiveViewMode', this.viewMode);
+            updateViewBtnLabel();
+            applyLayoutMode();
+            this.renderFileList(this.archiveFiles, this.currentArchive, this.currentPath, contentArea, pathDisplay, backBtn);
+        });
+
         archiveContainer.appendChild(navBar);
-        archiveContainer.appendChild(contentArea);
+        archiveContainer.appendChild(bodyArea);
         contentOther.appendChild(archiveContainer);
         contentOther.style.display = 'block';
 
@@ -415,15 +579,17 @@ class ArchiveRenderer {
     renderFileList(files, archivePath, currentPath, contentArea, pathDisplay, backBtn) {
         contentArea.innerHTML = '';
         
+        const sortedFiles = this.sortArchiveFiles(files);
+
         // Store current state
-        this.archiveFiles = files;
+        this.archiveFiles = sortedFiles;
         this.currentArchive = archivePath;
         this.currentPath = currentPath;
         this.selectedIndex = -1;
         
         // Update path display
         const displayPath = currentPath ? `${this.getBaseName(archivePath)}/${currentPath}` : this.getBaseName(archivePath);
-        pathDisplay.textContent = displayPath;
+        pathDisplay.textContent = `${displayPath} (${sortedFiles.length} items)`;
         
         // Update back button
         backBtn.disabled = !currentPath;
@@ -432,21 +598,21 @@ class ArchiveRenderer {
             this.loadArchiveContents(archivePath, parentPath, contentArea, pathDisplay, backBtn);
         };
 
-        if (files.length === 0) {
+        if (sortedFiles.length === 0) {
             contentArea.innerHTML = '<div style="padding: 20px; color: #666;">No files found in this location.</div>';
+            if (this.previewPane) {
+                this.previewPane.innerHTML = '<div style="color: #888; padding: 20px; text-align: center;">No files to preview</div>';
+            }
+            return;
+        }
+
+        if (this.viewMode === 'shelf') {
+            this.renderShelfView(sortedFiles, archivePath, currentPath, contentArea, pathDisplay, backBtn);
             return;
         }
 
         const fileList = document.createElement('div');
         fileList.className = 'file-list';
-        
-        // Sort files: directories first, then files
-        const sortedFiles = files.sort((a, b) => {
-            if (a.isDirectory !== b.isDirectory) {
-                return a.isDirectory ? -1 : 1;
-            }
-            return a.name.localeCompare(b.name);
-        });
 
         sortedFiles.forEach((file, index) => {
             const fileItem = document.createElement('div');
@@ -455,13 +621,10 @@ class ArchiveRenderer {
                 display: flex;
                 align-items: center;
                 padding: 8px 12px;
-                border-bottom: 1px solid #eee;
+                border-bottom: 1px solid #444;
                 cursor: pointer;
                 transition: background-color 0.2s;
             `;
-            
-            fileItem.onmouseover = () => fileItem.style.backgroundColor = '#f0f0f0';
-            fileItem.onmouseout = () => fileItem.style.backgroundColor = 'white';
 
             const icon = document.createElement('span');
             icon.style.cssText = `
@@ -469,22 +632,24 @@ class ArchiveRenderer {
                 font-size: 16px;
                 width: 20px;
             `;
-            icon.textContent = file.isDirectory ? '📁' : '📄';
+            icon.textContent = this.getTypeIcon(this.getFileType(file));
 
             const name = document.createElement('span');
             name.textContent = file.name;
             name.style.cssText = `
                 flex: 1;
                 font-family: monospace;
+                word-break: break-all;
             `;
 
             const size = document.createElement('span');
-            if (!file.isDirectory && file.size !== undefined) {
+            if (!file.isDirectory && file.size !== undefined && file.size !== null) {
                 size.textContent = this.formatFileSize(file.size);
                 size.style.cssText = `
-                    color: #666;
+                    color: #888;
                     font-size: 12px;
                     margin-left: 10px;
+                    white-space: nowrap;
                 `;
             }
 
@@ -494,13 +659,17 @@ class ArchiveRenderer {
 
             if (file.isDirectory) {
                 fileItem.onclick = () => {
+                    this.selectArchiveFile(index, { autoPreview: false });
                     const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
                     this.loadArchiveContents(archivePath, newPath, contentArea, pathDisplay, backBtn);
                 };
             } else {
                 fileItem.onclick = () => {
+                    this.selectArchiveFile(index, { autoPreview: true });
+                };
+                fileItem.ondblclick = () => {
                     const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
-                    this.previewFile(archivePath, filePath, file.name, index);
+                    this.previewFile(archivePath, filePath, file.name, index, { fullView: true });
                 };
             }
 
@@ -509,10 +678,196 @@ class ArchiveRenderer {
 
         contentArea.appendChild(fileList);
         
-        // Auto-select first file for keyboard navigation
-        if (files.length > 0) {
-            setTimeout(() => this.selectArchiveFile(0), 100);
+        // Auto-select first file for immediate preview and keyboard navigation
+        if (sortedFiles.length > 0) {
+            const firstFileIdx = sortedFiles.findIndex(f => !f.isDirectory);
+            const initialIdx = firstFileIdx !== -1 ? firstFileIdx : 0;
+            setTimeout(() => this.selectArchiveFile(initialIdx, { autoPreview: true }), 50);
         }
+    }
+
+    renderShelfView(sortedFiles, archivePath, currentPath, contentArea, pathDisplay, backBtn) {
+        const container = document.createElement('div');
+        container.className = 'library-container';
+        container.style.minHeight = '100%';
+
+        const loadingBar = document.createElement('div');
+        loadingBar.className = 'library-loading';
+        loadingBar.innerHTML = `
+            <div class="library-loading-text">Loading previews... <span class="archive-loading-percent">0%</span></div>
+            <div class="library-loading-bar">
+                <div class="library-loading-fill archive-loading-fill"></div>
+            </div>
+        `;
+        container.appendChild(loadingBar);
+
+        const shelf = document.createElement('div');
+        shelf.className = 'library-shelf';
+
+        const maxSize = Math.max(...sortedFiles.map(f => f.size || 0), 1);
+
+        sortedFiles.forEach((file, index) => {
+            const type = this.getFileType(file);
+            const item = document.createElement('div');
+            item.className = 'library-book archive-shelf-item';
+            item.dataset.index = index;
+            item.dataset.name = file.name;
+
+            const sizeRatio = (file.size || 0) / maxSize;
+            const shadowDepth = Math.max(3, Math.min(20, Math.floor(sizeRatio * 20)));
+            item.style.setProperty('--book-shadow-depth', `${shadowDepth}px`);
+            item.style.setProperty('--book-shadow-blur', `${shadowDepth * 1.5}px`);
+
+            let hash = 0;
+            for (let i = 0; i < file.name.length; i++) {
+                hash = (hash * 31 + file.name.charCodeAt(i)) >>> 0;
+            }
+            const tilt = ((hash % 7) - 3) * 0.6;
+            const placeholderRatio = 0.6 + ((hash >>> 3) % 8) * 0.12;
+            item.style.setProperty('--tilt', `${tilt}deg`);
+            item.style.setProperty('--thumb-ratio', placeholderRatio.toFixed(2));
+
+            const thumbContainer = document.createElement('div');
+            thumbContainer.className = 'library-thumb-container';
+
+            const thumbnail = document.createElement('div');
+            thumbnail.className = `library-thumbnail library-thumb-${type}`;
+            thumbnail.dataset.type = type;
+            thumbnail.dataset.file = file.name;
+            thumbnail.innerHTML = `<span class="library-placeholder-icon">${this.getTypeIcon(type)}</span>`;
+
+            thumbContainer.appendChild(thumbnail);
+            item.appendChild(thumbContainer);
+
+            const info = document.createElement('div');
+            info.className = 'library-info';
+            const shortName = file.name.length > 28
+                ? file.name.substring(0, 22) + '...' + (file.name.includes('.') ? '.' + file.name.split('.').pop() : '')
+                : file.name;
+            info.innerHTML = `
+                <span class="library-name" title="${file.name}">${shortName}</span>
+                ${!file.isDirectory && file.size != null ? `<span class="library-size">${this.formatFileSize(file.size)}</span>` : ''}
+            `;
+            item.appendChild(info);
+
+            item.addEventListener('click', (e) => {
+                e.preventDefault();
+                this.selectArchiveFile(index, { autoPreview: false });
+                if (file.isDirectory) {
+                    const newPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                    this.loadArchiveContents(archivePath, newPath, contentArea, pathDisplay, backBtn);
+                } else {
+                    const entryPath = currentPath ? `${currentPath}/${file.name}` : file.name;
+                    this.previewFile(archivePath, entryPath, file.name, index, { fullView: true });
+                }
+            });
+
+            shelf.appendChild(item);
+        });
+
+        container.appendChild(shelf);
+        contentArea.appendChild(container);
+
+        this.loadShelfThumbnails(shelf, loadingBar, archivePath, currentPath);
+    }
+
+    async loadShelfThumbnails(shelf, loadingBar, archivePath, currentPath) {
+        const items = Array.from(shelf.querySelectorAll('.library-thumbnail'));
+        const total = items.length;
+        let loaded = 0;
+
+        const percentEl = loadingBar.querySelector('.archive-loading-percent');
+        const fillEl = loadingBar.querySelector('.archive-loading-fill');
+
+        const updateProgress = () => {
+            const pct = total > 0 ? Math.round((loaded / total) * 100) : 100;
+            if (percentEl) percentEl.textContent = `${pct}%`;
+            if (fillEl) fillEl.style.width = `${pct}%`;
+            if (pct >= 100) {
+                setTimeout(() => {
+                    loadingBar.classList.add('complete');
+                    setTimeout(() => { loadingBar.style.display = 'none'; }, 300);
+                }, 200);
+            }
+        };
+
+        updateProgress();
+
+        // Concurrency-limited thumbnail rendering (4 at a time so PDF.js / network stay smooth)
+        let nextIdx = 0;
+        const worker = async () => {
+            while (nextIdx < items.length) {
+                const thumbEl = items[nextIdx++];
+                // Stop if user navigated away
+                if (!shelf.isConnected) return;
+
+                const type = thumbEl.dataset.type;
+                const fileName = thumbEl.dataset.file;
+                const entryPath = currentPath ? `${currentPath}/${fileName}` : fileName;
+                const rawUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(entryPath)}`;
+
+                try {
+                    if (type === 'image') {
+                        await new Promise((resolve) => {
+                            const img = document.createElement('img');
+                            img.className = 'library-thumb-img';
+                            img.loading = 'lazy';
+                            img.onload = () => {
+                                if (img.naturalWidth && img.naturalHeight) {
+                                    const ratio = Math.min(1.8, Math.max(0.5, img.naturalWidth / img.naturalHeight));
+                                    thumbEl.closest('.library-book')?.style.setProperty('--thumb-ratio', ratio.toFixed(3));
+                                }
+                                const icon = thumbEl.querySelector('.library-placeholder-icon');
+                                if (icon) icon.style.display = 'none';
+                                resolve();
+                            };
+                            img.onerror = () => resolve();
+                            img.src = rawUrl;
+                            thumbEl.insertBefore(img, thumbEl.firstChild);
+                        });
+                    } else if (type === 'pdf') {
+                        if (window.pdfJsLoaded) {
+                            await window.pdfJsLoaded.catch(() => {});
+                        }
+                        if (typeof pdfjsLib !== 'undefined') {
+                            const resp = await window.authManager.authenticatedFetch(rawUrl);
+                            if (resp && resp.ok) {
+                                const buf = await resp.arrayBuffer();
+                                const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+                                const page = await pdf.getPage(1);
+                                const baseVp = page.getViewport({ scale: 1 });
+                                const scale = Math.min(1.5, 260 / (baseVp.width || 260));
+                                const vp = page.getViewport({ scale });
+
+                                const canvas = document.createElement('canvas');
+                                canvas.width = vp.width;
+                                canvas.height = vp.height;
+                                await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
+
+                                const img = document.createElement('img');
+                                img.className = 'library-thumb-img';
+                                img.src = canvas.toDataURL('image/jpeg', 0.82);
+                                if (vp.width && vp.height) {
+                                    const ratio = Math.min(1.8, Math.max(0.5, vp.width / vp.height));
+                                    thumbEl.closest('.library-book')?.style.setProperty('--thumb-ratio', ratio.toFixed(3));
+                                }
+                                const icon = thumbEl.querySelector('.library-placeholder-icon');
+                                if (icon) icon.style.display = 'none';
+                                thumbEl.insertBefore(img, thumbEl.firstChild);
+                                pdf.destroy?.();
+                            }
+                        }
+                    }
+                } catch (err) {
+                    window.logger.debug?.('Archive thumb error:', fileName, err);
+                } finally {
+                    loaded++;
+                    updateProgress();
+                }
+            }
+        };
+
+        await Promise.all(Array.from({ length: Math.min(4, items.length) }, () => worker()));
     }
 
     getBaseName(path) {
@@ -527,8 +882,8 @@ class ArchiveRenderer {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
-    async previewFile(archivePath, filePath, fileName, fileIndex) {
-        // Clean up any existing preview handlers
+    async previewFile(archivePath, filePath, fileName, fileIndex, { fullView = false } = {}) {
+        // Clean up any existing full-view preview handlers
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
@@ -537,71 +892,84 @@ class ArchiveRenderer {
         this.previewIndex = fileIndex;
 
         try {
-            const contentOther = document.getElementById('content-other');
-            if (!contentOther) throw new Error('Content container not found');
+            const targetContainer = fullView
+                ? document.getElementById('content-other')
+                : (this.previewPane || document.getElementById('content-other'));
+            if (!targetContainer) throw new Error('Content container not found');
 
-            contentOther.innerHTML = '';
-            contentOther.style.display = 'block';
+            const isInline = targetContainer === this.previewPane && !fullView;
+            targetContainer.innerHTML = '';
+            targetContainer.style.display = isInline ? 'flex' : 'block';
 
             const extension = fileName.split('.').pop().toLowerCase();
+            const rawUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`;
 
-            if (extension === 'pdf') {
-                const pdfUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`;
-                
-                const previewContainer = document.createElement('div');
-                previewContainer.className = 'archive-preview-container';
-                previewContainer.style.cssText = `background: white; border: 1px solid #ccc; padding: 10px; border-radius: 5px; height: 80vh;`;
-
+            const createControls = () => {
                 const controls = document.createElement('div');
                 controls.className = 'archive-preview-controls';
-                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
+                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px; padding: 6px 10px; border-radius: 4px; flex-shrink: 0;`;
 
-                const backBtn = document.createElement('button');
-                backBtn.textContent = '← Back to Archive';
-                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
+                if (!isInline) {
+                    const backBtn = document.createElement('button');
+                    backBtn.textContent = '← Back to Archive';
+                    backBtn.onclick = () => this.revertToListView(archivePath, targetContainer);
+                    controls.appendChild(backBtn);
+                }
 
                 const fileInfo = document.createElement('span');
-                fileInfo.textContent = `Viewing: ${fileName}`;
-                fileInfo.style.fontWeight = 'bold';
-
-                controls.appendChild(backBtn);
+                fileInfo.textContent = fileName;
+                fileInfo.style.cssText = 'font-weight: bold; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;';
                 controls.appendChild(fileInfo);
 
+                if (isInline) {
+                    const expandBtn = document.createElement('button');
+                    expandBtn.textContent = '⛶ Full View';
+                    expandBtn.title = 'Open full preview (Enter)';
+                    expandBtn.onclick = () => this.previewFile(archivePath, filePath, fileName, fileIndex, { fullView: true });
+                    controls.appendChild(expandBtn);
+                }
+
+                const openTabLink = document.createElement('a');
+                openTabLink.href = rawUrl;
+                openTabLink.target = '_blank';
+                openTabLink.rel = 'noopener';
+                openTabLink.textContent = '↗ Open';
+                openTabLink.style.cssText = 'color: #4ecdc4; text-decoration: none; font-size: 12px; padding: 4px 8px; border: 1px solid #4ecdc4; border-radius: 4px;';
+                controls.appendChild(openTabLink);
+
+                return controls;
+            };
+
+            if (extension === 'pdf') {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
+
+                const controls = createControls();
+
                 const iframe = document.createElement('iframe');
-                iframe.style.cssText = `width: 100%; height: calc(100% - 40px); border: 1px solid #ddd;`;
-                iframe.src = pdfUrl;
+                iframe.style.cssText = `width: 100%; flex: 1; border: 1px solid #444; background: #fff; border-radius: 4px;`;
+                iframe.src = rawUrl;
 
                 previewContainer.appendChild(controls);
                 previewContainer.appendChild(iframe);
-                contentOther.appendChild(previewContainer);
+                targetContainer.appendChild(previewContainer);
 
-                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, pdfUrl, fileIndex);
-                document.addEventListener('keydown', this.previewKeydownHandler);
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, rawUrl, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
             } else if (extension === 'ipynb') {
                 // Handle Jupyter Notebook files from archives
                 const previewContainer = document.createElement('div');
                 previewContainer.className = 'archive-preview-container';
-                previewContainer.style.cssText = `background: #1a1a2e; border: 1px solid #333; padding: 10px; border-radius: 5px; max-height: 90vh; overflow-y: auto;`;
+                previewContainer.style.cssText = `background: #1a1a2e; border: 1px solid #333; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; overflow-y: auto; flex: 1;`;
 
-                const controls = document.createElement('div');
-                controls.className = 'archive-preview-controls';
-                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
-
-                const backBtn = document.createElement('button');
-                backBtn.textContent = '← Back to Archive';
-                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
-
-                const fileInfo = document.createElement('span');
-                fileInfo.textContent = `Viewing: ${fileName}`;
-                fileInfo.style.fontWeight = 'bold';
-                fileInfo.style.color = '#fff';
-
-                controls.appendChild(backBtn);
-                controls.appendChild(fileInfo);
+                const controls = createControls();
                 previewContainer.appendChild(controls);
 
                 // Fetch notebook content from archive
-                const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
+                const response = await window.authManager.authenticatedFetch(rawUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
                 const rawText = await response.text();
@@ -610,15 +978,11 @@ class ArchiveRenderer {
                 const notebookContent = document.createElement('div');
                 notebookContent.id = 'archive-notebook-content';
                 previewContainer.appendChild(notebookContent);
-                contentOther.appendChild(previewContainer);
+                targetContainer.appendChild(previewContainer);
 
                 // Use the NotebookRenderer if available
                 if (typeof NotebookRenderer !== 'undefined') {
                     const notebookRenderer = new NotebookRenderer();
-                    // Create a mock contentOther for the notebook renderer
-                    const mockContentCode = document.createElement('pre');
-                    
-                    // Parse and render the notebook manually since we already have the content
                     let notebook;
                     try {
                         notebook = JSON.parse(rawText);
@@ -632,7 +996,6 @@ class ArchiveRenderer {
                         return;
                     }
 
-                    // Build the notebook UI
                     const wrapper = document.createElement('div');
                     wrapper.className = 'notebook-container';
 
@@ -656,7 +1019,7 @@ class ArchiveRenderer {
 
                     const downloadLink = document.createElement('a');
                     downloadLink.className = 'notebook-action-btn';
-                    downloadLink.href = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`;
+                    downloadLink.href = rawUrl;
                     downloadLink.download = fileName;
                     downloadLink.textContent = 'Download';
 
@@ -695,72 +1058,166 @@ class ArchiveRenderer {
                         toggleRawBtn.textContent = showRaw ? 'Rendered' : 'Raw JSON';
                     });
                 } else {
-                    // Fallback: show raw JSON
                     const pre = document.createElement('pre');
                     pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word;';
                     pre.textContent = rawText;
                     notebookContent.appendChild(pre);
                 }
 
-                this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, null, fileIndex);
-                document.addEventListener('keydown', this.previewKeydownHandler);
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, null, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
+            } else if (['docx', 'doc'].includes(extension) && typeof mammoth !== 'undefined') {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
+
+                const controls = createControls();
+                previewContainer.appendChild(controls);
+
+                const response = await window.authManager.authenticatedFetch(rawUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const result = await mammoth.convertToHtml({ arrayBuffer });
+
+                const docxDiv = document.createElement('div');
+                docxDiv.style.cssText = 'background: #fff; color: #111; padding: 20px; border-radius: 4px; flex: 1; overflow-y: auto; line-height: 1.6;';
+                docxDiv.innerHTML = result.value;
+                previewContainer.appendChild(docxDiv);
+                targetContainer.appendChild(previewContainer);
+
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, null, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
+            } else if (['xlsx', 'xls'].includes(extension) && typeof XLSX !== 'undefined') {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
+
+                const controls = createControls();
+                previewContainer.appendChild(controls);
+
+                const response = await window.authManager.authenticatedFetch(rawUrl);
+                if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                const arrayBuffer = await response.arrayBuffer();
+                const workbook = XLSX.read(arrayBuffer, { type: 'array' });
+
+                const sheetDiv = document.createElement('div');
+                sheetDiv.style.cssText = 'background: #fff; color: #111; padding: 12px; border-radius: 4px; flex: 1; overflow: auto;';
+                sheetDiv.innerHTML = XLSX.utils.sheet_to_html(workbook.Sheets[workbook.SheetNames[0]]);
+                previewContainer.appendChild(sheetDiv);
+                targetContainer.appendChild(previewContainer);
+
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, null, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
+            } else if (['mp4', 'webm', 'mov', 'mkv', 'avi', 'mpg', 'mpeg', 'wmv'].includes(extension)) {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
+
+                const controls = createControls();
+                const video = document.createElement('video');
+                video.controls = true;
+                video.autoplay = !isInline;
+                video.style.cssText = 'width: 100%; max-height: 75vh; flex: 1; background: #000; border-radius: 4px;';
+                video.src = rawUrl;
+
+                previewContainer.appendChild(controls);
+                previewContainer.appendChild(video);
+                targetContainer.appendChild(previewContainer);
+
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, rawUrl, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
+            } else if (['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac'].includes(extension)) {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; display: flex; flex-direction: column; gap: 16px;`;
+
+                const controls = createControls();
+                const audio = document.createElement('audio');
+                audio.controls = true;
+                audio.src = rawUrl;
+                audio.style.cssText = 'width: 100%;';
+
+                previewContainer.appendChild(controls);
+                previewContainer.appendChild(audio);
+                targetContainer.appendChild(previewContainer);
+
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, rawUrl, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
+            } else if (['html', 'htm'].includes(extension)) {
+                const previewContainer = document.createElement('div');
+                previewContainer.className = 'archive-preview-container';
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
+
+                const controls = createControls();
+                const iframe = document.createElement('iframe');
+                iframe.style.cssText = 'width: 100%; flex: 1; border: 1px solid #444; background: #fff; border-radius: 4px;';
+                iframe.src = rawUrl;
+
+                previewContainer.appendChild(controls);
+                previewContainer.appendChild(iframe);
+                targetContainer.appendChild(previewContainer);
+
+                if (!isInline) {
+                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, rawUrl, fileIndex);
+                    document.addEventListener('keydown', this.previewKeydownHandler);
+                }
             } else {
                 const previewContainer = document.createElement('div');
                 previewContainer.className = 'archive-preview-container';
-                previewContainer.style.cssText = `background: white; border: 1px solid #ccc; padding: 10px; border-radius: 5px;`;
+                previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1; overflow: auto;`;
 
-                const controls = document.createElement('div');
-                controls.className = 'archive-preview-controls';
-                controls.style.cssText = `display: flex; align-items: center; margin-bottom: 10px; gap: 10px;`;
-
-                const backBtn = document.createElement('button');
-                backBtn.textContent = '← Back to Archive';
-                backBtn.onclick = () => this.revertToListView(archivePath, contentOther);
-
-                const fileInfo = document.createElement('span');
-                fileInfo.textContent = `Viewing: ${fileName}`;
-                fileInfo.style.fontWeight = 'bold';
-
-                controls.appendChild(backBtn);
-                controls.appendChild(fileInfo);
-
-                const img = document.createElement('img');
-                img.style.cssText = `max-width: 100%; max-height: 80vh; display: block; margin: 0 auto; border: 1px solid #ddd;`;
-
+                const controls = createControls();
                 previewContainer.appendChild(controls);
-                previewContainer.appendChild(img);
-                contentOther.appendChild(previewContainer);
+                targetContainer.appendChild(previewContainer);
 
-                const response = await window.authManager.authenticatedFetch(`/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(filePath)}`);
+                const response = await window.authManager.authenticatedFetch(rawUrl);
                 if (!response.ok) throw new Error(`HTTP ${response.status}: ${response.statusText}`);
 
                 const contentMode = response.headers.get('X-Content-Mode');
                 const contentType = response.headers.get('Content-Type') || '';
-                if (contentMode === 'hex') {
+                if (contentMode === 'hex' || contentType.startsWith('text/') || contentType.includes('json') || contentType.includes('javascript') || contentType.includes('xml')) {
                     const text = await response.text();
                     const pre = document.createElement('pre');
-                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word; box-sizing: border-box;';
+                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 0.9em; font-family: monospace; line-height: 1.6; overflow: auto; flex: 1; white-space: pre-wrap; word-break: break-word; box-sizing: border-box; margin: 0;';
                     pre.textContent = text;
                     previewContainer.appendChild(pre);
-                } else if (contentType.startsWith('text/plain')) {
-                    const text = await response.text();
-                    const pre = document.createElement('pre');
-                    pre.style.cssText = 'background: #222; color: #f8f8f2; border-radius: 8px; padding: 16px; font-size: 1em; font-family: monospace; line-height: 1.8; overflow-x: auto; white-space: pre-wrap; word-break: break-word; box-sizing: border-box;';
-                    pre.textContent = text;
-                    previewContainer.appendChild(pre);
+                    if (!isInline) {
+                        this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, null, fileIndex);
+                        document.addEventListener('keydown', this.previewKeydownHandler);
+                    }
                 } else {
+                    const img = document.createElement('img');
+                    img.style.cssText = `max-width: 100%; max-height: calc(100% - 50px); object-fit: contain; display: block; margin: auto; border: 1px solid #444; border-radius: 4px;`;
+                    previewContainer.appendChild(img);
+
                     const blob = await response.blob();
                     const url = URL.createObjectURL(blob);
                     img.src = url;
-                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, contentOther, url, fileIndex);
-                    document.addEventListener('keydown', this.previewKeydownHandler);
-                    img.onload = () => URL.revokeObjectURL(url); // Revoke on load to free memory
+                    if (!isInline) {
+                        this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, url, fileIndex);
+                        document.addEventListener('keydown', this.previewKeydownHandler);
+                    }
+                    img.onload = () => URL.revokeObjectURL(url);
                 }
             }
 
         } catch (error) {
             window.logger.error('Preview error:', error);
-            alert(`Error previewing file: ${error.message}`);
+            if (this.previewPane && !fullView) {
+                this.previewPane.innerHTML = `<div style="color: #ff6b6b; padding: 20px;">Error previewing ${fileName}: ${error.message}</div>`;
+            } else {
+                alert(`Error previewing file: ${error.message}`);
+            }
         }
     }
 
@@ -791,7 +1248,7 @@ class ArchiveRenderer {
             if (nextIndex !== -1) {
                 const nextFile = this.archiveFiles[nextIndex];
                 const nextFilePath = this.currentPath ? `${this.currentPath}/${nextFile.name}` : nextFile.name;
-                this.previewFile(archivePath, nextFilePath, nextFile.name, nextIndex);
+                this.previewFile(archivePath, nextFilePath, nextFile.name, nextIndex, { fullView: true });
             }
         };
 
@@ -812,23 +1269,30 @@ class ArchiveRenderer {
         }
     }
 
-    
-
-    revertToListView(archivePath, contentOther) {
+    async revertToListView(archivePath, contentOther) {
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
         }
+        const savedPath = this.currentPath;
+        const savedIndex = this.previewIndex >= 0 ? this.previewIndex : this.selectedIndex;
         this.previewIndex = -1;
-        // Re-render the file list view
-        const navBar = document.createElement('div');
-        const pathDisplay = document.createElement('span');
-        const backBtn = document.createElement('button');
-        this.loadArchiveContents(archivePath, this.currentPath, contentOther, pathDisplay, backBtn);
+
+        contentOther.innerHTML = '';
+        await this.render(archivePath, this.getBaseName(archivePath), document.getElementById('content-code'), contentOther);
+        if (savedPath) {
+            await this.loadArchiveContents(archivePath, savedPath, this.contentArea, this.pathDisplay, this.backBtn);
+        }
+        if (savedIndex >= 0) {
+            setTimeout(() => this.selectArchiveFile(savedIndex, { autoPreview: true }), 60);
+        }
     }
 
     setupKeyboardNavigation(archivePath, contentArea, pathDisplay, backBtn) {
         this.keydownHandler = (event) => {
+            if (event.target.tagName === 'INPUT' || event.target.tagName === 'SELECT' || event.target.tagName === 'TEXTAREA') return;
+            // Ignore when full-view preview handler is active
+            if (this.previewKeydownHandler) return;
             if (this.archiveFiles.length === 0) return;
 
             let newIndex = this.selectedIndex;
@@ -858,7 +1322,7 @@ class ArchiveRenderer {
                             this.loadArchiveContents(this.currentArchive, newPath, contentArea, pathDisplay, backBtn);
                         } else {
                             const filePath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
-                            this.previewFile(this.currentArchive, filePath, file.name, this.selectedIndex);
+                            this.previewFile(this.currentArchive, filePath, file.name, this.selectedIndex, { fullView: true });
                         }
                     }
                     return;
@@ -872,22 +1336,33 @@ class ArchiveRenderer {
             }
 
             if (newIndex !== this.selectedIndex) {
-                this.selectArchiveFile(newIndex);
+                this.selectArchiveFile(newIndex, { autoPreview: true });
             }
         };
 
         document.addEventListener('keydown', this.keydownHandler);
     }
 
-    selectArchiveFile(index) {
-        const fileItems = document.querySelectorAll('.archive-content .file-item');
-        fileItems.forEach(item => item.style.backgroundColor = 'white');
+    selectArchiveFile(index, { autoPreview = true } = {}) {
+        const fileItems = document.querySelectorAll('.archive-content .file-item, .archive-content .archive-shelf-item');
+        fileItems.forEach(item => {
+            item.classList.remove('selected');
+            item.style.backgroundColor = '';
+        });
 
         if (index >= 0 && index < this.archiveFiles.length && index < fileItems.length) {
             this.selectedIndex = index;
             const selectedItem = fileItems[index];
-            selectedItem.style.backgroundColor = '#e3f2fd';
+            selectedItem.classList.add('selected');
             selectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+            const file = this.archiveFiles[index];
+            if (this.viewMode === 'split' && autoPreview && file && !file.isDirectory && this.previewPane) {
+                const filePath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
+                this.previewFile(this.currentArchive, filePath, file.name, index, { fullView: false });
+            } else if (this.viewMode === 'split' && file && file.isDirectory && this.previewPane) {
+                this.previewPane.innerHTML = `<div style="color: #888; padding: 20px; text-align: center;">📁 Folder: <strong>${file.name}</strong><br><small>Click or press Enter to open</small></div>`;
+            }
         }
     }
 }
