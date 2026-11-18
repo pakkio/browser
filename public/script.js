@@ -1758,6 +1758,72 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         }
     });
 
+    let subfolderSearchTimer;
+    let subfolderSearchId = 0;
+
+    // Append name matches found in subfolders of the current folder below the local list
+    async function showSubfolderMatches() {
+        const query = searchInput.value.trim();
+        const searchId = ++subfolderSearchId;
+        if (!query) return;
+
+        let data;
+        try {
+            const response = await window.authManager.authenticatedFetch(
+                `/api/search?path=${encodeURIComponent(currentPath)}&q=${encodeURIComponent(query)}`);
+            if (!response || !response.ok) return;
+            data = await response.json();
+        } catch (error) {
+            window.logger.warn('Subfolder search failed:', error);
+            return;
+        }
+        // A newer keystroke (or a cleared box) supersedes this response
+        if (searchId !== subfolderSearchId) return;
+
+        const nested = data.results.filter(r => r.dir !== currentPath);
+        if (nested.length === 0) return;
+
+        const header = document.createElement('li');
+        header.className = 'search-subfolder-header';
+        header.style.cssText = 'color:#888;font-size:12px;padding:8px 4px 2px;cursor:default;';
+        header.textContent = `In subfolders (${nested.length}${data.truncated ? '+' : ''})`;
+        fileList.appendChild(header);
+
+        nested.forEach(result => {
+            const li = document.createElement('li');
+            li.classList.add('file-item', 'search-result');
+            li.setAttribute('data-type', result.isDirectory ? 'directory' : 'file');
+
+            const icon = document.createElement('span');
+            icon.classList.add('file-icon');
+            const name = document.createElement('span');
+            name.classList.add('file-name');
+            // Show where it lives, relative to the folder being searched
+            const relDir = currentPath ? result.dir.slice(currentPath.length + 1) : result.dir;
+            name.textContent = `${relDir}/${result.name}`;
+            name.title = name.textContent;
+            li.appendChild(icon);
+            li.appendChild(name);
+
+            li.addEventListener('click', () => {
+                searchInput.value = '';
+                subfolderSearchId++;
+                if (result.isDirectory) {
+                    currentPath = result.dir ? `${result.dir}/${result.name}` : result.name;
+                    loadFiles(currentPath);
+                    return;
+                }
+                currentPath = result.dir;
+                skipAutoDisplay = true;
+                showContent(result.dir, result.name, { autoPlay: true, keyboardNavigation: true });
+                Promise.resolve(loadFiles(result.dir, { keepContent: true })).finally(() => {
+                    skipAutoDisplay = false;
+                });
+            });
+            fileList.appendChild(li);
+        });
+    }
+
     searchInput.addEventListener('input', () => {
         // Show brief loading for searching in large directories
         if (currentFiles.length > 100) {
@@ -1774,6 +1840,10 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         } else {
             displayFiles(currentFiles, currentPath);
         }
+
+        clearTimeout(subfolderSearchTimer);
+        subfolderSearchId++;
+        subfolderSearchTimer = setTimeout(showSubfolderMatches, 300);
     });
 
     // Sort field change event
