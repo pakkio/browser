@@ -445,7 +445,7 @@ class PDFRenderer {
             // Determine the URL to fetch
             // If filePath starts with /, treat it as a full API path (e.g., /epub-pdf?path=...)
             // Otherwise, construct the standard /files?path=... URL
-            const fetchUrl = filePath.startsWith('/epub-pdf') || filePath.startsWith('/files')
+            const fetchUrl = filePath.startsWith('/epub-pdf') || filePath.startsWith('/files') || filePath.startsWith('/archive-file')
                 ? filePath
                 : `/files?path=${encodeURIComponent(filePath)}`;
             
@@ -638,9 +638,12 @@ class PDFRenderer {
             }
             
             if (!this.pdfDoc) {
+                const fetchUrl = this.filePath.startsWith('/epub-pdf') || this.filePath.startsWith('/files') || this.filePath.startsWith('/archive-file')
+                    ? this.filePath
+                    : `/files?path=${encodeURIComponent(this.filePath)}`;
                 // Load the PDF document using authenticated fetch
                 const response = await window.authManager.authenticatedFetch(
-                    `/files?path=${encodeURIComponent(this.filePath)}`,
+                    fetchUrl,
                     { timeout: 30000 } // 30 second timeout
                 );
                 

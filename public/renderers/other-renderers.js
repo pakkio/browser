@@ -305,6 +305,7 @@ class ArchiveRenderer {
         this.backBtn = null;
         this.previewPane = null;
         this.bodyArea = null;
+        this.subPdfRenderer = null;
     }
 
     cleanup() {
@@ -318,6 +319,10 @@ class ArchiveRenderer {
         this.backBtn = null;
         this.previewPane = null;
         this.bodyArea = null;
+        if (this.subPdfRenderer) {
+            this.subPdfRenderer.cleanup();
+            this.subPdfRenderer = null;
+        }
         
         // Remove keyboard event listener
         if (this.keydownHandler) {
@@ -883,10 +888,14 @@ class ArchiveRenderer {
     }
 
     async previewFile(archivePath, filePath, fileName, fileIndex, { fullView = false } = {}) {
-        // Clean up any existing full-view preview handlers
+        // Clean up any existing full-view preview handlers or active PDF renderer
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
+        }
+        if (this.subPdfRenderer) {
+            this.subPdfRenderer.cleanup();
+            this.subPdfRenderer = null;
         }
 
         this.previewIndex = fileIndex;
@@ -946,17 +955,30 @@ class ArchiveRenderer {
                 previewContainer.style.cssText = `background: #2a2a2a; border: 1px solid #444; padding: 10px; border-radius: 5px; height: ${isInline ? '100%' : '85vh'}; display: flex; flex-direction: column; flex: 1;`;
 
                 const controls = createControls();
-
-                const iframe = document.createElement('iframe');
-                iframe.style.cssText = `width: 100%; flex: 1; border: 1px solid #444; background: #fff; border-radius: 4px;`;
-                iframe.src = rawUrl;
-
                 previewContainer.appendChild(controls);
-                previewContainer.appendChild(iframe);
+
+                const pdfHost = document.createElement('div');
+                pdfHost.style.cssText = 'flex: 1; min-height: 0; overflow: auto; position: relative;';
+                previewContainer.appendChild(pdfHost);
                 targetContainer.appendChild(previewContainer);
 
+                if (typeof PDFRenderer !== 'undefined') {
+                    this.subPdfRenderer = new PDFRenderer();
+                    await this.subPdfRenderer.render(rawUrl, fileName, document.createElement('pre'), pdfHost);
+                } else {
+                    const iframe = document.createElement('iframe');
+                    iframe.style.cssText = `width: 100%; height: 100%; border: 1px solid #444; background: #fff; border-radius: 4px;`;
+                    iframe.src = rawUrl;
+                    pdfHost.appendChild(iframe);
+                }
+
                 if (!isInline) {
-                    this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, rawUrl, fileIndex);
+                    this.previewKeydownHandler = (e) => {
+                        if (e.key === 'Escape' || e.key === 'Backspace') {
+                            e.preventDefault();
+                            this.revertToListView(archivePath, targetContainer);
+                        }
+                    };
                     document.addEventListener('keydown', this.previewKeydownHandler);
                 }
             } else if (extension === 'ipynb') {
@@ -1273,6 +1295,10 @@ class ArchiveRenderer {
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
+        }
+        if (this.subPdfRenderer) {
+            this.subPdfRenderer.cleanup();
+            this.subPdfRenderer = null;
         }
         const savedPath = this.currentPath;
         const savedIndex = this.previewIndex >= 0 ? this.previewIndex : this.selectedIndex;

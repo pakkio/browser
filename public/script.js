@@ -47,7 +47,7 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">Enter</td><td>Open selected file</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">/</td><td>Focus search</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">f</td><td>Toggle full screen</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">h</td><td>Hide/show side panels</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">h / z</td><td>Hide/show side panels</td></tr>
         </table>
         <h3 style="margin:18px 0 0 0;color:#00aacc;font-size:1.05rem;">Comic viewer</h3>
         <table style="width:100%;margin:8px 0 0 0;font-size:1rem;border-collapse:collapse;">
@@ -1662,13 +1662,13 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     // Event listeners
     document.addEventListener('keydown', handleKeyNavigation);
 
-    // Focus mode: 'H' (or the corner button) hides the file list and details panel
+    // Focus mode: 'H' or 'Z' (or the corner button) hides the file list and details panel
     // ("wings") so the content fills the window. Works with any open file type.
     const WINGS_KEY = 'browser.wingsHidden';
     function setWingsHidden(hidden) {
         document.body.classList.toggle('wings-hidden', hidden);
         wingsToggleBtn.textContent = hidden ? '⇥' : '⇤';
-        wingsToggleBtn.title = hidden ? 'Show side panels (H)' : 'Hide side panels (H)';
+        wingsToggleBtn.title = hidden ? 'Show side panels (H / Z)' : 'Hide side panels (H / Z)';
         try { localStorage.setItem(WINGS_KEY, hidden ? '1' : '0'); } catch (e) { /* storage unavailable */ }
     }
     const wingsToggleBtn = document.createElement('button');
@@ -1725,14 +1725,19 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     document.body.appendChild(fullscreenBtn);
 
     // Bubble phase on window: runs after viewer handlers on document, so a viewer that has its
-    // own 'f' (the comic reader's full screen) has already called preventDefault and wins
+    // own 'f' or 'z' (comic reader's panel zoom or video player's focus view) has already called
+    // preventDefault and wins
     window.addEventListener('keydown', (event) => {
-        if (event.key !== 'f' && event.key !== 'F') return;
         if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
         const tag = event.target && event.target.tagName;
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (event.target && event.target.isContentEditable)) return;
-        event.preventDefault();
-        toggleFullscreen();
+        if (event.key === 'f' || event.key === 'F') {
+            event.preventDefault();
+            toggleFullscreen();
+        } else if (event.key === 'z' || event.key === 'Z') {
+            event.preventDefault();
+            setWingsHidden(!document.body.classList.contains('wings-hidden'));
+        }
     });
     
     fileTypeFilter.addEventListener('change', () => {
