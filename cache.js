@@ -108,7 +108,7 @@ class FileCache {
             }
 
             const cacheData = JSON.parse(fs.readFileSync(cacheFilePath, 'utf8'));
-            logger.info(` 🔍 Cache GET: Successfully loaded ${Array.isArray(cacheData) ? cacheData.length : 'non-array'} items`);
+            logger.info(` 🔍 Cache GET: Successfully loaded ${Array.isArray(cacheData.data) ? cacheData.data.length : 'non-array'} items`);
             
             // Update access time for LRU (keep mtime as current time to prevent cache invalidation)
             const now = new Date();

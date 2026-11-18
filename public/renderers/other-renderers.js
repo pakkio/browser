@@ -50,8 +50,9 @@ class DocxRenderer {
         }
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
+        const initialSubPath = options.initialSubPath || '';
         try {
             const response = await window.authManager.authenticatedFetch(`/files?path=${encodeURIComponent(filePath)}`);
             const arrayBuffer = await response.arrayBuffer();
@@ -391,8 +392,9 @@ class ArchiveRenderer {
         });
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
+        const initialSubPath = options.initialSubPath || '';
         
         const archiveContainer = document.createElement('div');
         archiveContainer.className = 'archive-container';
@@ -555,7 +557,7 @@ class ArchiveRenderer {
 
         // Load archive contents
         try {
-            await this.loadArchiveContents(filePath, '', contentArea, pathDisplay, backBtn);
+            await this.loadArchiveContents(filePath, initialSubPath, contentArea, pathDisplay, backBtn);
             this.setupKeyboardNavigation(filePath, contentArea, pathDisplay, backBtn);
         } catch (error) {
             window.logger.error('Archive load error:', error);
@@ -1305,10 +1307,7 @@ class ArchiveRenderer {
         this.previewIndex = -1;
 
         contentOther.innerHTML = '';
-        await this.render(archivePath, this.getBaseName(archivePath), document.getElementById('content-code'), contentOther);
-        if (savedPath) {
-            await this.loadArchiveContents(archivePath, savedPath, this.contentArea, this.pathDisplay, this.backBtn);
-        }
+        await this.render(archivePath, this.getBaseName(archivePath), document.getElementById('content-code'), contentOther, { initialSubPath: savedPath });
         if (savedIndex >= 0) {
             setTimeout(() => this.selectArchiveFile(savedIndex, { autoPreview: true }), 60);
         }
@@ -1409,8 +1408,9 @@ class HtmlRenderer {
         }
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         this.cleanup();
+        const initialSubPath = options.initialSubPath || '';
         this.zoomLevel = 1.0;
 
         try {
