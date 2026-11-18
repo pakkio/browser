@@ -63,6 +63,8 @@ describe('Comprehensive Coverage Tests', () => {
     });
 
     test('should extract the page in-process when the unrar binary is unavailable', async () => {
+      // Load the worker module first: its lazy require would otherwise use up the readFile mock below
+      require('../lib/cpu-worker');
       mockRarFile([{ name: 'image1.jpg' }]);
       jest.spyOn(fs.promises, 'readFile').mockResolvedValueOnce(Buffer.from('rar-bytes'));
       exec.mockImplementationOnce((command, options, callback) => {
