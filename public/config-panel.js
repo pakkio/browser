@@ -131,7 +131,7 @@
             megaStatus.textContent = state.saved ? `Remembered for ${state.username} (stored encrypted on the server)` : 'Not saved';
             megaForget.style.display = state.saved ? '' : 'none';
         }
-        api(megaUrl).then(showMega).catch(() => { megaStatus.textContent = 'Only available from the machine running the server'; });
+        api(megaUrl).then(showMega).catch(() => { megaStatus.textContent = 'Not available from this network'; });
         $('#config-mega-save').addEventListener('click', async () => {
             msg.textContent = '';
             try {

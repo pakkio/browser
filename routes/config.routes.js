@@ -6,6 +6,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const config = require('../lib/config');
 const credentials = require('../lib/credentials');
+const { isLoopback, isPrivateAddress } = require('../utils/networkAccess');
 const mega = require('../lib/mega');
 const { readLatestPath, saveLatestPath } = require('../utils/latestPath');
 
@@ -23,6 +24,18 @@ function localOnly(req, res, next) {
   const addr = req.socket.remoteAddress;
   if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return next();
   next(ApiError.forbidden('Changing the root is only allowed from this machine'));
+}
+
+// Saved logins may be managed from this machine and from devices on the same private network
+// (so a phone can save the mega.nz login). Never from the public internet, and never through a
+// proxy that adds forwarding headers. CREDENTIALS_REMOTE=off restricts it to this machine only.
+function localOrPrivateNetwork(req, res, next) {
+  const addr = req.socket.remoteAddress;
+  if (isLoopback(addr)) return next();
+  const remoteOff = String(process.env.CREDENTIALS_REMOTE || '').toLowerCase() === 'off';
+  const proxied = !!(req.headers['x-forwarded-for'] || req.headers['forwarded'] || req.headers['x-real-ip']);
+  if (!remoteOff && !proxied && isPrivateAddress(addr)) return next();
+  next(ApiError.forbidden('Saved logins can only be changed from this machine or your private network'));
 }
 
 // Sub-folders of any directory (drives when path is empty on Windows), for the root picker
@@ -75,11 +88,11 @@ function serviceParam(req, res, next) {
   next();
 }
 
-router.get('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+router.get('/api/config/credentials/:service', requireAuth, localOrPrivateNetwork, serviceParam, (req, res) => {
   res.json(credentials.describe(req.params.service));
 });
 
-router.put('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+router.put('/api/config/credentials/:service', requireAuth, localOrPrivateNetwork, serviceParam, (req, res) => {
   const { username, password } = req.body || {};
   if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
     throw ApiError.badRequest('username and password are required');
@@ -89,7 +102,7 @@ router.put('/api/config/credentials/:service', requireAuth, localOnly, servicePa
   res.json(credentials.describe(req.params.service));
 });
 
-router.delete('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+router.delete('/api/config/credentials/:service', requireAuth, localOrPrivateNetwork, serviceParam, (req, res) => {
   credentials.remove(req.params.service);
   mega.reset();
   res.json(credentials.describe(req.params.service));
