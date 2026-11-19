@@ -62,6 +62,9 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
 // --- Security headers ---
+// mega.nz (site, API and user storage hosts) may be loaded from the browser
+const MEGA_SOURCES = ['https://mega.nz', 'https://*.mega.nz', 'https://mega.io', 'https://*.mega.io', 'https://*.mega.co.nz'];
+
 app.use(helmet({
   contentSecurityPolicy: {
     useDefaults: true,
@@ -70,9 +73,10 @@ app.use(helmet({
       'script-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
       'script-src-elem': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
       'style-src': ["'self'", "'unsafe-inline'", 'https://cdnjs.cloudflare.com'],
-      'img-src': ["'self'", 'data:', 'blob:'],
-      'media-src': ["'self'", 'blob:'],
-      'connect-src': ["'self'"],
+      'img-src': ["'self'", 'data:', 'blob:', ...MEGA_SOURCES],
+      'media-src': ["'self'", 'blob:', ...MEGA_SOURCES],
+      'connect-src': ["'self'", ...MEGA_SOURCES],
+      'frame-src': ["'self'", ...MEGA_SOURCES],
       'worker-src': ["'self'", 'blob:', 'https://cdnjs.cloudflare.com'],
       // PDFs and HTML from archives are shown in same-origin iframes; the browser's
       // PDF viewer needs object-src. Other sites still cannot frame the app.
