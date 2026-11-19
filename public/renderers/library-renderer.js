@@ -41,6 +41,44 @@ class LibraryRenderer {
 
         this.files.sort(compareFn);
     }
+
+    /**
+     * Filter files by a free-text query. Whitespace-separated tokens are ANDed;
+     * a token matches a file when it is part of the name, matches the type or
+     * extension, or matches the modified date (year "2024", month "mar"/"march",
+     * "2024-03", "03/2024").
+     */
+    filterFiles(files, query) {
+        const tokens = (query || '').toLowerCase().split(/\s+/).filter(Boolean);
+        if (tokens.length === 0) return files;
+
+        const months = ['january', 'february', 'march', 'april', 'may', 'june',
+            'july', 'august', 'september', 'october', 'november', 'december'];
+
+        const matchesToken = (file, token) => {
+            const name = file.name.toLowerCase();
+            const ext = (file.extension || '').toLowerCase().replace(/^\./, '');
+            const type = (file.isDirectory ? 'directory folder' : (file.thumbnailType || '')).toLowerCase();
+            if (name.includes(token)) return true;
+            if (ext && ext === token.replace(/^\./, '')) return true;
+            if (type.split(' ').includes(token)) return true;
+
+            if (!file.modified) return false;
+            const d = new Date(file.modified);
+            if (isNaN(d.getTime())) return false;
+            const year = String(d.getFullYear());
+            const month = d.getMonth();
+            const mm = String(month + 1).padStart(2, '0');
+
+            if (/^\d{4}$/.test(token)) return token === year;
+            if (token === `${year}-${mm}` || token === `${mm}/${year}`) return true;
+            if (token.length >= 3 && months[month].startsWith(token)) return true;
+            return false;
+        };
+
+        return files.filter(file => tokens.every(token => matchesToken(file, token)));
+    }
+
     constructor() {
         this.currentPath = '';
         this.files = [];
@@ -58,6 +96,8 @@ class LibraryRenderer {
     }
 
     async render(dirPath, contentOther, options = {}) {
+        // Filter is per folder: reset when navigating elsewhere
+        if (this.currentPath !== dirPath) this.filterQuery = '';
         this.currentPath = dirPath;
 
         // Fetch library data and annotations in parallel
@@ -138,8 +178,15 @@ class LibraryRenderer {
          const renderShelf = () => {
              // Rebuild shelf to reflect new ordering
              shelf.innerHTML = '';
+             const visible = this.filterFiles(this.files, this.filterQuery);
+             const countEl = header.querySelector('.library-count');
+             if (countEl) {
+                 countEl.textContent = visible.length === this.files.length
+                     ? `${this.files.length} items`
+                     : `${visible.length} of ${this.files.length} items`;
+             }
              const maxSize = Math.max(...this.files.map(f => f.size || 0), 1);
-             for (const file of this.files) {
+             for (const file of visible) {
                  shelf.appendChild(this.createBookItem(file, dirPath, maxSize));
              }
 
@@ -170,6 +217,19 @@ class LibraryRenderer {
              applySort();
          });
 
+         const filterInput = document.createElement('input');
+         filterInput.type = 'search';
+         filterInput.className = 'library-filter';
+         filterInput.placeholder = 'Filter: name, type, 2024, mar…';
+         filterInput.title = 'Filter by name, type/extension (pdf, epub…), year (2024), month (mar) or 2024-03. Multiple words must all match.';
+         filterInput.value = this.filterQuery || '';
+
+         filterInput.addEventListener('input', () => {
+             this.filterQuery = filterInput.value;
+             renderShelf();
+         });
+
+         sortControls.appendChild(filterInput);
          sortControls.appendChild(sortFieldSelect);
          sortControls.appendChild(sortDirectionBtn);
          header.appendChild(sortControls);
@@ -183,7 +243,7 @@ class LibraryRenderer {
         // Find max file size for shadow scaling
         const maxSize = Math.max(...this.files.map(f => f.size), 1);
 
-        for (const file of this.files) {
+        for (const file of this.filterFiles(this.files, this.filterQuery)) {
             const bookItem = this.createBookItem(file, dirPath, maxSize);
             shelf.appendChild(bookItem);
         }
