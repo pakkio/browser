@@ -1,6 +1,7 @@
-// ../.env takes precedence; a local .env only fills in what it leaves unset
+// ../.env takes precedence, then a local .env, then the per-user %LOCALAPPDATA%/FileBrowser/.env (survives reinstalls)
 require('dotenv').config({ path: require('path').join(__dirname, '..', '.env') });
 require('dotenv').config({ path: require('path').join(__dirname, '.env') });
+if (process.env.LOCALAPPDATA) require('dotenv').config({ path: require('path').join(process.env.LOCALAPPDATA, 'FileBrowser', '.env') });
 
 const express = require('express');
 // NOTE: Pinned to Express 4.x (was 5.1.0) because express-session and
