@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A folder, drawn inside the 66dp safe zone of the 108dp adaptive icon -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:fillColor="#4ECDC4"
+        android:pathData="M30,38 L30,72 Q30,76 34,76 L74,76 Q78,76 78,72 L78,44 Q78,40 74,40 L54,40 L48,34 L34,34 Q30,34 30,38 Z" />
+    <path
+        android:fillColor="#2FA39B"
+        android:pathData="M30,48 L78,48 L78,72 Q78,76 74,76 L34,76 Q30,76 30,72 Z" />
+</vector>

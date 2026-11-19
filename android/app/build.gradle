@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Release signing: keystore.properties (git-ignored) holds storeFile, storePassword, keyAlias, keyPassword
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) {
+    keystoreFile.withInputStream { keystoreProps.load(it) }
+}
+
+android {
+    namespace 'io.github.pakkio.filebrowser'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'io.github.pakkio.filebrowser'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0.0'
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreFile.exists()) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            if (keystoreFile.exists()) {
+                signingConfig signingConfigs.release
+            }
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    applicationVariants.all { variant ->
+        variant.outputs.all {
+            outputFileName = "FileBrowser-${variant.versionName}-${variant.buildType.name}.apk"
+        }
+    }
+}

@@ -166,3 +166,13 @@ installer/out/
 # Remembered service logins (encrypted store + its key)
 .credentials.json
 .credentials.key
+
+# Android app: build output, local SDK path, release signing key
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/keystore.properties
+android/*.jks
+android/*.keystore
+*.apk

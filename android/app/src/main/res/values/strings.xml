@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">File Browser</string>
+    <string name="server_title">Server address</string>
+    <string name="server_message">Enter the address of your File Browser server, for example 192.168.1.10:3000</string>
+    <string name="server_hint">192.168.1.10:3000</string>
+    <string name="connect">Connect</string>
+    <string name="invalid_address">Enter a valid address</string>
+    <string name="change_server">Change server</string>
+    <string name="retry">Retry</string>
+    <string name="exit">Exit</string>
+    <string name="cannot_reach">Cannot reach %1$s\n\n%2$s</string>
+    <string name="cannot_open_link">No app can open this link</string>
+    <string name="downloading">Downloading %1$s</string>
+    <string name="download_failed">Download failed</string>
+</resources>
