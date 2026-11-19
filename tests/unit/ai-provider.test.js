@@ -3,7 +3,7 @@ const { EventEmitter } = require('events');
 
 jest.mock('pdf-parse', () => jest.fn(), { virtual: true });
 
-const ENV_KEYS = ['AI_PROVIDER', 'LMSTUDIO_URL', 'OPENROUTER_API_KEY', 'OPENCODEGO_API_KEY', 'OPENCODEGO_MODEL', 'OPENCODEGO_FALLBACK_MODELS'];
+const ENV_KEYS = ['AI_PROVIDER', 'LMSTUDIO_URL', 'OPENROUTER_API_KEY', 'OPENROUTER_DEFAULT_MODEL', 'OPENROUTER_FALLBACK_MODELS', 'OPENCODEGO_API_KEY', 'OPENCODEGO_MODEL', 'OPENCODEGO_FALLBACK_MODELS'];
 
 function load(env) {
     ENV_KEYS.forEach(k => delete process.env[k]);
@@ -90,6 +90,31 @@ describe('AIFileAnalyzer providers', () => {
         const res = await a.makeAIRequest([]);
         expect(res.success).toBe(true);
         expect(bodies.map(b => b.model)).toEqual(['deepseek-v4.1-flash', 'grok-4.7']);
+    });
+
+
+    test('retries openrouter with a fallback model when the primary is rate-limited', async () => {
+        const bodies = [];
+        jest.spyOn(https, 'request').mockImplementation((opts, cb) => {
+            const req = new EventEmitter();
+            req.write = d => { bodies.push(JSON.parse(d)); };
+            req.setTimeout = jest.fn();
+            req.destroy = jest.fn();
+            req.end = () => {
+                const limited = bodies.length === 1;
+                const res = new EventEmitter();
+                cb(res);
+                res.emit('data', JSON.stringify(limited
+                    ? { error: { message: 'Provider returned error', code: 429 } }
+                    : { choices: [{ finish_reason: 'stop', message: { content: '{}' } }] }));
+                res.emit('end');
+            };
+            return req;
+        });
+        const a = load({ AI_PROVIDER: 'openrouter', OPENROUTER_API_KEY: 'k', OPENROUTER_DEFAULT_MODEL: 'openrouter/free', OPENROUTER_FALLBACK_MODELS: 'm/two:free' });
+        const res = await a.makeAIRequest([]);
+        expect(res.success).toBe(true);
+        expect(bodies.map(b => b.model)).toEqual(['openrouter/free', 'm/two:free']);
     });
 
     test('reports the content filter when every model refuses', async () => {
