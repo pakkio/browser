@@ -176,3 +176,6 @@ android/keystore.properties
 android/*.jks
 android/*.keystore
 *.apk
+
+# README QR code for the Android APK
+!docs/android-apk-qr.svg

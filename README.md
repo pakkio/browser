@@ -178,6 +178,19 @@ git fetch && git reset --hard origin/master
 ```
 This discards local commits and uncommitted changes, so save any local work first.
 
+### Android
+
+An Android app (Android 8.0+) wraps the web UI. It is a thin shell around **your own** File Browser server, so it asks for the server address on first launch (for example `192.168.1.10:3000`) and remembers it.
+
+<img src="docs/android-apk-qr.svg" alt="QR code to download the Android APK" width="220" align="right">
+
+Scan the QR code or [download the APK](https://github.com/pakkio/browser/releases/download/android-v1.0.0/FileBrowser-1.0.0.apk), open it on the phone and allow installing from this source when asked. All releases are on the [releases page](https://github.com/pakkio/browser/releases).
+
+- The server must be reachable from the phone (same network or a VPN). Plain `http` is allowed.
+- Google sign-in does not work inside the app (Google blocks embedded browsers), so leave `AUTH` off or protect the server another way.
+- The mega.nz login can be saved from the phone's Settings. Devices on a private network may do this; set `CREDENTIALS_REMOTE=off` in `.env` to allow only the server machine.
+- To build it yourself you need JDK 17+ and the Android SDK (platform 34): run `./gradlew assembleRelease` in `android/`. Signing uses a git-ignored `android/keystore.properties`.
+
 ## 🧪 Testing
 
 The application includes a comprehensive test suite with unit tests, integration tests, and security validation.
