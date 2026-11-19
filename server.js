@@ -144,6 +144,7 @@ app.use(require('./routes/media.routes'));
 app.use(require('./routes/annotations.routes'));
 app.use(require('./routes/ai.routes'));
 app.use(require('./routes/cache.routes'));
+app.use(require('./routes/mega.routes'));
 
 // --- Error handling (must be last) ---
 app.use(errorHandler);

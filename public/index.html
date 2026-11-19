@@ -10,6 +10,7 @@
     <script>try{document.documentElement.dataset.theme=localStorage.getItem('fb-theme')||'dark';}catch(e){}</script>
     <link rel="stylesheet" href="style.css">
     <link rel="stylesheet" href="theme.css">
+    <link rel="stylesheet" href="mega.css">
     <link rel="stylesheet" href="mobile.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
@@ -79,6 +80,7 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
             <div class="controls-section">
                 <div class="controls-title">
                     <h2>File Browser</h2>
+                    <button id="mega-btn" class="config-btn" title="Browse mega.nz" aria-label="Browse mega.nz">☁️</button>
                     <button id="config-btn" class="config-btn" title="Settings" aria-label="Settings">⚙️</button>
                 </div>
                 <input type="text" id="search-input" class="search-input" placeholder="Search files...">
@@ -219,6 +221,7 @@ window.pdfJsLoaded = new Promise((resolve, reject) => {
     <script src="auth.js"></script>
     <script src="script.js?v=3"></script>
     <script src="config-panel.js"></script>
+    <script src="mega-browser.js"></script>
     <script src="mobile.js"></script>
 </body>
 </html>

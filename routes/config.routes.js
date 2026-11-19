@@ -6,6 +6,7 @@ const asyncHandler = require('../middleware/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const config = require('../lib/config');
 const credentials = require('../lib/credentials');
+const mega = require('../lib/mega');
 const { readLatestPath, saveLatestPath } = require('../utils/latestPath');
 
 const router = Router();
@@ -84,11 +85,13 @@ router.put('/api/config/credentials/:service', requireAuth, localOnly, servicePa
     throw ApiError.badRequest('username and password are required');
   }
   credentials.save(req.params.service, { username: username.trim(), secret: password });
+  mega.reset(); // next mega.nz request logs in with the new login
   res.json(credentials.describe(req.params.service));
 });
 
 router.delete('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
   credentials.remove(req.params.service);
+  mega.reset();
   res.json(credentials.describe(req.params.service));
 });
 
