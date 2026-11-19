@@ -43,7 +43,8 @@
 .config-modal h3 { margin: 0 0 14px; font-size: 1.1rem; }
 .config-modal h4 { margin: 16px 0 8px; font-size: 0.9rem; opacity: 0.85; }
 .config-modal .config-row { display: flex; gap: 8px; }
-.config-modal input[type="text"] {
+.config-modal input[type="text"],
+.config-modal input[type="password"] {
     flex: 1;
     background: #1e1e1e;
     color: inherit;
@@ -93,7 +94,8 @@ html[data-theme="contrast"] .controls-section,
 html[data-theme="contrast"] .current-path,
 html[data-theme="contrast"] .tree-view,
 html[data-theme="contrast"] .config-modal,
-html[data-theme="contrast"] .config-modal input[type="text"] {
+html[data-theme="contrast"] .config-modal input[type="text"],
+html[data-theme="contrast"] .config-modal input[type="password"] {
     background: #000 !important;
     color: #fff !important;
 }

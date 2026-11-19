@@ -44,6 +44,16 @@
                     <button id="config-browse">Browse</button>
                 </div>
                 <div class="config-dirs" style="display:none"></div>
+                <h4>mega.nz login</h4>
+                <div class="config-row">
+                    <input type="text" id="config-mega-user" placeholder="Email" autocomplete="username" spellcheck="false">
+                </div>
+                <div class="config-row" style="margin-top:6px">
+                    <input type="password" id="config-mega-pass" placeholder="Password" autocomplete="current-password">
+                    <button id="config-mega-save">Remember</button>
+                    <button id="config-mega-forget" style="display:none">Forget</button>
+                </div>
+                <div class="config-mega-status" style="font-size:0.8rem;opacity:0.75;margin-top:4px"></div>
                 <div class="config-msg"></div>
                 <div class="config-actions">
                     <button id="config-close">Close</button>
@@ -107,6 +117,36 @@
             } catch (err) {
                 msg.textContent = err.message;
             }
+        });
+
+        const megaUser = $('#config-mega-user');
+        const megaPass = $('#config-mega-pass');
+        const megaStatus = $('.config-mega-status');
+        const megaForget = $('#config-mega-forget');
+        const megaUrl = '/api/config/credentials/mega';
+        function showMega(state) {
+            megaUser.value = state.username || '';
+            megaPass.value = '';
+            megaPass.placeholder = state.saved ? 'Saved (type to replace)' : 'Password';
+            megaStatus.textContent = state.saved ? `Remembered for ${state.username} (stored encrypted on the server)` : 'Not saved';
+            megaForget.style.display = state.saved ? '' : 'none';
+        }
+        api(megaUrl).then(showMega).catch(() => { megaStatus.textContent = 'Only available from the machine running the server'; });
+        $('#config-mega-save').addEventListener('click', async () => {
+            msg.textContent = '';
+            try {
+                showMega(await api(megaUrl, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: megaUser.value, password: megaPass.value })
+                }));
+            } catch (err) {
+                msg.textContent = err.message;
+            }
+        });
+        megaForget.addEventListener('click', async () => {
+            msg.textContent = '';
+            try { showMega(await api(megaUrl, { method: 'DELETE' })); } catch (err) { msg.textContent = err.message; }
         });
 
         fetch('/api/server-info').then((r) => r.json()).then((d) => { input.value = d.rootDir || ''; }).catch(() => {});

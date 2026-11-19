@@ -162,3 +162,7 @@ installer/out/
 
 # Installer icon (ships in the MSI)
 !installer/filebrowser.ico
+
+# Remembered service logins (encrypted store + its key)
+.credentials.json
+.credentials.key

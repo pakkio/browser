@@ -5,6 +5,7 @@ const { requireAuth } = require('../auth');
 const asyncHandler = require('../middleware/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const config = require('../lib/config');
+const credentials = require('../lib/credentials');
 const { readLatestPath, saveLatestPath } = require('../utils/latestPath');
 
 const router = Router();
@@ -64,6 +65,31 @@ router.post('/api/config/root', requireAuth, localOnly, (req, res) => {
   req.session.lastBrowsedPath = '';
   saveLatestPath('');
   res.json({ success: true, rootDir });
+});
+
+// Remembered logins for external services. The secret is stored encrypted and is never sent back.
+const SERVICES = ['mega'];
+function serviceParam(req, res, next) {
+  if (!SERVICES.includes(req.params.service)) return next(ApiError.badRequest('Unknown service'));
+  next();
+}
+
+router.get('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+  res.json(credentials.describe(req.params.service));
+});
+
+router.put('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || typeof username !== 'string' || !password || typeof password !== 'string') {
+    throw ApiError.badRequest('username and password are required');
+  }
+  credentials.save(req.params.service, { username: username.trim(), secret: password });
+  res.json(credentials.describe(req.params.service));
+});
+
+router.delete('/api/config/credentials/:service', requireAuth, localOnly, serviceParam, (req, res) => {
+  credentials.remove(req.params.service);
+  res.json(credentials.describe(req.params.service));
 });
 
 module.exports = router;
