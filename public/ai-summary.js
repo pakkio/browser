@@ -101,7 +101,7 @@ class AISummaryManager {
 
         // Exclude binary types that definitely can't be summarized
         const excludedTypes = [
-            'png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff', 'webp', 'svg', 'ico',
+            'png', 'jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'gif', 'bmp', 'tiff', 'webp', 'svg', 'ico',
             'mp4', 'avi', 'mkv', 'mov', 'wmv', 'flv', 'webm', 'm4v',
             'mp3', 'wav', 'flac', 'aac', 'ogg', 'wma', 'm4a',
             'zip', 'rar', '7z', 'tar', 'gz', 'bz2',

@@ -1128,7 +1128,7 @@ function initializeFileExplorer() {
                             li.setAttribute('data-type', 'pdf');
                         } else if (['cbz', 'cbr'].includes(extension)) {
                             li.setAttribute('data-type', 'comic');
-                        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) {
+                        } else if (['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp'].includes(extension)) {
                             li.setAttribute('data-type', 'image');
                         } else if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) {
                             li.setAttribute('data-type', 'video');
@@ -1376,7 +1376,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     function getFileTypeFromExtension(extension, fileName = '') {
         if (extension === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(extension)) return 'comic';
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
+        if (['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp'].includes(extension)) return 'image';
         if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)) return 'audio';
         if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';
@@ -1394,7 +1394,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     function getFileTypeDescription(extension) {
         const types = {
             'pdf': 'PDF Document',
-            'jpg': 'JPEG Image', 'jpeg': 'JPEG Image', 'png': 'PNG Image', 'gif': 'GIF Image', 'webp': 'WebP Image',
+            'jpg': 'JPEG Image', 'jpeg': 'JPEG Image', 'jfif': 'JPEG Image', 'png': 'PNG Image', 'gif': 'GIF Image', 'webp': 'WebP Image',
             'mp4': 'MP4 Video', 'avi': 'AVI Video', 'mov': 'QuickTime Video', 'mkv': 'Matroska Video',
             'webm': 'WebM Video', 'mpg': 'MPEG Video', 'mpeg': 'MPEG Video', 'wmv': 'WMV Video',
             'm4v': 'M4V Video', 'flv': 'Flash Video', '3gp': '3GP Video', 'ts': 'MPEG-TS Video', 'mts': 'AVCHD Video', 'm2ts': 'Blu-ray Video',
@@ -2042,7 +2042,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         
         // Count different file types
         const imageFiles = files.filter(file => !file.isDirectory && 
-            ['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
+            ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp'].includes(file.name.split('.').pop().toLowerCase()));
         const videoFiles = files.filter(file => !file.isDirectory && 
             ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts'].includes(file.name.split('.').pop().toLowerCase()));
         const pdfFiles = files.filter(file => !file.isDirectory && 

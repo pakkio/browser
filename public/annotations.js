@@ -23,7 +23,7 @@ class AnnotationManager {
     getFileTypeFromExtension(extension, fileName = '') {
         if (extension === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(extension)) return 'comic';
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp'].includes(extension)) return 'image';
+        if (['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp'].includes(extension)) return 'image';
         if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv'].includes(extension)) return 'video';
         if (['mp3', 'wav', 'flac', 'ogg'].includes(extension)) return 'audio';
         if (['js', 'html', 'css', 'json', 'py', 'java', 'c', 'cpp', 'go', 'rs', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro'].includes(extension)) return 'code';

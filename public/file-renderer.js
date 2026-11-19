@@ -81,7 +81,7 @@ class FileRenderer {
             return 'html';
         } else if (['txt', 'md', 'js', 'css', 'json', 'py', 'java', 'c', 'cpp', 'h', 'hpp', 'go', 'rs', 'csv', 'srt', 'xml', 'yaml', 'yml', 'ini', 'conf', 'log', 'sh', 'bat', 'ps1', 'sql', 'php', 'rb', 'swift', 'kt', 'dart', 'r', 'scala', 'clj', 'elm', 'vue', 'jsx', 'tsx', 'ts', 'less', 'scss', 'sass', 'styl', 'svelte', 'astro', 'lsl', 'lua', 'pl', 'asm', 's', 'vb', 'pas', 'f90', 'f95', 'f03', 'f08', 'for', 'cobol', 'cob', 'zig', 'm', 'mm', 'groovy', 'gradle', 'cmake', 'dockerfile'].includes(extension)) {
             return 'text';
-        } else if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(extension)) {
+        } else if (['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(extension)) {
             const response = await window.authManager.authenticatedFetch(`/files/list?path=${encodeURIComponent(filePath.substring(0, filePath.lastIndexOf('/')))}`);
             if (!response) return extension;
             const files = await response.json();
@@ -90,7 +90,7 @@ class FileRenderer {
                 const name = file.name.toLowerCase().endsWith('.btpart')
                     ? file.name.substring(0, file.name.length - 7)
                     : file.name;
-                return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
+                return ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
             });
             return imageFiles.length > 1 ? 'image-pair' : 'image';
         } else if (extension === 'pdf') {
@@ -213,7 +213,7 @@ class FileRenderer {
                     const name = file.name.toLowerCase().endsWith('.btpart')
                         ? file.name.substring(0, file.name.length - 7)
                         : file.name;
-                    return ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
+                    return ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp', 'tiff', 'tif'].includes(name.split('.').pop().toLowerCase());
                 });
             }
 

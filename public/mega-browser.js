@@ -3,7 +3,7 @@
 // The server logs in with the login remembered in Settings; nothing secret reaches the page.
 (function () {
     const MEDIA = {
-        image: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'],
+        image: ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp', 'avif'],
         video: ['mp4', 'webm', 'm4v', 'mov', 'ogv'],
         audio: ['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'opus'],
         pdf: ['pdf'],

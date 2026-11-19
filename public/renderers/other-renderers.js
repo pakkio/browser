@@ -345,7 +345,7 @@ class ArchiveRenderer {
         if (file.isDirectory) return 'directory';
         const ext = (file.name.includes('.') ? file.name.split('.').pop() : '').toLowerCase();
         if (['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv'].includes(ext)) return 'video';
-        if (['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
+        if (['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp'].includes(ext)) return 'image';
         if (ext === 'pdf') return 'pdf';
         if (['cbz', 'cbr'].includes(ext)) return 'comic';
         if (ext === 'epub') return 'epub';
