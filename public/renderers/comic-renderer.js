@@ -15,7 +15,7 @@ class ComicRenderer {
         this.retryAttempts = new Map(); // Track retry attempts per page
         this.isCleaningUp = false; // Flag to prevent operations during cleanup
         this.singlePage = false; // '1' key: show one page instead of a spread
-        this.panelMode = false; // 'n' key: step through panels of the current page
+        this.panelMode = false; // '.' key: step through panels of the current page
         this.panels = null;
         this.panelIndex = -1;
         this.panelsFromAI = false;
@@ -81,7 +81,7 @@ class ComicRenderer {
         if (blocking) {
             const hint = document.createElement('div');
             hint.className = 'comic-wait-hint';
-            hint.textContent = 'Page turns are paused until it finishes · n/p step through the panels found so far · Esc to skip the AI check';
+            hint.textContent = 'Page turns are paused until it finishes · ./, step through the panels found so far · Esc to skip the AI check';
             wait.appendChild(hint);
         }
         badge.style.display = badge.childNodes.length ? 'block' : 'none';
@@ -917,9 +917,9 @@ class ComicRenderer {
 
             // While the AI checks a page nothing else may run; Esc gives up on the check
             // ...except stepping through the panels already found by the built-in detection
-            const panelKey = ['n', 'N', 'p', 'P'].includes(e.key) && this.panelMode && this.panels;
+            const panelKey = ['.', ','].includes(e.key) && this.panelMode && this.panels;
             if (this.isLocked() && !panelKey) {
-                if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '0', 'z', 'Z', '1'].includes(e.key)) {
+                if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '.', ',', '0', 'z', 'Z', '1'].includes(e.key)) {
                     e.preventDefault();
                     if (e.key === 'Escape') this.cancelAIPanels();
                 }
@@ -970,15 +970,24 @@ class ComicRenderer {
                     e.preventDefault();
                     this.toggleSinglePage();
                     break;
-                case 'n':
-                case 'N':
+                case '.':
                     e.preventDefault();
                     this.nextPanel();
                     break;
-                case 'p':
-                case 'P':
+                case ',':
                     e.preventDefault();
                     this.previousPanel();
+                    break;
+                case 'n':
+                case 'N':
+                case 'p':
+                case 'P':
+                    // n / p: next / previous archive in the folder
+                    if (e.ctrlKey || e.altKey || e.metaKey) break;
+                    e.preventDefault();
+                    if (window.fileExplorer && window.fileExplorer.openAdjacentFile) {
+                        window.fileExplorer.openAdjacentFile(this.fileName, e.key.toLowerCase() === 'n' ? 1 : -1, ['cbz', 'cbr', 'zip', 'rar', '7z']);
+                    }
                     break;
                 case '0':
                     e.preventDefault();
@@ -1007,7 +1016,7 @@ class ComicRenderer {
             }
         };
 
-        // Drag with the mouse to pan the zoomed panel; n/p snap back to the next panel
+        // Drag with the mouse to pan the zoomed panel; ./, snap back to the next panel
         this.handleMouseDown = (e) => {
             if (e.button !== 0 || !this.panelMode || !this.panView || this.isLocked()) return;
             const img = document.getElementById('page-left');

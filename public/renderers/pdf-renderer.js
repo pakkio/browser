@@ -149,6 +149,17 @@ class PDFRenderer {
                     e.preventDefault();
                     this.nextPage();
                     break;
+                case 'n':
+                case 'N':
+                case 'p':
+                case 'P':
+                    // n / p: next / previous PDF in the folder
+                    if (e.ctrlKey || e.altKey || e.metaKey) break;
+                    e.preventDefault();
+                    if (window.fileExplorer && window.fileExplorer.openAdjacentFile) {
+                        window.fileExplorer.openAdjacentFile(this.fileName, e.key.toLowerCase() === 'n' ? 1 : -1, ['pdf']);
+                    }
+                    break;
                 case 'Home':
                     e.preventDefault();
                     this.loadPage(1);

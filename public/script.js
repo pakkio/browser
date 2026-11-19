@@ -54,7 +54,8 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">← / a, → / d</td><td>Previous / next page</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Home / End</td><td>First / last page</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">1</td><td>Toggle single-page view</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">n / p</td><td>Next / previous panel</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">. / ,</td><td>Next / previous panel</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">n / p</td><td>Next / previous comic or archive in the folder</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">0</td><td>First panel</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">z</td><td>Zoom on the panel</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">f</td><td>Full screen</td></tr>
@@ -2103,7 +2104,28 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     }
 
     // Expose file explorer state for keyboard navigation
+    // Open the next/previous file of the same kind (by extension) as the one on show, wrapping
+    // around. Used by the n / p keys in the PDF and archive viewers. Returns the new name or null.
+    function openAdjacentFile(currentName, step, extensions) {
+        const files = filteredFiles;
+        const extOf = (name) => name.toLowerCase().replace(/\.btpart$/, '').split('.').pop();
+        const from = files.findIndex(f => f.name === currentName);
+        if (from === -1) return null;
+        for (let k = 1; k < files.length; k++) {
+            const i = (((from + step * k) % files.length) + files.length) % files.length;
+            const file = files[i];
+            if (file.isDirectory || !extensions.includes(extOf(file.name))) continue;
+            const filePath = currentPath ? `${currentPath}/${file.name}` : file.name;
+            selectFile(i, filePath, file.name, { keyboardNavigation: true });
+            showContent(currentPath, file.name, { keyboardNavigation: true });
+            updateDetails(file);
+            return file.name;
+        }
+        return null;
+    }
+
     window.fileExplorer = {
+        openAdjacentFile: openAdjacentFile,
         currentPath: () => currentPath,
         currentFiles: () => currentFiles,
         filteredFiles: () => filteredFiles,
