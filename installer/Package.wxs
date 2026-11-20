@@ -1,4 +1,4 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="File Browser" Manufacturer="Pakkio" Version="$(var.Version)"
            UpgradeCode="7d3f5c1e-2b8a-4e6f-9a41-0c5b7e2d8f13" Scope="perUser">
     <MajorUpgrade DowngradeErrorMessage="A newer version of File Browser is already installed." />
@@ -60,6 +60,18 @@
       <util:RemoveFolderEx On="uninstall" Property="TOOLSDIR" />
     </Component>
 
+    <!-- Last page of the installer: offers to start File Browser right away -->
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch File Browser" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
+    <CustomAction Id="LaunchApp" Directory="INSTALLFOLDER" Return="asyncNoWait" Impersonate="yes"
+                  ExeCommand="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot;" />
+    <UI>
+      <UIRef Id="WixUI_ErrorProgressText" />
+      <DialogRef Id="ExitDialog" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="EndDialog" Value="Return" />
+      <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="LaunchApp"
+               Condition="WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 AND NOT Installed" />
+    </UI>
     <Icon Id="AppIcon" SourceFile="$(var.Stage)\filebrowser.ico" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
   </Package>

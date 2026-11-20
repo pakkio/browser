@@ -36,7 +36,8 @@ foreach ($t in $manifest.tools) {
 
 if (-not (Get-Command wix -ErrorAction SilentlyContinue)) { dotnet tool install --global wix --version 5.0.2 }
 wix extension add -g WixToolset.Util.wixext/5.0.2 | Out-Null
+wix extension add -g WixToolset.UI.wixext/5.0.2 | Out-Null
 $msi = "$out\FileBrowser-$version.msi"
-wix build "$PSScriptRoot\Package.wxs" -arch x64 -ext WixToolset.Util.wixext -d Version=$version -d Stage=$stage -o $msi
+wix build "$PSScriptRoot\Package.wxs" -arch x64 -ext WixToolset.Util.wixext -ext WixToolset.UI.wixext -d Version=$version -d Stage=$stage -o $msi
 if ($LASTEXITCODE) { throw 'wix build failed' }
 "{0}  ({1:N1} MB)" -f $msi, ((Get-Item $msi).Length / 1MB)
