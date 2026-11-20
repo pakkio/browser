@@ -4,13 +4,15 @@ Serves -Dir (or a folder picked in a dialog), opens the browser, and keeps an ic
 whose menu reopens the page or stops the server. If a server is already running on
 the port, it is switched to the new folder instead of starting a second one.
 #>
-param([string]$Dir)
+param([string]$Dir, [switch]$Help)
 
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
 
 $fb = $PSScriptRoot
 $port = if ($env:PORT) { $env:PORT } else { '3000' }
 $url = "http://localhost:$port"
+# -Help (Explorer's "File Browser help" entry) opens the page with the shortcut legend showing
+$openUrl = if ($Help) { "$url/?help=shortcuts" } else { $url }
 $logDir = Join-Path $env:LOCALAPPDATA 'FileBrowser'
 New-Item -ItemType Directory $logDir -Force | Out-Null
 $log = Join-Path $logDir 'server.log'
@@ -31,13 +33,14 @@ if (-not (Test-Path $Dir -PathType Container)) { Show-Error "Not a folder: $Dir"
 # Already running: point it at the new folder and open the page
 try {
     Invoke-RestMethod "$url/api/server-info" -TimeoutSec 2 | Out-Null
+    if ($Help) { Start-Process $openUrl; exit }
     try {
         Invoke-RestMethod "$url/api/config/root" -Method Post -ContentType 'application/json' `
             -Body (@{ path = $Dir } | ConvertTo-Json) | Out-Null
     } catch {
         Show-Error "File Browser is already running on port $port but could not switch to $Dir.`n$($_.Exception.Message)"
     }
-    Start-Process $url
+    Start-Process $openUrl
     exit
 } catch { }
 
@@ -63,7 +66,7 @@ if (-not $ready) {
     Show-Error "File Browser did not start.`n`n$detail`n`nLog: $log"
     exit 1
 }
-Start-Process $url
+Start-Process $openUrl
 
 $icon = New-Object System.Windows.Forms.NotifyIcon
 $icon.Icon = New-Object System.Drawing.Icon (Join-Path $fb 'filebrowser.ico')
@@ -77,6 +80,8 @@ $menu.Items.Add('-') | Out-Null
 $open = $menu.Items.Add('Open in browser')
 $open.Font = New-Object System.Drawing.Font($open.Font, [System.Drawing.FontStyle]::Bold)
 $open.add_Click({ Start-Process $url })
+$help = $menu.Items.Add('Keyboard shortcuts / Help')
+$help.add_Click({ Start-Process "$url/?help=shortcuts" })
 $stop = $menu.Items.Add('Stop File Browser')
 $stop.add_Click({
     # /T also ends ffmpeg/gm children still working for the server

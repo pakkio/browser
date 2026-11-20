@@ -43,6 +43,11 @@
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
         <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%V&quot;" /></RegistryKey>
       </RegistryKey>
+      <RegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\FileBrowserHelp">
+        <RegistryValue Type="string" Value="File Browser help &amp; shortcuts" />
+        <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; --help &quot;%V&quot;" /></RegistryKey>
+      </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open with File Browser" />
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />

@@ -1730,6 +1730,11 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     try { wingsInitiallyHidden = localStorage.getItem(WINGS_KEY) === '1'; } catch (e) { /* storage unavailable */ }
     setWingsHidden(wingsInitiallyHidden);
 
+    // ?help=shortcuts / ?help=readme (from the Explorer menu and tray icon) opens the help on load
+    const helpParam = new URLSearchParams(window.location.search).get('help');
+    if (helpParam === 'readme') showReadmePopup();
+    else if (helpParam) showShortcutHelpPopup();
+
     // Right-click anywhere that is not a file entry opens the help menu
     document.addEventListener('contextmenu', (event) => {
         if (event.defaultPrevented) return;
