@@ -465,7 +465,8 @@ class VideoRenderer {
         `;
         this.annotationOverlay.textContent = 'Loading annotations...';
         contentOther.appendChild(this.annotationOverlay);
-        
+        this.makeOverlayDraggable(this.annotationOverlay, contentOther);
+
         contentOther.style.display = 'block';
         
         // Load and display current annotations
@@ -894,6 +895,57 @@ class VideoRenderer {
         }
     }
     
+    /**
+     * Let the user drag the annotation card (stars/color/comment) anywhere inside its container.
+     * The position is remembered in localStorage between videos and sessions.
+     */
+    makeOverlayDraggable(el, container) {
+        const KEY = 'annotationOverlayPos';
+        // Bounds come from the element's positioned ancestor, which only has a size once visible
+        const place = (x, y) => {
+            const parent = el.offsetParent || container;
+            const maxX = Math.max(0, parent.clientWidth - el.offsetWidth);
+            const maxY = Math.max(0, parent.clientHeight - el.offsetHeight);
+            el.style.left = `${Math.max(0, Math.min(x, maxX))}px`;
+            el.style.top = `${Math.max(0, Math.min(y, maxY))}px`;
+        };
+        const restore = (x, y) => {
+            el.style.left = `${x}px`;
+            el.style.top = `${y}px`;
+        };
+
+        try {
+            const saved = JSON.parse(localStorage.getItem(KEY));
+            if (saved && Number.isFinite(saved.x) && Number.isFinite(saved.y)) restore(saved.x, saved.y);
+        } catch (e) { /* storage unavailable: keep default position */ }
+
+        el.style.cursor = 'move';
+        el.style.touchAction = 'none';
+        el.style.userSelect = 'none';
+        el.title = 'Drag to move';
+
+        el.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0) return;
+            const startX = e.clientX - el.offsetLeft;
+            const startY = e.clientY - el.offsetTop;
+            el.setPointerCapture(e.pointerId);
+
+            const onMove = (ev) => place(ev.clientX - startX, ev.clientY - startY);
+            const onUp = () => {
+                el.removeEventListener('pointermove', onMove);
+                el.removeEventListener('pointerup', onUp);
+                el.removeEventListener('pointercancel', onUp);
+                try {
+                    localStorage.setItem(KEY, JSON.stringify({ x: el.offsetLeft, y: el.offsetTop }));
+                } catch (err) { /* ignore */ }
+            };
+            el.addEventListener('pointermove', onMove);
+            el.addEventListener('pointerup', onUp);
+            el.addEventListener('pointercancel', onUp);
+            e.preventDefault();
+        });
+    }
+
     updateAnnotationDisplay(annotation) {
         // Create visual star rating display (1-5 stars)
         let starsDisplay = '';
