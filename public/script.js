@@ -1041,6 +1041,12 @@ function initializeFileExplorer() {
             })
             .catch(error => {
                 window.logger.error('Error loading files:', error);
+                // A remembered folder that no longer exists: fall back to the root instead of getting stuck
+                if (path !== '' && /404/.test(error.message)) {
+                    currentPath = '';
+                    loadFiles('');
+                    return;
+                }
                 document.getElementById('current-path-display').textContent = 'Error loading directory';
                 fileList.innerHTML = '<li style="color: red;">Error: ' + error.message + '</li>';
             })

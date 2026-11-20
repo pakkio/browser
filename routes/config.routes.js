@@ -32,10 +32,22 @@ function localOnly(req, res, next) {
   next(ApiError.forbidden('Changing the root is only allowed from this machine'));
 }
 
+function savedPathExists(rel) {
+  if (!rel) return false;
+  try {
+    const full = path.resolve(config.baseDir, rel);
+    return full.startsWith(path.resolve(config.baseDir)) && fs.statSync(full).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
 // Public: the UI asks for the root before the user signs in.
 // parentRoot is only offered to the local machine: it lets ".." climb out of the root.
 router.get('/api/server-info', (req, res) => {
-  const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
+  // A saved path may belong to a previous root; only offer one that still exists
+  const saved = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
+  const currentPath = savedPathExists(saved) ? saved : '';
   const parent = path.dirname(config.baseDir);
   const parentRoot = isLocalRequest(req) && parent !== config.baseDir ? parent : null;
   res.json({ rootDir: config.baseDir, currentPath, parentRoot });
