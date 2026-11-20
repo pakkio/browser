@@ -12,19 +12,25 @@ const { readLatestPath, saveLatestPath } = require('../utils/latestPath');
 
 const router = Router();
 
-// Public: the UI asks for the root before the user signs in
-router.get('/api/server-info', (req, res) => {
-  const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
-  res.json({ rootDir: config.baseDir, currentPath });
-});
-
 // Changing the served root exposes other folders of this machine, so only
 // the machine itself may do it (the socket address, not a spoofable header).
+function isLocalRequest(req) {
+  return ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress);
+}
+
 function localOnly(req, res, next) {
-  const addr = req.socket.remoteAddress;
-  if (['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(addr)) return next();
+  if (isLocalRequest(req)) return next();
   next(ApiError.forbidden('Changing the root is only allowed from this machine'));
 }
+
+// Public: the UI asks for the root before the user signs in.
+// parentRoot is only offered to the local machine: it lets ".." climb out of the root.
+router.get('/api/server-info', (req, res) => {
+  const currentPath = req.session.currentPath || req.session.lastBrowsedPath || readLatestPath();
+  const parent = path.dirname(config.baseDir);
+  const parentRoot = isLocalRequest(req) && parent !== config.baseDir ? parent : null;
+  res.json({ rootDir: config.baseDir, currentPath, parentRoot });
+});
 
 // Saved logins may be managed from this machine and from devices on the same private network
 // (so a phone can save the mega.nz login). Never from the public internet, and never through a

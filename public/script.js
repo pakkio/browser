@@ -864,6 +864,7 @@ function initializeFileExplorer() {
     let filteredFiles = [];
     let selectedIndex = -1;
     let serverRootDir = '';  // Will be fetched from server
+    let serverParentRoot = '';  // Parent of the root; set only for local requests
     let sortField = 'name';  // name, date, size, type
     let sortAscending = true;  // true = ascending, false = descending
     let skipAutoDisplay = false;  // Set to true when opening specific file from URL
@@ -1009,11 +1010,12 @@ function initializeFileExplorer() {
         
         window.logger.info('displayFiles called with path:', JSON.stringify(path), 'path !== "":', path !== '');
         
-        if (path !== '') {
+        if (path !== '' || serverParentRoot) {
             const parentLi = document.createElement('li');
             parentLi.textContent = '..';
             parentLi.classList.add('parent-dir');
             parentLi.addEventListener('click', () => {
+                if (currentPath === '') { climbOutOfRoot(); return; }
                 window.logger.info('Parent directory clicked. Current path:', JSON.stringify(currentPath));
                 const lastSlashIndex = currentPath.lastIndexOf('/');
                 window.logger.info('Last slash index:', lastSlashIndex);
@@ -1428,7 +1430,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         pathDisplay.innerHTML = '';
         
         // Parent folder button (only show if not at root)
-        if (fullPath && fullPath !== '') {
+        if ((fullPath && fullPath !== '') || serverParentRoot) {
             const parentBtn = document.createElement('button');
             parentBtn.className = 'path-parent';
             parentBtn.title = 'Go to Parent Folder';
@@ -1899,6 +1901,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         .then(response => response.json())
         .then(data => {
             serverRootDir = data.rootDir || '';
+            serverParentRoot = data.parentRoot || '';
             // Only restore saved path if there's no ?file= parameter in URL
             // Otherwise the URL parameter handler will set the correct path
             if (!hasFileParam) {
@@ -2088,9 +2091,25 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         }
     }
     
+    // At the root, ".." re-roots the server one level up (the server only allows this locally)
+    async function climbOutOfRoot() {
+        if (!serverParentRoot) return;
+        try {
+            const res = await fetch('/api/config/root', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ path: serverParentRoot })
+            });
+            if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || 'Cannot leave the root');
+            location.reload();
+        } catch (err) {
+            window.logger.error('Cannot go above root:', err.message);
+        }
+    }
+
     // Go to parent folder
     function goToParent() {
-        if (currentPath === '') return;
+        if (currentPath === '') { climbOutOfRoot(); return; }
         
         const lastSlashIndex = currentPath.lastIndexOf('/');
         if (lastSlashIndex > 0) {
