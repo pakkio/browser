@@ -12,6 +12,15 @@ const { readLatestPath, saveLatestPath } = require('../utils/latestPath');
 
 const router = Router();
 
+// README shown by the "Help" entry of the right-click menu
+router.get('/api/readme', (req, res) => {
+  const file = path.join(__dirname, '..', 'README.md');
+  fs.readFile(file, 'utf8', (err, text) => {
+    if (err) return res.status(404).type('text/plain').send('README not available');
+    res.type('text/plain').send(text);
+  });
+});
+
 // Changing the served root exposes other folders of this machine, so only
 // the machine itself may do it (the socket address, not a spoofable header).
 function isLocalRequest(req) {

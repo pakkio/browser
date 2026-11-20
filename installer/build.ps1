@@ -14,7 +14,7 @@ Remove-Item $stage -Recurse -Force -ErrorAction SilentlyContinue
 New-Item -ItemType Directory $stage, "$stage\app", "$stage\licenses", $out -Force | Out-Null
 
 # app (no tests/specs/dev data), then production dependencies only
-Copy-Item "$root\server.js", "$root\auth.js", "$root\cache.js", "$root\package.json", "$root\package-lock.json" "$stage\app" -ErrorAction SilentlyContinue
+Copy-Item "$root\server.js", "$root\auth.js", "$root\cache.js", "$root\package.json", "$root\package-lock.json", "$root\README.md" "$stage\app" -ErrorAction SilentlyContinue
 Copy-Item "$root\lib", "$root\routes", "$root\middleware", "$root\utils", "$root\public" "$stage\app" -Recurse
 Push-Location "$stage\app"; npm install --omit=dev --no-audit --no-fund; Pop-Location
 if ($LASTEXITCODE) { throw 'npm install failed' }

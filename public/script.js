@@ -78,7 +78,52 @@ function showShortcutHelpPopup() {
     });
 }
 
-// Context menu functionality
+// Show the project README (plain text) in a modal
+async function showReadmePopup() {
+    const existing = document.getElementById('readme-popup');
+    if (existing) existing.remove();
+    let text;
+    try {
+        const res = await fetch('/api/readme');
+        text = res.ok ? await res.text() : 'README not available';
+    } catch (e) {
+        text = 'README not available';
+    }
+    const backdrop = document.createElement('div');
+    backdrop.id = 'readme-popup';
+    backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:2000;display:flex;align-items:center;justify-content:center;';
+    const modal = document.createElement('div');
+    modal.style.cssText = 'background:#23272e;color:#d4d4d4;border-radius:10px;border:1px solid #444;box-shadow:0 4px 24px rgba(0,0,0,0.4);width:min(900px,92vw);max-height:85vh;display:flex;flex-direction:column;';
+    const bar = document.createElement('div');
+    bar.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid #444;';
+    const title = document.createElement('b');
+    title.textContent = 'README / Help';
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '×';
+    closeBtn.style.cssText = 'background:#444;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:1.1rem;';
+    bar.append(title, closeBtn);
+    const body = document.createElement('pre');
+    body.style.cssText = 'margin:0;padding:16px;overflow:auto;white-space:pre-wrap;word-break:break-word;font:0.9rem/1.5 monospace;';
+    body.textContent = text;
+    modal.append(bar, body);
+    backdrop.appendChild(modal);
+    document.body.appendChild(backdrop);
+    const close = () => { backdrop.remove(); document.removeEventListener('keydown', onKey, true); };
+    function onKey(ev) { if (ev.key === 'Escape') close(); }
+    document.addEventListener('keydown', onKey, true);
+    backdrop.addEventListener('click', (e) => { if (e.target === backdrop) close(); });
+    closeBtn.addEventListener('click', close);
+}
+
+// Help entries shared by every right-click menu
+function helpMenuItems() {
+    return [
+        { text: 'Keyboard Shortcuts (?)', icon: '⌨️', action: () => showShortcutHelpPopup() },
+        { text: 'README / Help', icon: '📖', action: () => showReadmePopup() }
+    ];
+}
+
+// Context menu functionality. With no fileName it is the background menu: help entries only.
 function showContextMenu(x, y, filePath, fileName, isDirectory) {
     // Remove any existing context menu
     const existing = document.getElementById('context-menu');
@@ -101,8 +146,8 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
     `;
 
     // Check if file is a media file (video or audio)
-    const extension = fileName.split('.').pop().toLowerCase();
-    const isMediaFile = !isDirectory && (
+    const extension = (fileName || '').split('.').pop().toLowerCase();
+    const isMediaFile = !!fileName && !isDirectory && (
         ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv', 'm4v', 'flv', '3gp', 'ts', 'mts', 'm2ts',
          'mp3', 'wav', 'flac', 'ogg', 'm4a', 'aac', 'wma'].includes(extension)
     );
@@ -137,8 +182,8 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
         });
     }
 
-    // Always add rename and delete
-    menuItems.push(
+    // Always add rename and delete (file entries only)
+    if (fileName) menuItems.push(
         {
             text: `Rename ${isDirectory ? 'Folder' : 'File'}`,
             icon: '✏️',
@@ -155,6 +200,8 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
             action: () => deleteFile(filePath, fileName, isDirectory)
         }
     );
+
+    menuItems.push(...helpMenuItems());
 
     menuItems.forEach((item, index) => {
         const menuItem = document.createElement('div');
@@ -1682,6 +1729,15 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     let wingsInitiallyHidden = false;
     try { wingsInitiallyHidden = localStorage.getItem(WINGS_KEY) === '1'; } catch (e) { /* storage unavailable */ }
     setWingsHidden(wingsInitiallyHidden);
+
+    // Right-click anywhere that is not a file entry opens the help menu
+    document.addEventListener('contextmenu', (event) => {
+        if (event.defaultPrevented) return;
+        const tag = event.target && event.target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'VIDEO' || tag === 'AUDIO') return;
+        event.preventDefault();
+        showContextMenu(event.clientX, event.clientY, null, null, false);
+    });
 
     // '?' opens the shortcut help from anywhere. Registered on window in the capture phase so
     // no renderer, modal or annotation handler can swallow it before it gets here.
