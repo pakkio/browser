@@ -1,12 +1,15 @@
 {
   "name": "browser",
-  "version": "2.7.0",
+  "version": "3.0.0",
   "main": "index.js",
   "scripts": {
     "start": "node server.js /mnt/z",
     "test": "jest --config jest.config.js",
     "test:watch": "jest --watch --config jest.config.js",
     "test:coverage": "jest --coverage --config jest.config.js",
+    "test:parity": "jest --config jest.parity.config.js --runInBand",
+    "build:rust": "cargo build --release --manifest-path server-rs/Cargo.toml",
+    "start:rust": "node -e \"require('child_process').spawn(require('path').join('server-rs','target','release','filebrowser'), process.argv.slice(1), {stdio:'inherit'}).on('exit', c => process.exit(c))\" --",
     "test:min": "jest tests/sanity.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json",
     "test:min:node": "node -e \"console.log('Deprecated - run npm test instead')\"",
     "test:min:direct": "node ./node_modules/jest/bin/jest.js tests/sanity.test.js --runInBand --verbose --config jest.config.js --json --outputFile minimal-jest.json"
