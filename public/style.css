@@ -2011,6 +2011,59 @@ audio, video {
     color: #ff9800;
 }
 
+.tooltip-corrupted {
+    margin-top: 6px;
+    padding: 5px 8px;
+    border-radius: 4px;
+    background: rgba(211, 47, 47, 0.22);
+    border: 1px solid rgba(255, 107, 107, 0.55);
+    color: #ff8a80;
+    font-size: 0.82rem;
+    line-height: 1.35;
+}
+
+.library-book-corrupted {
+    outline: 2px solid rgba(255, 82, 82, 0.7);
+}
+
+.library-corrupted-badge {
+    position: absolute;
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    z-index: 4;
+    padding: 3px 6px;
+    border-radius: 4px;
+    background: rgba(183, 28, 28, 0.92);
+    color: #fff;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-align: center;
+    pointer-events: none;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45);
+}
+
+.library-corrupted-reason {
+    position: absolute;
+    left: 8px;
+    right: 8px;
+    bottom: 8px;
+    z-index: 4;
+    padding: 4px 6px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.78);
+    color: #ffcdd2;
+    font-size: 0.7rem;
+    line-height: 1.25;
+    text-align: center;
+    pointer-events: none;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+}
+
 /* Focus mode ("no wings"): hide the file list and details panel so content fills the window */
 body.wings-hidden .browser,
 body.wings-hidden .right-panel {

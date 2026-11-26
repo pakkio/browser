@@ -190,27 +190,44 @@ pub enum Cover {
 /// directory alone; for a RAR, the first image stored in the archive, so only its start is read
 /// (on a network drive the full listing can mean reading the whole archive).
 pub fn cover_fast(path: &str) -> Result<Cover, String> {
-    let is_rar = read_header(path, 7).map(|h| h.starts_with(b"Rar!\x1a\x07")).unwrap_or(false);
-    if is_rar {
-        let mut open = unrar::Archive::new(path).open_for_processing().map_err(|e| e.to_string())?;
+    let header = read_header(path, 64).map_err(|e| e.to_string())?;
+    if header.is_empty() {
+        return Err("Corrupted: file is empty (0 bytes)".into());
+    }
+    if header.len() >= 16 && header.iter().all(|&b| b == 0) {
+        return Err("Corrupted: file starts with zero bytes (incomplete download)".into());
+    }
+    if header.starts_with(b"Rar!\x1a\x07") {
+        let mut open = unrar::Archive::new(path)
+            .open_for_processing()
+            .map_err(|e| format!("Corrupted RAR archive: {}", e))?;
         loop {
-            let Some(header) = open.read_header().map_err(|e| e.to_string())? else { return Err("No pages".into()) };
-            let name = header.entry().filename.to_string_lossy().into_owned();
-            if header.entry().is_file() && is_page_name(&name) && jsutil::ext_lower(&name) != ".pdf" {
-                let (data, _) = header.read().map_err(|e| e.to_string())?;
+            let Some(hdr) = open.read_header().map_err(|e| format!("Corrupted RAR archive: {}", e))? else {
+                return Err("No pages".into());
+            };
+            let name = hdr.entry().filename.to_string_lossy().into_owned();
+            if hdr.entry().is_file() && is_page_name(&name) && jsutil::ext_lower(&name) != ".pdf" {
+                let (data, _) = hdr.read().map_err(|e| format!("Corrupted RAR archive: {}", e))?;
                 return Ok(Cover::Image(data));
             }
-            open = header.skip().map_err(|e| e.to_string())?;
+            open = hdr.skip().map_err(|e| format!("Corrupted RAR archive: {}", e))?;
         }
     }
-    let first = zip_page_names(path)?.into_iter().next().ok_or("No pages")?;
+    if !header.starts_with(b"PK\x03\x04") && !header.starts_with(b"PK\x05\x06") {
+        return Err("Corrupted: invalid archive header (not a RAR or ZIP file)".into());
+    }
+    let first = zip_page_names(path)
+        .map_err(|e| format!("Corrupted ZIP archive: {}", e))?
+        .into_iter()
+        .next()
+        .ok_or("No pages")?;
     if jsutil::ext_lower(&first) == ".pdf" {
         return zip_entry_to_temp(path, &first).map(Cover::Pdf);
     }
-    let mut z = crate::archives::open_zip(path).map_err(|e| e.to_string())?;
-    let mut f = z.by_name(&first).map_err(|e| e.to_string())?;
+    let mut z = crate::archives::open_zip(path).map_err(|e| format!("Corrupted ZIP archive: {}", e))?;
+    let mut f = z.by_name(&first).map_err(|e| format!("Corrupted ZIP archive: {}", e))?;
     let mut buf = Vec::new();
-    f.read_to_end(&mut buf).map_err(|e| e.to_string())?;
+    f.read_to_end(&mut buf).map_err(|e| format!("Corrupted ZIP archive: {}", e))?;
     Ok(Cover::Image(buf))
 }
 

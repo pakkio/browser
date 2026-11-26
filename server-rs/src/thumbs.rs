@@ -162,10 +162,10 @@ fn cached(app: &App, path: &str, size: u32, mtime: i64) -> Option<Thumb> {
     if let Ok(d) = std::fs::read(base.with_extension("svg")) {
         return Some(Ok((d, "image/svg+xml")));
     }
-    let none = base.with_extension("none");
-    let fresh = std::fs::metadata(&none).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|age| age < MISSING_TTL);
+    let err = base.with_extension("err");
+    let fresh = std::fs::metadata(&err).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).map(|age| age < MISSING_TTL);
     match fresh {
-        Some(true) => Some(Err(std::fs::read_to_string(none).unwrap_or_else(|_| "No thumbnail".into()))),
+        Some(true) => Some(Err(std::fs::read_to_string(err).unwrap_or_else(|_| "No thumbnail".into()))),
         _ => None,
     }
 }
@@ -180,8 +180,41 @@ fn store_svg(app: &App, path: &str, size: u32, mtime: i64, data: &[u8]) {
 
 fn store_missing(app: &App, path: &str, sizes: &[u32], mtime: i64, why: &str) {
     for &s in sizes {
-        let _ = std::fs::write(cache_base(app, path, s, mtime).with_extension("none"), why);
+        let _ = std::fs::write(cache_base(app, path, s, mtime).with_extension("err"), why);
     }
+}
+
+/// True when a thumbnail failure means the file itself is corrupted or unreadable (as opposed to
+/// simply having no cover image, or a transient timeout).
+pub fn is_corrupted_error(err: &str) -> bool {
+    let e = err.to_ascii_lowercase();
+    e.starts_with("corrupted")
+        || e.contains("invalid archive")
+        || e.contains("not a valid zip")
+        || e.contains("unreadable image")
+        || e.contains("invalid pdf")
+        || e.contains("could not read the video")
+        || e.contains("could not read a frame")
+        || e.contains("zero bytes")
+        || e.contains("file is empty")
+}
+
+/// Quick header check on local files so empty or zero-filled incomplete downloads report a clear reason.
+fn check_file_header(path: &str, kind: Kind) -> Result<(), String> {
+    use std::io::Read;
+    let mut f = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    let mut buf = [0u8; 64];
+    let n = f.read(&mut buf).map_err(|e| e.to_string())?;
+    if n == 0 {
+        return Err("Corrupted: file is empty (0 bytes)".into());
+    }
+    if n >= 16 && buf[..n].iter().all(|&b| b == 0) {
+        return Err("Corrupted: file starts with zero bytes (incomplete download)".into());
+    }
+    if kind == Kind::Pdf && !buf[..n].windows(4).any(|w| w == b"%PDF") {
+        return Err("Corrupted: invalid PDF header".into());
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -189,6 +222,12 @@ fn store_missing(app: &App, path: &str, sizes: &[u32], mtime: i64, why: &str) {
 
 /// The image a thumbnail is made from (a comic's first page, an EPUB cover, a video frame...).
 async fn source_image(app: &App, kind: Kind, path: &str) -> Result<Vec<u8>, String> {
+    if kind != Kind::Comic {
+        let p = path.to_string();
+        tokio::task::spawn_blocking(move || check_file_header(&p, kind))
+            .await
+            .map_err(|e| e.to_string())??;
+    }
     match kind {
         Kind::Image => tokio::fs::read(path).await.map_err(|e| e.to_string()),
         Kind::Comic => {
@@ -409,7 +448,10 @@ pub async fn batch(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
                     .unwrap_or_else(|_| Err("Timed out".into()));
                 match made {
                     Ok((data, mime)) => json!({ "name": name, "type": mime, "data": base64::engine::general_purpose::STANDARD.encode(data) }),
-                    Err(e) => json!({ "name": name, "error": e }),
+                    Err(e) => {
+                        let corrupted = is_corrupted_error(&e);
+                        json!({ "name": name, "error": e, "corrupted": corrupted })
+                    }
                 }
             };
             let _ = tx.send(format!("{}\n", line)).await;
@@ -573,7 +615,10 @@ pub async fn archive_batch(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
             if let Some(hit) = cached(&app_bg, &cache_key, size, mtime) {
                 let line = match hit {
                     Ok((data, mime)) => json!({ "name": name, "type": mime, "data": base64::engine::general_purpose::STANDARD.encode(data) }),
-                    Err(e) => json!({ "name": name, "error": e }),
+                    Err(e) => {
+                        let corrupted = is_corrupted_error(&e);
+                        json!({ "name": name, "error": e, "corrupted": corrupted })
+                    }
                 };
                 if tx.send(format!("{}\n", line)).await.is_err() {
                     return;
@@ -655,12 +700,16 @@ pub async fn archive_batch(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
                         .unwrap_or_else(|_| Err("Timed out".into()));
                         match made {
                             Ok((data, mime)) => json!({ "name": name, "type": mime, "data": base64::engine::general_purpose::STANDARD.encode(data) }),
-                            Err(e) => json!({ "name": name, "error": e }),
+                            Err(e) => {
+                                let corrupted = is_corrupted_error(&e);
+                                json!({ "name": name, "error": e, "corrupted": corrupted })
+                            }
                         }
                     }
                     Err(why) => {
                         store_missing(&app_r, &cache_key, &levels_r, mtime, &why);
-                        json!({ "name": name, "error": why })
+                        let corrupted = is_corrupted_error(&why);
+                        json!({ "name": name, "error": why, "corrupted": corrupted })
                     }
                 };
                 let _ = tx_r.send(format!("{}\n", line)).await;
@@ -710,5 +759,15 @@ mod tests {
         assert_eq!(kind_of("a.JPG"), Some(Kind::Jpeg));
         assert_eq!(kind_of("a.cbr"), Some(Kind::Comic));
         assert_eq!(kind_of("a.txt"), None);
+    }
+
+    #[test]
+    fn corrupted_error_classification() {
+        assert!(is_corrupted_error("Corrupted: file starts with zero bytes (incomplete download)"));
+        assert!(is_corrupted_error("Corrupted: invalid PDF header"));
+        assert!(is_corrupted_error("Unreadable image"));
+        assert!(!is_corrupted_error("No cover"));
+        assert!(!is_corrupted_error("No thumbnail"));
+        assert!(!is_corrupted_error("Timed out"));
     }
 }

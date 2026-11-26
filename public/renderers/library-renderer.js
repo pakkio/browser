@@ -439,6 +439,11 @@ class LibraryRenderer {
 
         let html = `<div class="tooltip-filename">${file.name}</div>`;
         html += `<div class="tooltip-size">${this.formatSize(file.size)}</div>`;
+        if (file.corruptedReason) {
+            const safeReason = String(file.corruptedReason)
+                .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<div class="tooltip-corrupted">⚠️ ${safeReason}</div>`;
+        }
 
         if (annotation) {
             html += '<div class="tooltip-annotations">';
@@ -576,10 +581,12 @@ class LibraryRenderer {
         if (jobs.length === 0) return;
 
         const byName = new Map(jobs.map(j => [j.name, j]));
-        const tiny = await this.streamThumbnails(dirPath, jobs, 96, abort.signal, (job, url) => {
+        const tiny = await this.streamThumbnails(dirPath, jobs, 96, abort.signal, (job, url, msg) => {
             if (url) {
                 job.ok = true;
                 this.showThumbnail(job.item, url);
+            } else if (msg && msg.corrupted) {
+                this.showCorrupted(job.item, job.name, msg.error);
             } else {
                 this.showPlaceholder(job.item);
             }
@@ -633,7 +640,7 @@ class LibraryRenderer {
             const job = byName.get(msg.name);
             if (!job || job.done) return;
             job.done = true;
-            onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null);
+            onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null, msg);
         };
         try {
             for (;;) {
@@ -676,6 +683,33 @@ class LibraryRenderer {
         const img = item.querySelector('img.library-thumb-img');
         if (img) img.style.display = 'none';
         item.querySelector('.library-placeholder-icon').style.display = 'flex';
+    }
+
+    showCorrupted(item, fileName, reason) {
+        this.showPlaceholder(item);
+        const text = reason || 'Corrupted or unreadable file';
+        const shortText = text.replace(/^Corrupted:\s*/i, '');
+        const book = item.closest('.library-book');
+        if (book) {
+            book.classList.add('library-book-corrupted');
+            book.title = `⚠️ ${text}`;
+        }
+        const f = this.files && this.files.find(entry => entry.name === fileName);
+        if (f) f.corruptedReason = text;
+
+        if (!item.querySelector('.library-corrupted-badge')) {
+            const badge = document.createElement('div');
+            badge.className = 'library-corrupted-badge';
+            badge.textContent = '⚠️ CORRUPTED';
+            item.appendChild(badge);
+        }
+        let reasonEl = item.querySelector('.library-corrupted-reason');
+        if (!reasonEl) {
+            reasonEl = document.createElement('div');
+            reasonEl.className = 'library-corrupted-reason';
+            item.appendChild(reasonEl);
+        }
+        reasonEl.textContent = shortText;
     }
 
     updateThumbProgress(total, loaded) {

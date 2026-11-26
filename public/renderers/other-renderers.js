@@ -928,7 +928,7 @@ class ArchiveRenderer {
                 const job = byName.get(msg.name);
                 if (!job || job.done) return;
                 job.done = true;
-                onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null);
+                onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null, msg);
             };
             try {
                 for (;;) {
@@ -948,10 +948,30 @@ class ArchiveRenderer {
             return 'ok';
         };
 
-        const tinyStatus = await streamBatch(jobs, 96, (job, url) => {
+        const tinyStatus = await streamBatch(jobs, 96, (job, url, msg) => {
             if (url) {
                 job.ok = true;
                 showThumb(job.el, url);
+            } else if (msg && msg.corrupted) {
+                const reason = msg.error || 'Corrupted file';
+                const book = job.el.closest('.library-book');
+                if (book) {
+                    book.classList.add('library-book-corrupted');
+                    book.title = `⚠️ ${reason}`;
+                }
+                if (!job.el.querySelector('.library-corrupted-badge')) {
+                    const badge = document.createElement('div');
+                    badge.className = 'library-corrupted-badge';
+                    badge.textContent = '⚠️ CORRUPTED';
+                    job.el.appendChild(badge);
+                }
+                let reasonEl = job.el.querySelector('.library-corrupted-reason');
+                if (!reasonEl) {
+                    reasonEl = document.createElement('div');
+                    reasonEl.className = 'library-corrupted-reason';
+                    job.el.appendChild(reasonEl);
+                }
+                reasonEl.textContent = reason.replace(/^Corrupted:\s*/i, '');
             }
             loaded++;
             updateProgress();
