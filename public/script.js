@@ -46,7 +46,7 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">Arrow keys</td><td>Navigate file list</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Enter</td><td>Open selected file</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">/</td><td>Focus search</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">f</td><td>Toggle full screen</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">f / Ctrl+F</td><td>Toggle full screen</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">h / z</td><td>Hide/show side panels</td></tr>
         </table>
         <h3 style="margin:18px 0 0 0;color:#00aacc;font-size:1.05rem;">Comic viewer</h3>
@@ -275,6 +275,7 @@ async function renameFile(filePath, currentName) {
             // Refresh the file list
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+                document.dispatchEvent(new CustomEvent('files-changed'));
             }
             
             // Refresh annotations cache
@@ -315,6 +316,7 @@ async function deleteFile(filePath, fileName, isDirectory) {
             // Refresh the file list
             if (window.fileExplorer && window.fileExplorer.loadFiles) {
                 window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+                document.dispatchEvent(new CustomEvent('files-changed'));
             }
             
             // Refresh annotations cache
@@ -837,6 +839,7 @@ async function moveFile(filePath, fileName, isDirectory) {
                 // Refresh the file list
                 if (window.fileExplorer && window.fileExplorer.loadFiles) {
                     window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
+                document.dispatchEvent(new CustomEvent('files-changed'));
                 }
                 
                 // Refresh annotations cache
@@ -1787,7 +1790,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     fullscreenBtn.id = 'fullscreen-toggle';
     fullscreenBtn.className = 'wings-toggle fullscreen-toggle';
     fullscreenBtn.textContent = '⛶';
-    fullscreenBtn.title = 'Toggle full screen (F)';
+    fullscreenBtn.title = 'Toggle full screen (F or Ctrl+F)';
     fullscreenBtn.addEventListener('click', (event) => {
         toggleFullscreen();
         event.currentTarget.blur(); // hand focus back to the page so F keeps working
@@ -1798,6 +1801,12 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     // own 'f' or 'z' (comic reader's panel zoom or video player's focus view) has already called
     // preventDefault and wins
     window.addEventListener('keydown', (event) => {
+        // Ctrl+F: full screen too (instead of the browser's find bar), from any view
+        if (event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && (event.key === 'f' || event.key === 'F')) {
+            event.preventDefault();
+            toggleFullscreen();
+            return;
+        }
         if (event.defaultPrevented || event.ctrlKey || event.altKey || event.metaKey) return;
         const tag = event.target && event.target.tagName;
         if (tag === 'INPUT' || tag === 'SELECT' || tag === 'TEXTAREA' || (event.target && event.target.isContentEditable)) return;

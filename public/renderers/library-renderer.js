@@ -370,6 +370,23 @@ class LibraryRenderer {
             this.openInNewTab(filePath, file.name);
         });
 
+        // Right-click: select the tile and offer rename / move / delete (same menu as the list)
+        item.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+            this.hideTooltip();
+            const container = item.closest('.library-shelf');
+            if (container) {
+                container.querySelectorAll('.library-book.selected').forEach(el => el.classList.remove('selected'));
+            }
+            item.classList.add('selected');
+            const filePath = dirPath ? `${dirPath}/${file.name}` : file.name;
+            // The list view refreshes after the operation; this view has to redraw itself
+            this.refreshAfterChange = true;
+            if (typeof showContextMenu === 'function') {
+                showContextMenu(e.clientX, e.clientY, filePath, file.name, file.isDirectory);
+            }
+        });
+
         return item;
     }
 
@@ -531,7 +548,152 @@ class LibraryRenderer {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
+    /**
+     * Thumbnails in two levels of detail, for the whole folder in one streamed request each:
+     * a tiny pass fills every tile quickly (it drives the progress bar), then a sharp pass
+     * replaces them. The server renders them in parallel and caches both levels, so a folder
+     * seen before shows at once. Servers without /api/thumbnails get one request per tile.
+     */
     async loadThumbnails(shelf, dirPath) {
+        if (this.thumbAbort) this.thumbAbort.abort();
+        const abort = new AbortController();
+        this.thumbAbort = abort;
+
+        const items = [...shelf.querySelectorAll('.library-thumbnail')];
+        const total = items.length;
+        let loaded = 0;
+        const updateProgress = () => this.updateThumbProgress(total, loaded);
+        updateProgress();
+
+        const THUMB_TYPES = new Set(['video', 'image', 'pdf', 'comic', 'epub', 'docx']);
+        const jobs = [];
+        for (const item of items) {
+            if (THUMB_TYPES.has(item.dataset.type)) jobs.push({ item, name: item.dataset.file, ok: false });
+            else loaded++;
+        }
+        updateProgress();
+        if (jobs.length === 0) return;
+
+        const byName = new Map(jobs.map(j => [j.name, j]));
+        const tiny = await this.streamThumbnails(dirPath, jobs, 96, abort.signal, (job, url) => {
+            if (url) {
+                job.ok = true;
+                this.showThumbnail(job.item, url);
+            } else {
+                this.showPlaceholder(job.item);
+            }
+            loaded++;
+            updateProgress();
+        }, byName);
+        if (tiny === 'unsupported') {
+            if (!abort.signal.aborted) this.loadThumbnailsOneByOne(shelf, dirPath);
+            return;
+        }
+        if (abort.signal.aborted) return;
+        // Whatever never arrived (stream cut) must not leave the bar stuck
+        for (const job of jobs) if (!job.done) { job.done = true; loaded++; }
+        updateProgress();
+
+        const sharp = jobs.filter(j => j.ok);
+        if (sharp.length) {
+            await this.streamThumbnails(dirPath, sharp, 400, abort.signal, (job, url) => {
+                if (url) this.showThumbnail(job.item, url);
+            }, byName);
+        }
+    }
+
+    /**
+     * POST the folder's file names and handle each thumbnail as the server streams it back.
+     * Returns 'unsupported' when the server has no batch endpoint.
+     */
+    async streamThumbnails(dirPath, jobs, size, signal, onThumb, byName) {
+        for (const job of jobs) job.done = false;
+        let response;
+        try {
+            response = await fetch('/api/thumbnails', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dir: dirPath || '', files: jobs.map(j => j.name), size }),
+                signal,
+            });
+        } catch (e) {
+            return signal.aborted ? 'aborted' : 'unsupported';
+        }
+        if (response.status === 404 || response.status === 405) return 'unsupported';
+        if (!response.ok || !response.body) return 'failed';
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        const handle = (line) => {
+            if (!line.trim()) return;
+            let msg;
+            try { msg = JSON.parse(line); } catch { return; }
+            const job = byName.get(msg.name);
+            if (!job || job.done) return;
+            job.done = true;
+            onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null);
+        };
+        try {
+            for (;;) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                buffer += decoder.decode(value, { stream: true });
+                let nl;
+                while ((nl = buffer.indexOf('\n')) >= 0) {
+                    handle(buffer.slice(0, nl));
+                    buffer = buffer.slice(nl + 1);
+                }
+            }
+            handle(buffer);
+        } catch (e) {
+            if (!signal.aborted) window.logger.info('Thumbnail stream interrupted', e);
+        }
+        return 'ok';
+    }
+
+    showThumbnail(item, url) {
+        let img = item.querySelector('img.library-thumb-img');
+        if (!img) {
+            img = document.createElement('img');
+            img.className = 'library-thumb-img';
+            img.onload = () => {
+                // Tile takes the image's own shape so the shelf packs like a collage
+                if (img.naturalWidth && img.naturalHeight) {
+                    const ratio = Math.min(1.8, Math.max(0.5, img.naturalWidth / img.naturalHeight));
+                    item.closest('.library-book').style.setProperty('--thumb-ratio', ratio.toFixed(3));
+                }
+                item.querySelector('.library-placeholder-icon').style.display = 'none';
+            };
+            img.onerror = () => this.showPlaceholder(item);
+            item.insertBefore(img, item.firstChild);
+        }
+        img.src = url;
+    }
+
+    showPlaceholder(item) {
+        const img = item.querySelector('img.library-thumb-img');
+        if (img) img.style.display = 'none';
+        item.querySelector('.library-placeholder-icon').style.display = 'flex';
+    }
+
+    updateThumbProgress(total, loaded) {
+        const percent = total > 0 ? Math.round((loaded / total) * 100) : 100;
+        const percentEl = document.getElementById('library-loading-percent');
+        const fillEl = document.getElementById('library-loading-fill');
+        const loadingEl = document.getElementById('library-loading');
+        if (percentEl) percentEl.textContent = `${percent}%`;
+        if (fillEl) fillEl.style.width = `${percent}%`;
+        if (percent >= 100 && loadingEl) {
+            setTimeout(() => {
+                loadingEl.classList.add('complete');
+                setTimeout(() => { loadingEl.style.display = 'none'; }, 300);
+            }, 200);
+        }
+    }
+
+    /** One request per tile (servers without /api/thumbnails). */
+    async loadThumbnailsOneByOne(shelf, dirPath) {
         const items = shelf.querySelectorAll('.library-thumbnail');
         const total = items.length;
         let loaded = 0;
@@ -631,3 +793,12 @@ class LibraryRenderer {
 
 // Create global instance
 window.libraryRenderer = new LibraryRenderer();
+
+// A file renamed, moved or deleted from this view's right-click menu: show the folder again
+document.addEventListener('files-changed', () => {
+    const lib = window.libraryRenderer;
+    if (!lib.refreshAfterChange) return;
+    lib.refreshAfterChange = false;
+    const contentOther = document.getElementById('content-other');
+    if (contentOther) lib.render(lib.currentPath, contentOther);
+});
