@@ -18,7 +18,16 @@ npm run test:watch
 
 # Check project health
 node server.js --help
+
+# Rust server (server-rs/, shipped by the Windows installer)
+npm run build:rust
+cd server-rs && cargo test --release && cargo clippy --release
+npm run test:parity   # Node vs Rust, request by request
 ```
+
+The Node server (server.js, lib/, routes/) and the Rust server (server-rs/) answer the same API.
+A change to one belongs in the other too; add a request to tests/parity/parity.test.js to keep
+them in step.
 
 ## Commit Guidelines
 
@@ -76,7 +85,9 @@ browser/
 ├── lib/              # Server-side modules
 ├── public/           # Frontend assets
 │   └── renderers/    # Document type renderers
-├── tests/            # Test files
+├── server-rs/        # Rust port of the server (one program, used by the MSI)
+├── mega-sidecar/     # Node helper the Rust server runs for mega.nz
+├── tests/            # Test files (tests/parity: Node vs Rust)
 ├── .env.example      # Environment template
 ├── .gitignore        # Git ignore rules
 └── server.js         # Main server file

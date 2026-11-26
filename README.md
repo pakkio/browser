@@ -95,14 +95,41 @@ The server runs on Windows Node. Install the programs from the table above and m
 
 #### MSI installer
 
-`installeruild.ps1` builds a small (about 5 MB) per-user MSI. On first launch it downloads Node.js,
-FFmpeg and the PDF tools (Poppler, GraphicsMagick, Ghostscript; about 190 MB, internet needed once) into
-`%LOCALAPPDATA%FileBrowser	ools`, checking each against the pinned SHA-256 in
-`installer	ools-manifest.json`. Node is required; if FFmpeg or the PDF tools cannot be fetched the server
-still starts, without video or PDF previews. Uninstalling removes the downloaded tools.
+`installer\build.ps1` builds a small (about 4 MB) per-user MSI around the Rust server
+(`filebrowser.exe`, see [Rust server](#rust-server)); it needs Rust (`cargo`) and Node/npm on the
+build machine. Right after installing, it fetches every tool that is not already on the machine
+(FFmpeg, the PDF tools Poppler and Ghostscript, and Node.js for mega.nz; internet needed once) into
+`%LOCALAPPDATA%\FileBrowser\tools`, checking each against the pinned SHA-256 in
+`installer\tools-manifest.json`. Tools already on `PATH` (your own ffmpeg, Poppler, Ghostscript or
+Node.js) are used instead and not downloaded. If a download fails, the next launch tries again; the
+server still starts, without video or PDF previews. RAR and CBR archives need nothing extra: the
+UnRAR library is built into `filebrowser.exe`. Uninstalling removes the downloaded tools.
 
-When the PDF tools change, run `installerpack-pdf-tools.ps1` and upload `installeroutpdf-tools-win64.zip`
+When the PDF tools change, run `installer\pack-pdf-tools.ps1` and upload `installer\out\pdf-tools-win64.zip`
 as the `tools-1` release asset named in the manifest.
+
+Installed, File Browser opens in its own window (no browser needed): from the Start menu, from
+Explorer's right-click menu on any folder or drive, or with `filebrowser [FOLDER]` in a terminal.
+Closing the window stops it. `filebrowser --serve [FOLDER]` runs only the server, for any browser
+at http://localhost:3000. The window uses Microsoft Edge WebView2, which Windows 10 and 11 include;
+its log is `%LOCALAPPDATA%\FileBrowser\app.log`.
+
+#### Rust server
+
+`server-rs/` is a port of the Node server to Rust: the same routes and answers, serving the same
+`public/` web app, with no runtime to install. It builds two programs: `filebrowser` (the server,
+for a terminal) and `filebrowser-app` (the same server inside its own window, Windows). They are
+what the MSI ships; `server.js` remains for development and for platforms without a build.
+
+```bash
+npm run build:rust            # cargo build --release in server-rs
+npm run start:rust -- /mnt/z  # serve a folder (default: the current one)
+server-rs/target/release/filebrowser --help
+```
+
+It reads the same `.env` settings and uses the same external tools when they are on `PATH`
+(`ffmpeg`/`ffprobe`, `pdftoppm`/`pdfinfo`/`pdftotext`, `gs`); RAR archives are read in-process.
+mega.nz is reached through `mega-sidecar/`, a small Node.js helper the server starts on demand.
 
 #### Quick install (PowerShell)
 
@@ -206,7 +233,15 @@ npm run test:coverage
 
 # Run tests in watch mode during development
 npm run test:watch
+
+# Compare the Rust server with the Node server, request by request (build it first)
+npm run build:rust && npm run test:parity
 ```
+
+The parity tests start both servers on identical copies of a generated folder (archives, comics,
+EPUB, DOCX, subtitles, and video clips when `ffmpeg` is installed) and require the same status,
+headers and body from each. Set `PARITY_TOOLS_PATH` to folders holding Poppler and Ghostscript to
+include PDF rendering.
 
 ### Test Coverage
 
