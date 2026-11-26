@@ -1,7 +1,8 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs" xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util" xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="File Browser" Manufacturer="Pakkio" Version="$(var.Version)"
            UpgradeCode="7d3f5c1e-2b8a-4e6f-9a41-0c5b7e2d8f13" Scope="perUser">
-    <MajorUpgrade DowngradeErrorMessage="A newer version of File Browser is already installed." />
+    <!-- Same-version rebuilds replace the installed copy instead of being installed beside it -->
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of File Browser is already installed." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
 
     <StandardDirectory Id="LocalAppDataFolder">
@@ -22,10 +23,9 @@
       <Environment Id="PathEnv" Name="PATH" Value="[INSTALLFOLDER]" Action="set" Part="last" System="no" Permanent="no" />
     </Component>
 
-    <!-- Start menu: asks which folder to serve; runs with a taskbar icon to stop it -->
+    <!-- Start menu: File Browser in its own window; asks which folder to open -->
     <Component Id="StartShortcut" Directory="StartDir" Guid="5e8b2d70-1a94-4c3f-b6d8-e47a0f93c215">
-      <Shortcut Id="StartLnk" Name="File Browser" Target="[SystemFolder]wscript.exe"
-                Arguments="&quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot;"
+      <Shortcut Id="StartLnk" Name="File Browser" Target="[INSTALLFOLDER]app\filebrowser-app.exe"
                 WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
       <RemoveFolder Id="RmStartDir" On="uninstall" />
       <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="StartShortcut" Type="integer" Value="1" KeyPath="yes" />
@@ -36,22 +36,22 @@
       <RegistryKey Root="HKCU" Key="Software\Classes\Directory\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open with File Browser" />
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%1&quot;" /></RegistryKey>
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]app\filebrowser-app.exe&quot; &quot;%1&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open File Browser here" />
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%V&quot;" /></RegistryKey>
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]app\filebrowser-app.exe&quot; &quot;%V&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Directory\Background\shell\FileBrowserHelp">
         <RegistryValue Type="string" Value="File Browser help &amp; shortcuts" />
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; --help &quot;%V&quot;" /></RegistryKey>
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]app\filebrowser-app.exe&quot; --help-page &quot;%V&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryKey Root="HKCU" Key="Software\Classes\Drive\shell\FileBrowser">
         <RegistryValue Type="string" Value="Open with File Browser" />
         <RegistryValue Name="Icon" Type="string" Value="[INSTALLFOLDER]filebrowser.ico" />
-        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot; &quot;%1&quot;" /></RegistryKey>
+        <RegistryKey Key="command"><RegistryValue Type="string" Value="&quot;[INSTALLFOLDER]app\filebrowser-app.exe&quot; &quot;%1&quot;" /></RegistryKey>
       </RegistryKey>
       <RegistryValue Root="HKCU" Key="Software\FileBrowser" Name="ExplorerVerbs" Type="integer" Value="1" KeyPath="yes" />
     </Component>
@@ -65,11 +65,20 @@
       <util:RemoveFolderEx On="uninstall" Property="TOOLSDIR" />
     </Component>
 
+    <!-- Right after installing: fetch every tool that is not already on this machine (ffmpeg,
+         Poppler, Ghostscript, Node.js for mega.nz), with a progress window. It runs on its own so a
+         failed download never fails the install; the first launch tries again. -->
+    <CustomAction Id="FetchTools" Directory="INSTALLFOLDER" Return="asyncNoWait" Impersonate="yes" Execute="immediate"
+                  ExeCommand="&quot;[System64Folder]WindowsPowerShell\v1.0\powershell.exe&quot; -NoProfile -ExecutionPolicy Bypass -STA -WindowStyle Hidden -File &quot;[INSTALLFOLDER]fetch-tools.ps1&quot; -Gui -Features mega" />
+    <InstallExecuteSequence>
+      <Custom Action="FetchTools" After="InstallFinalize" Condition="NOT REMOVE" />
+    </InstallExecuteSequence>
+
     <!-- Last page of the installer: offers to start File Browser right away -->
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOXTEXT" Value="Launch File Browser" />
     <Property Id="WIXUI_EXITDIALOGOPTIONALCHECKBOX" Value="1" />
     <CustomAction Id="LaunchApp" Directory="INSTALLFOLDER" Return="asyncNoWait" Impersonate="yes"
-                  ExeCommand="&quot;[SystemFolder]wscript.exe&quot; &quot;[INSTALLFOLDER]filebrowser-tray.vbs&quot;" />
+                  ExeCommand="&quot;[INSTALLFOLDER]app\filebrowser-app.exe&quot;" />
     <UI>
       <UIRef Id="WixUI_ErrorProgressText" />
       <DialogRef Id="ExitDialog" />

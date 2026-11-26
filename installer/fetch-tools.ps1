@@ -3,17 +3,47 @@ Makes sure the tools listed in tools-manifest.json are present under
 %LOCALAPPDATA%\FileBrowser\tools, downloading and SHA-256-checking any that are missing.
 Each tool lives in tools\<name>-<version>, so a manifest bump fetches the new version.
 
-  fetch-tools.ps1 [-Gui]   returns @{ Node = <node.exe>; Path = <dirs for PATH> }
-  fetch-tools.ps1 -Cmd     writes tools\env.cmd (FB_NODE / FB_PATH) for filebrowser.cmd
+A tool whose "commands" are all already on PATH (an ffmpeg, Poppler, Ghostscript or Node.js the
+user installed) is used from there and not downloaded. "gs|gswin64c" means either name will do.
 
-A failed "required" tool (node) throws; the others only warn, and the server starts without them.
+A tool with a "feature" (Node.js, which only mega.nz browsing needs) is fetched only when that
+feature is asked for with -Features, and is used from then on. The installer asks for every
+feature right after installing, so all tools are in place before the first launch.
+
+  fetch-tools.ps1 [-Gui]          returns @{ Node = <node.exe or $null>; Path = <dirs for PATH> }
+  fetch-tools.ps1 -Cmd            writes tools\env.cmd (FB_NODE / FB_PATH) for filebrowser.cmd
+  fetch-tools.ps1 -Features mega  also fetches the tools of that feature
+
+A failed "required" tool throws; the others only warn, and the server starts without them.
 #>
-param([switch]$Gui, [switch]$Cmd)
+param([switch]$Gui, [switch]$Cmd, [string[]]$Features = @())
 $ErrorActionPreference = 'Stop'
 
 $manifest = Get-Content (Join-Path $PSScriptRoot 'tools-manifest.json') -Raw | ConvertFrom-Json
 $toolsRoot = Join-Path $env:LOCALAPPDATA 'FileBrowser\tools'
 New-Item -ItemType Directory $toolsRoot -Force | Out-Null
+
+# The post-install run and a first launch can overlap: one fetches, the other waits for it
+$lock = New-Object System.Threading.Mutex($false, 'Local\FileBrowserFetchTools')
+try { [void]$lock.WaitOne() } catch [System.Threading.AbandonedMutexException] { }
+
+# Run from the installer, this script sees the Windows Installer service's PATH, which lacks the
+# user's own entries (where winget puts ffmpeg, for one). Look tools up on the full PATH.
+$env:Path = @($env:Path, [Environment]::GetEnvironmentVariable('Path', 'Machine'),
+    [Environment]::GetEnvironmentVariable('Path', 'User')) -join ';'
+
+# Path of a tool's main program when all its commands are already installed, else $null
+function Find-SystemTool($tool) {
+    if (-not $tool.commands) { return $null }
+    $first = $null
+    foreach ($alternatives in $tool.commands) {
+        $found = $alternatives -split '\|' | ForEach-Object { Get-Command "$_.exe" -CommandType Application -ErrorAction SilentlyContinue } |
+            Where-Object { $_.Source -notlike "$toolsRoot*" } | Select-Object -First 1
+        if (-not $found) { return $null }
+        if (-not $first) { $first = $found.Source }
+    }
+    $first
+}
 
 $form = $null
 if ($Gui) {
@@ -90,6 +120,16 @@ function Install-Tool($tool, $dest) {
 $dirs = @(); $node = $null; $problems = @()
 foreach ($tool in $manifest.tools) {
     $dest = Join-Path $toolsRoot ("{0}-{1}" -f $tool.name, $tool.version)
+    # Already installed on this machine (and not by us): use it, download nothing
+    if (-not (Test-Path $dest)) {
+        $system = Find-SystemTool $tool
+        if ($system) {
+            if ($tool.name -eq 'node') { $node = $system }
+            continue
+        }
+    }
+    # Tools for an optional feature are only fetched when that feature is asked for
+    if ($tool.feature -and $tool.feature -notin $Features -and -not (Test-Path $dest)) { continue }
     try {
         if (-not (Test-Path $dest)) { Install-Tool $tool $dest }
         foreach ($d in $tool.dirs) { $dirs += (Join-Path $dest $d).TrimEnd('\') }
@@ -106,6 +146,8 @@ if ($problems) { Write-Warning ("Optional tools unavailable (some previews will 
 $keep = $manifest.tools | ForEach-Object { "{0}-{1}" -f $_.name, $_.version }
 Get-ChildItem $toolsRoot -Directory | Where-Object { $_.Name -notin $keep } |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+
+$lock.ReleaseMutex()
 
 $path = $dirs -join ';'
 if ($Cmd) {

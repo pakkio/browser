@@ -3,11 +3,15 @@
     {
       "name": "node",
       "version": "25.9.0",
-      "required": true,
+      "required": false,
+      "feature": "mega",
       "url": "https://nodejs.org/dist/v25.9.0/node-v25.9.0-win-x64.zip",
       "sha256": "929552b8305effac843ba7b4270c437aefb702fc3fbd73fcd1bffd35d4ac284e",
       "dirs": [
         ""
+      ],
+      "commands": [
+        "node"
       ]
     },
     {
@@ -18,6 +22,10 @@
       "sha256": "60f467265b1e312373dbcd92200c2618a74850f98d3d078e94296bb3fa2047ba",
       "dirs": [
         "bin"
+      ],
+      "commands": [
+        "ffmpeg",
+        "ffprobe"
       ]
     },
     {
@@ -30,6 +38,12 @@
         "poppler",
         "graphicsmagick",
         "ghostscript\\bin"
+      ],
+      "commands": [
+        "pdftoppm",
+        "pdfinfo",
+        "pdftotext",
+        "gs|gswin64c"
       ]
     }
   ]
