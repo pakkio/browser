@@ -179,3 +179,6 @@ android/*.keystore
 
 # README QR code for the Android APK
 !docs/android-apk-qr.svg
+
+# Rust server build output
+server-rs/target/

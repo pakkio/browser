@@ -52,6 +52,33 @@ run folder="":
     Write-Host "  stop: Ctrl+C | other folder: just run PATH | other port: `$env:PORT=4000; just run"
     node server.js $dir
 
+# Same, with the Rust server (built first if needed): `just rust` or `just rust D:\Comics`
+[windows]
+[extension: '.ps1']
+rust folder="":
+    #!powershell.exe -File
+    $ErrorActionPreference = 'Stop'
+    $exe = 'server-rs\target\release\filebrowser.exe'
+    if (-not (Test-Path $exe)) { cargo build --release --manifest-path server-rs\Cargo.toml }
+    $port = if ($env:PORT) { $env:PORT } else { '3000' }
+    $env:PORT = $port
+    $dir = '{{folder}}'
+    if (-not $dir) { $dir = if (Test-Path 'Z:\') { 'Z:\' } else { '{{fallback}}' } }
+    Write-Host "File Browser (Rust) -> http://localhost:$port  (serving $dir)"
+    Write-Host "  stop: Ctrl+C | other folder: just rust PATH | other port: `$env:PORT=4000; just rust"
+    & $exe $dir
+
+[unix]
+rust folder="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    exe=server-rs/target/release/filebrowser
+    [ -x "$exe" ] || cargo build --release --manifest-path server-rs/Cargo.toml
+    dir="{{folder}}"
+    [ -n "$dir" ] || { [ -n "$(ls -A /mnt/z 2>/dev/null | head -1)" ] && dir=/mnt/z || dir="{{fallback}}"; }
+    echo "File Browser (Rust) -> http://localhost:${PORT:-3000}  (serving $dir)"
+    exec "$exe" "$dir"
+
 # Run the test suite
 test:
     npm test

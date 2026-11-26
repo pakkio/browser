@@ -1,5 +1,6 @@
 module.exports = {
   testMatch: ["**/tests/**/*.test.js"],
+  testPathIgnorePatterns: ["/node_modules/", "/tests/parity/", "/server-rs/"],
   testEnvironment: "node",
   verbose: true,
   moduleNameMapper: {

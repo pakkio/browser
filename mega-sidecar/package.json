@@ -1,0 +1,11 @@
+{
+  "name": "filebrowser-mega-sidecar",
+  "version": "1.0.0",
+  "private": true,
+  "description": "mega.nz helper process for the Rust file browser server",
+  "main": "index.js",
+  "license": "ISC",
+  "dependencies": {
+    "megajs": "1.3.10"
+  }
+}
