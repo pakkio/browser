@@ -286,6 +286,6 @@ async fn serve_static(State(app): State<AppRef>, req: Request, next: Next) -> Re
     }
     let Ok(resp) = tower_http::services::ServeDir::new(&app.public_dir).oneshot(req).await;
     let mut resp = resp.into_response();
-    resp.headers_mut().insert(axum::http::header::CACHE_CONTROL, "public, max-age=0".parse().unwrap());
+    resp.headers_mut().insert(axum::http::header::CACHE_CONTROL, "public, max-age=0, must-revalidate".parse().unwrap());
     resp
 }

@@ -373,6 +373,7 @@ class LibraryRenderer {
         // Right-click: select the tile and offer rename / move / delete (same menu as the list)
         item.addEventListener('contextmenu', (e) => {
             e.preventDefault();
+            e.stopPropagation();
             this.hideTooltip();
             const container = item.closest('.library-shelf');
             if (container) {

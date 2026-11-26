@@ -18,18 +18,26 @@ use crate::jsutil::{self, iso};
 // ---------------------------------------------------------------------------------------------
 // Path checks
 
+fn starts_with_path(path: &str, base: &str) -> bool {
+    if cfg!(windows) {
+        path.len() >= base.len() && path.is_char_boundary(base.len()) && path[..base.len()].eq_ignore_ascii_case(base)
+    } else {
+        path.starts_with(base)
+    }
+}
+
 /// utils/pathSecurity.js resolveSafePath: join under the root, reject traversal, resolve symlinks
 /// and reject targets outside the real root. Non-existent paths come back as the plain join.
 pub fn resolve_safe_path(app: &crate::app::App, requested: &str) -> Result<String, ApiError> {
     let base = app.base_dir();
     let normalized = requested.strip_prefix('/').unwrap_or(requested);
     let joined = jsutil::join(&[&base, normalized]);
-    if !joined.starts_with(&base) {
+    if !starts_with_path(&joined, &base) {
         return Err(ApiError::forbidden("Path outside allowed directory"));
     }
     match jsutil::realpath(&joined) {
         Ok(resolved) => {
-            if !resolved.starts_with(&app.base_real()) {
+            if !starts_with_path(&resolved, &app.base_real()) {
                 return Err(ApiError::forbidden("Path outside allowed directory"));
             }
             Ok(resolved)
@@ -482,7 +490,7 @@ pub async fn rename_file(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
     let full_old = resolve_safe_path(&app, old)?;
     let full_new = jsutil::join(&[&jsutil::dirname(&full_old), new_name]);
     let base = jsutil::resolve(&app.base_dir(), "");
-    if !full_new.starts_with(&base) {
+    if !starts_with_path(&full_new, &base) {
         return Err(ApiError::forbidden("New path outside allowed directory"));
     }
     if Path::new(&full_new).exists() {

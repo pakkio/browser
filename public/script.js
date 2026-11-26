@@ -138,7 +138,7 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
         border: 1px solid #444;
         border-radius: 6px;
         box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-        z-index: 1000;
+        z-index: 10002;
         min-width: 150px;
         font-size: 14px;
         color: #e0e0e0;
@@ -233,25 +233,165 @@ function showContextMenu(x, y, filePath, fileName, isDirectory) {
     // Adjust position if menu goes off screen
     const rect = menu.getBoundingClientRect();
     if (rect.right > window.innerWidth) {
-        menu.style.left = (x - rect.width) + 'px';
+        menu.style.left = Math.max(8, x - rect.width) + 'px';
     }
     if (rect.bottom > window.innerHeight) {
-        menu.style.top = (y - rect.height) + 'px';
+        menu.style.top = Math.max(8, y - rect.height) + 'px';
     }
 
-    // Close menu when clicking elsewhere
+    // Close menu when clicking elsewhere or pressing Escape
     function closeMenu(e) {
         if (!menu.contains(e.target)) {
-            menu.remove();
-            document.removeEventListener('click', closeMenu);
+            cleanupMenu();
         }
     }
-    setTimeout(() => document.addEventListener('click', closeMenu), 10);
+    function escMenu(e) {
+        if (e.key === 'Escape') cleanupMenu();
+    }
+    function cleanupMenu() {
+        menu.remove();
+        document.removeEventListener('click', closeMenu);
+        document.removeEventListener('keydown', escMenu);
+    }
+    setTimeout(() => {
+        document.addEventListener('click', closeMenu);
+        document.addEventListener('keydown', escMenu);
+    }, 10);
+}
+
+// Refresh views cleanly after rename, move, or delete (without clobbering library view)
+function refreshAfterFileOp() {
+    const keepLibrary = Boolean(window.libraryRenderer && window.libraryRenderer.refreshAfterChange);
+    if (!keepLibrary && window.fileExplorer && window.fileExplorer.clearContentView) {
+        window.fileExplorer.clearContentView();
+    }
+    if (window.fileExplorer && window.fileExplorer.loadFiles) {
+        window.fileExplorer.loadFiles(window.fileExplorer.currentPath(), keepLibrary);
+        document.dispatchEvent(new CustomEvent('files-changed'));
+    }
+    if (window.annotationManager && window.annotationManager.loadAnnotations) {
+        window.annotationManager.loadAnnotations();
+    }
+}
+
+// Custom modal dialogs for rename and delete (reliable in WebView2 and fullscreen)
+function showRenameDialog(currentName) {
+    return new Promise((resolve) => {
+        const existing = document.getElementById('rename-modal-backdrop');
+        if (existing) existing.remove();
+
+        const backdrop = document.createElement('div');
+        backdrop.id = 'rename-modal-backdrop';
+        backdrop.className = 'move-modal-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10005;display:flex;align-items:center;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#23272e;color:#e0e0e0;border:1px solid #444;border-radius:10px;padding:20px 24px;width:min(460px,92vw);box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+        const title = document.createElement('h3');
+        title.textContent = 'Rename';
+        title.style.cssText = 'margin:0 0 12px 0;color:#4ecdc4;font-size:1.1rem;';
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentName;
+        input.style.cssText = 'width:100%;box-sizing:border-box;padding:10px 12px;background:#1a1d23;color:#fff;border:1px solid #555;border-radius:6px;font-size:14px;';
+
+        const buttons = document.createElement('div');
+        buttons.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;margin-top:16px;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding:8px 16px;background:#444;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'Rename';
+        okBtn.style.cssText = 'padding:8px 16px;background:#4ecdc4;color:#111;font-weight:bold;border:none;border-radius:6px;cursor:pointer;';
+
+        buttons.append(cancelBtn, okBtn);
+        modal.append(title, input, buttons);
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+
+        const done = (val) => {
+            backdrop.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); done(null); }
+            else if (e.key === 'Enter') { e.preventDefault(); done(input.value.trim()); }
+        };
+        document.addEventListener('keydown', onKey);
+        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(null); });
+        cancelBtn.addEventListener('click', () => done(null));
+        okBtn.addEventListener('click', () => done(input.value.trim()));
+
+        input.focus();
+        const dot = currentName.lastIndexOf('.');
+        input.setSelectionRange(0, dot > 0 ? dot : currentName.length);
+    });
+}
+
+function showDeleteConfirmDialog(fileName, isDirectory) {
+    return new Promise((resolve) => {
+        const existing = document.getElementById('delete-modal-backdrop');
+        if (existing) existing.remove();
+
+        const fileType = isDirectory ? 'folder' : 'file';
+        const backdrop = document.createElement('div');
+        backdrop.id = 'delete-modal-backdrop';
+        backdrop.className = 'move-modal-backdrop';
+        backdrop.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:10005;display:flex;align-items:center;justify-content:center;';
+
+        const modal = document.createElement('div');
+        modal.style.cssText = 'background:#23272e;color:#e0e0e0;border:1px solid #444;border-radius:10px;padding:20px 24px;width:min(460px,92vw);box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+        const title = document.createElement('h3');
+        title.textContent = `Delete ${isDirectory ? 'Folder' : 'File'}`;
+        title.style.cssText = 'margin:0 0 10px 0;color:#ff6b6b;font-size:1.1rem;';
+
+        const msg = document.createElement('p');
+        msg.textContent = `Are you sure you want to delete the ${fileType} "${fileName}"? This action cannot be undone.`;
+        msg.style.cssText = 'margin:0 0 18px 0;line-height:1.45;word-break:break-word;';
+
+        const buttons = document.createElement('div');
+        buttons.style.cssText = 'display:flex;justify-content:flex-end;gap:10px;';
+
+        const cancelBtn = document.createElement('button');
+        cancelBtn.textContent = 'Cancel';
+        cancelBtn.style.cssText = 'padding:8px 16px;background:#444;color:#fff;border:none;border-radius:6px;cursor:pointer;';
+
+        const okBtn = document.createElement('button');
+        okBtn.textContent = 'Delete';
+        okBtn.style.cssText = 'padding:8px 16px;background:#d32f2f;color:#fff;font-weight:bold;border:none;border-radius:6px;cursor:pointer;';
+
+        buttons.append(cancelBtn, okBtn);
+        modal.append(title, msg, buttons);
+        backdrop.appendChild(modal);
+        document.body.appendChild(backdrop);
+
+        const done = (val) => {
+            backdrop.remove();
+            document.removeEventListener('keydown', onKey);
+            resolve(val);
+        };
+        const onKey = (e) => {
+            if (e.key === 'Escape') { e.preventDefault(); done(false); }
+            else if (e.key === 'Enter') { e.preventDefault(); done(true); }
+        };
+        document.addEventListener('keydown', onKey);
+        backdrop.addEventListener('click', (e) => { if (e.target === backdrop) done(false); });
+        cancelBtn.addEventListener('click', () => done(false));
+        okBtn.addEventListener('click', () => done(true));
+
+        okBtn.focus();
+    });
 }
 
 // File operation functions
 async function renameFile(filePath, currentName) {
-    const newName = prompt(`Rename "${currentName}" to:`, currentName);
+    const newName = await showRenameDialog(currentName);
     if (!newName || newName === currentName) return;
 
     try {
@@ -266,22 +406,7 @@ async function renameFile(filePath, currentName) {
 
         const result = await response.json();
         if (result.success) {
-            // Clear current content view to avoid showing stale data
-            if (window.fileExplorer && window.fileExplorer.clearContentView) {
-                window.fileExplorer.clearContentView();
-            }
-            
-            // Refresh the file list
-            if (window.fileExplorer && window.fileExplorer.loadFiles) {
-                window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
-                document.dispatchEvent(new CustomEvent('files-changed'));
-            }
-            
-            // Refresh annotations cache
-            if (window.annotationManager && window.annotationManager.loadAnnotations) {
-                window.annotationManager.loadAnnotations();
-            }
-            
+            refreshAfterFileOp();
             showToast(`Successfully renamed to "${newName}"`, 'success');
         } else {
             showToast(`Failed to rename: ${result.error}`, 'error');
@@ -293,10 +418,8 @@ async function renameFile(filePath, currentName) {
 }
 
 async function deleteFile(filePath, fileName, isDirectory) {
-    const fileType = isDirectory ? 'folder' : 'file';
-    if (!confirm(`Are you sure you want to delete the ${fileType} "${fileName}"?\n\nThis action cannot be undone.`)) {
-        return;
-    }
+    const confirmed = await showDeleteConfirmDialog(fileName, isDirectory);
+    if (!confirmed) return;
 
     try {
         const response = await window.authManager.authenticatedFetch('/api/file', {
@@ -307,22 +430,7 @@ async function deleteFile(filePath, fileName, isDirectory) {
 
         const result = await response.json();
         if (result.success) {
-            // Clear current content view to avoid showing deleted file
-            if (window.fileExplorer && window.fileExplorer.clearContentView) {
-                window.fileExplorer.clearContentView();
-            }
-            
-            // Refresh the file list
-            if (window.fileExplorer && window.fileExplorer.loadFiles) {
-                window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
-                document.dispatchEvent(new CustomEvent('files-changed'));
-            }
-            
-            // Refresh annotations cache
-            if (window.annotationManager && window.annotationManager.loadAnnotations) {
-                window.annotationManager.loadAnnotations();
-            }
-            
+            refreshAfterFileOp();
             showToast(`Successfully deleted "${fileName}"`, 'success');
         } else {
             showToast(`Failed to delete: ${result.error}`, 'error');
@@ -392,7 +500,7 @@ async function moveFile(filePath, fileName, isDirectory) {
         position: fixed;
         top: 0; left: 0; width: 100vw; height: 100vh;
         background: rgba(0,0,0,0.6);
-        z-index: 2000;
+        z-index: 10005;
         display: flex; align-items: center; justify-content: center;
     `;
     
@@ -829,23 +937,7 @@ async function moveFile(filePath, fileName, isDirectory) {
                 addRecentFolder(selectedPath);
                 
                 closeModal();
-                
-                // Clear content view
-                if (window.fileExplorer && window.fileExplorer.clearContentView) {
-                    window.fileExplorer.clearContentView();
-                }
-                
-                // Refresh the file list
-                if (window.fileExplorer && window.fileExplorer.loadFiles) {
-                    window.fileExplorer.loadFiles(window.fileExplorer.currentPath());
-                document.dispatchEvent(new CustomEvent('files-changed'));
-                }
-                
-                // Refresh annotations cache
-                if (window.annotationManager && window.annotationManager.loadAnnotations) {
-                    window.annotationManager.loadAnnotations();
-                }
-                
+                refreshAfterFileOp();
                 showToast(`Successfully moved "${fileName}" to ${selectedPath || 'root'}`, 'success');
             } else {
                 showToast(`Failed to move: ${result.error}`, 'error');
@@ -1171,8 +1263,11 @@ function initializeFileExplorer() {
                         // Add context menu for directories
                         li.addEventListener('contextmenu', (e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             const filePath = path ? `${path}/${file.name}` : file.name;
-                            showContextMenu(e.pageX, e.pageY, filePath, file.name, file.isDirectory);
+                            selectFile(index, filePath, file.name, {});
+                            if (window.libraryRenderer) window.libraryRenderer.refreshAfterChange = false;
+                            showContextMenu(e.clientX, e.clientY, filePath, file.name, file.isDirectory);
                         });
                     } else {
                         // Handle .btpart files - strip the extension to get actual file type
@@ -1235,8 +1330,11 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
                         // Add context menu for files
                         li.addEventListener('contextmenu', (e) => {
                             e.preventDefault();
+                            e.stopPropagation();
                             const filePath = path ? `${path}/${file.name}` : file.name;
-                            showContextMenu(e.pageX, e.pageY, filePath, file.name, file.isDirectory);
+                            selectFile(index, filePath, file.name, {});
+                            if (window.libraryRenderer) window.libraryRenderer.refreshAfterChange = false;
+                            showContextMenu(e.clientX, e.clientY, filePath, file.name, file.isDirectory);
                         });
 
                         li.addEventListener('dblclick', (e) => {
