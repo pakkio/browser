@@ -2021,6 +2021,11 @@ body.wings-hidden .content-viewer {
     padding: 6px;
 }
 
+body.wings-hidden .archive-container,
+body.wings-hidden .archive-preview-container {
+    height: calc(100vh - 16px) !important;
+}
+
 .wings-toggle {
     position: fixed;
     left: 6px;

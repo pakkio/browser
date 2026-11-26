@@ -47,19 +47,18 @@ function showShortcutHelpPopup() {
             <tr><td style="padding:4px 12px 4px 0;">Enter</td><td>Open selected file</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">/</td><td>Focus search</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">f / Ctrl+F</td><td>Toggle full screen</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">h / z</td><td>Hide/show side panels</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">h / z</td><td>Hide/show left &amp; right columns</td></tr>
         </table>
-        <h3 style="margin:18px 0 0 0;color:#00aacc;font-size:1.05rem;">Comic viewer</h3>
+        <h3 style="margin:18px 0 0 0;color:#00aacc;font-size:1.05rem;">Comic, PDF &amp; archive viewer</h3>
         <table style="width:100%;margin:8px 0 0 0;font-size:1rem;border-collapse:collapse;">
-            <tr><td style="padding:4px 12px 4px 0;">← / a, → / d</td><td>Previous / next page</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">← / a, → / d</td><td>Previous / next page (or file in ZIP)</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">Home / End</td><td>First / last page</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">1</td><td>Toggle single-page view</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">. / ,</td><td>Next / previous panel</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">n / p</td><td>Next / previous comic or archive in the folder</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">. / ,</td><td>Next / previous panel (comics, PDFs, images in ZIP)</td></tr>
             <tr><td style="padding:4px 12px 4px 0;">0</td><td>First panel</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">z</td><td>Zoom on the panel</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">f</td><td>Full screen</td></tr>
-            <tr><td style="padding:4px 12px 4px 0;">Esc</td><td>Leave full screen / panel mode</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">n / p</td><td>Next / previous comic, PDF, or file in ZIP</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">f / Ctrl+F</td><td>Full screen</td></tr>
+            <tr><td style="padding:4px 12px 4px 0;">Esc</td><td>Leave full screen / panel mode / ZIP preview</td></tr>
         </table>
         <button id="close-shortcut-help" style="position:absolute;top:12px;right:16px;background:#444;border:none;color:#fff;padding:4px 10px;border-radius:4px;cursor:pointer;font-size:1.1rem;">×</button>
         <div style="margin-top:18px;font-size:0.95rem;color:#aaa;">Press <b>Esc</b> or click outside to close</div>
@@ -1560,7 +1559,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
             return;
         }
         
-        // In the comic viewer these keys belong to the comic (p = previous panel, 1-5 / r g y c
+        // In the comic viewer these keys belong to the comic (p = previous archive, 1-5 / r g y c
         // annotate the open comic); they must not also label the file selected in the list
         const comicKeys = ['b', 'r', 'g', 'w', 'l', 'o', 'p', 'y', 's', 'c', '1', '2', '3', '4', '5'];
         const comicContainer = document.querySelector('.comic-container');
@@ -1729,6 +1728,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
         wingsToggleBtn.textContent = hidden ? '⇥' : '⇤';
         wingsToggleBtn.title = hidden ? 'Show side panels (H / Z)' : 'Hide side panels (H / Z)';
         try { localStorage.setItem(WINGS_KEY, hidden ? '1' : '0'); } catch (e) { /* storage unavailable */ }
+        window.dispatchEvent(new Event('wings-changed'));
     }
     const wingsToggleBtn = document.createElement('button');
     wingsToggleBtn.id = 'wings-toggle';
@@ -1798,8 +1798,7 @@ const videoExtensions = ['mp4', 'avi', 'mov', 'mkv', 'webm', 'mpg', 'mpeg', 'wmv
     document.body.appendChild(fullscreenBtn);
 
     // Bubble phase on window: runs after viewer handlers on document, so a viewer that has its
-    // own 'f' or 'z' (comic reader's panel zoom or video player's focus view) has already called
-    // preventDefault and wins
+    // own 'f' or 'z' (video player's focus view) has already called preventDefault and wins
     window.addEventListener('keydown', (event) => {
         // Ctrl+F: full screen too (instead of the browser's find bar), from any view
         if (event.ctrlKey && !event.altKey && !event.metaKey && !event.shiftKey && (event.key === 'f' || event.key === 'F')) {

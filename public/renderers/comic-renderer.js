@@ -2,6 +2,7 @@ class ComicRenderer {
     constructor() {
         this.handleKeyDown = null;
         this.handleWheel = null;
+        this.handleWingsChanged = null;
         this.currentPage = 1;
         this.totalPages = null;
         this.currentFilePath = null;
@@ -140,7 +141,7 @@ class ComicRenderer {
      */
     detectPanels(img) {
         const full = [{ x: 0, y: 0, w: 1, h: 1 }];
-        const nw = img.naturalWidth, nh = img.naturalHeight;
+        const nw = img.naturalWidth || img.width, nh = img.naturalHeight || img.height;
         if (!nw || !nh) return full;
 
         const scale = Math.min(1, 500 / Math.max(nw, nh));
@@ -351,12 +352,14 @@ class ComicRenderer {
         }
     }
 
-    /** Downscale the page image to a JPEG small enough to send to the AI. */
+    /** Downscale the page image or canvas to a JPEG small enough to send to the AI. */
     pageToJpeg(img) {
-        const scale = Math.min(1, 1000 / Math.max(img.naturalWidth, img.naturalHeight));
+        const nw = img.naturalWidth || img.width;
+        const nh = img.naturalHeight || img.height;
+        const scale = Math.min(1, 1000 / Math.max(nw, nh));
         const canvas = document.createElement('canvas');
-        canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
-        canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+        canvas.width = Math.max(1, Math.round(nw * scale));
+        canvas.height = Math.max(1, Math.round(nh * scale));
         canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
         return new Promise((resolve, reject) => {
             canvas.toBlob((blob) => blob ? resolve(blob) : reject(new Error('Could not encode page')), 'image/jpeg', 0.8);
@@ -483,6 +486,10 @@ class ComicRenderer {
         if (this.handleWheel) {
             document.removeEventListener('wheel', this.handleWheel);
             this.handleWheel = null;
+        }
+        if (this.handleWingsChanged) {
+            window.removeEventListener('wings-changed', this.handleWingsChanged);
+            this.handleWingsChanged = null;
         }
         if (this.handleMouseDown) {
             document.removeEventListener('mousedown', this.handleMouseDown);
@@ -919,7 +926,7 @@ class ComicRenderer {
             // ...except stepping through the panels already found by the built-in detection
             const panelKey = ['.', ','].includes(e.key) && this.panelMode && this.panels;
             if (this.isLocked() && !panelKey) {
-                if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '.', ',', '0', 'z', 'Z', '1'].includes(e.key)) {
+                if (['Escape', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'a', 'd', 'n', 'N', 'p', 'P', '.', ',', '0', '1'].includes(e.key)) {
                     e.preventDefault();
                     if (e.key === 'Escape') this.cancelAIPanels();
                 }
@@ -993,11 +1000,6 @@ class ComicRenderer {
                     e.preventDefault();
                     this.firstPanel();
                     break;
-                case 'z':
-                case 'Z':
-                    e.preventDefault();
-                    this.toggleZoom();
-                    break;
                 case 'r': case 'g': case 'y': case 'c':
                 case '2': case '3': case '4': case '5':
                     if (typeof handleAnnotationShortcut === 'function') {
@@ -1044,11 +1046,14 @@ class ComicRenderer {
             }
         };
 
+        this.handleWingsChanged = () => this.refreshPanelView();
+
         document.addEventListener('keydown', this.handleKeyDown);
         document.addEventListener('wheel', this.handleWheel);
         document.addEventListener('mousedown', this.handleMouseDown);
         document.addEventListener('mousemove', this.handleMouseMove);
         document.addEventListener('mouseup', this.handleMouseUp);
+        window.addEventListener('wings-changed', this.handleWingsChanged);
     }
 
     async loadComicInfo(filePath) {
@@ -1671,3 +1676,74 @@ class ComicRenderer {
         }
     }
 }
+
+// Shared panel detection and zoom helpers reused by ArchiveRenderer (images in ZIP) and PDFRenderer
+window.ComicPanelHelper = (() => {
+    const cache = new Map();
+    let pausedUntil = 0;
+
+    function detectPanels(el) {
+        return ComicRenderer.prototype.detectPanels.call(null, el);
+    }
+
+    function elementToJpeg(el) {
+        return ComicRenderer.prototype.pageToJpeg.call(null, el);
+    }
+
+    function ensureStyles() {
+        ComicRenderer.prototype.ensureModeStyles.call(null);
+    }
+
+    function applyPanelTransform(el, container, panel) {
+        if (!el || !container || !panel) return null;
+        const previous = el.style.transition;
+        el.style.transition = 'none';
+        el.style.transform = '';
+        el.style.transformOrigin = '0 0';
+        const elRect = el.getBoundingClientRect();
+        const boxRect = container.getBoundingClientRect();
+        el.style.transition = previous;
+
+        const pad = 4;
+        const availW = boxRect.width - pad * 2;
+        const availH = boxRect.height - pad * 2;
+        const panelW = panel.w * elRect.width;
+        const panelH = panel.h * elRect.height;
+        if (!panelW || !panelH || availW <= 0 || availH <= 0) return null;
+
+        const scale = Math.min(availW / panelW, availH / panelH);
+        const centerX = (panel.x + panel.w / 2) * elRect.width;
+        const centerY = (panel.y + panel.h / 2) * elRect.height;
+        const tx = boxRect.left + boxRect.width / 2 - elRect.left - centerX * scale;
+        const ty = boxRect.top + boxRect.height / 2 - elRect.top - centerY * scale;
+        el.style.cursor = 'grab';
+        el.style.transform = `translate(${tx}px, ${ty}px) scale(${scale})`;
+        return { tx, ty, scale };
+    }
+
+    async function fetchAIPanels(el, key, { signal } = {}) {
+        const hit = cache.get(key);
+        if (hit) return { panels: hit, cached: true };
+        if (pausedUntil > Date.now()) return { panels: null, paused: true };
+        const blob = await elementToJpeg(el);
+        const response = await fetch('/api/comic-panels', {
+            method: 'POST',
+            headers: { 'Content-Type': 'image/jpeg' },
+            body: blob,
+            signal,
+        });
+        if (!response.ok) {
+            if (response.status === 429 || response.status === 503) {
+                pausedUntil = Date.now() + 5 * 60 * 1000;
+            }
+            const { error } = await response.json().catch(() => ({}));
+            return { panels: null, error: error || `HTTP ${response.status}` };
+        }
+        const data = await response.json();
+        const panels = data && Array.isArray(data.panels) && data.panels.length ? data.panels : null;
+        if (panels) cache.set(key, panels);
+        return { panels };
+    }
+
+    return { detectPanels, elementToJpeg, ensureStyles, applyPanelTransform, fetchAIPanels };
+})();

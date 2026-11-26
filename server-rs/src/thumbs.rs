@@ -425,6 +425,169 @@ pub async fn batch(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
         .unwrap())
 }
 
+// ---------------------------------------------------------------------------------------------
+// Archive entry thumbnails (PDFs and images inside .zip / .cbz / .rar / .cbr)
+
+fn read_archive_entry_bytes(archive: &str, entry: &str) -> Result<Vec<u8>, String> {
+    let ext = jsutil::ext_lower(archive);
+    if ext == ".rar" || ext == ".cbr" {
+        if let Ok(Some(d)) = crate::comics::rar_extract_lib(archive, entry) {
+            return Ok(d);
+        }
+        return Err("Could not read RAR entry".into());
+    }
+    let mut z = crate::archives::open_zip(archive).map_err(|e| e.to_string())?;
+    let mut f = z.by_name(entry).map_err(|e| e.to_string())?;
+    let mut buf = Vec::new();
+    std::io::Read::read_to_end(&mut f, &mut buf).map_err(|e| e.to_string())?;
+    Ok(buf)
+}
+
+fn extract_archive_entry_to_temp(archive: &str, entry: &str) -> Result<PathBuf, String> {
+    let ext = jsutil::ext_lower(archive);
+    if ext == ".rar" || ext == ".cbr" {
+        let data = read_archive_entry_bytes(archive, entry)?;
+        let temp = crate::util::temp_dir("filebrowser-comics").join(crate::util::unique_name(&jsutil::basename(entry)));
+        std::fs::write(&temp, data).map_err(|e| e.to_string())?;
+        return Ok(temp);
+    }
+    crate::comics::zip_entry_to_temp(archive, entry)
+}
+
+/// Thumbnail for a single entry inside an archive, cached under the archive's mtime.
+pub async fn make_archive_entry(
+    app: &App,
+    archive: &str,
+    entry: &str,
+    size: u32,
+    mtime: i64,
+) -> Thumb {
+    let size = size.clamp(MIN, MAX);
+    let kind = match kind_of(entry) {
+        Some(k @ (Kind::Jpeg | Kind::Image | Kind::Pdf)) => k,
+        _ => return Err("No thumbnail for this type".into()),
+    };
+    let cache_key = format!("{}::{}", archive, entry);
+    if let Some(hit) = cached(app, &cache_key, size, mtime) {
+        return hit;
+    }
+    let levels: Vec<u32> = if size == TINY || size == SHARP { vec![TINY, SHARP] } else { vec![size] };
+    let _slot = cpu_slots().acquire().await.map_err(|e| e.to_string())?;
+    if let Some(hit) = cached(app, &cache_key, size, mtime) {
+        return hit;
+    }
+
+    let source_res: Result<Vec<u8>, String> = match kind {
+        Kind::Pdf => {
+            let (a, e) = (archive.to_string(), entry.to_string());
+            let temp = tokio::task::spawn_blocking(move || extract_archive_entry_to_temp(&a, &e))
+                .await
+                .map_err(|e| e.to_string())?;
+            match temp {
+                Ok(path) => {
+                    let rendered = render_pdf(&path.to_string_lossy(), SHARP).await;
+                    let _ = std::fs::remove_file(&path);
+                    rendered
+                }
+                Err(e) => Err(e),
+            }
+        }
+        Kind::Jpeg | Kind::Image => {
+            let (a, e) = (archive.to_string(), entry.to_string());
+            tokio::task::spawn_blocking(move || read_archive_entry_bytes(&a, &e))
+                .await
+                .map_err(|e| e.to_string())?
+        }
+        _ => Err("Unsupported".into()),
+    };
+
+    let data = match source_res {
+        Ok(d) => d,
+        Err(why) => {
+            store_missing(app, &cache_key, &levels, mtime, &why);
+            return Err(why);
+        }
+    };
+
+    let levels_vec = levels.clone();
+    let biggest = *levels_vec.iter().max().unwrap();
+    let encoded = tokio::task::spawn_blocking(move || -> Option<Vec<(u32, Vec<u8>)>> {
+        let img = decode(&data, biggest)?;
+        levels_vec.into_iter().map(|l| encode(&img, l).map(|e| (l, e))).collect()
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    let Some(encoded) = encoded else {
+        let why = "Unreadable image".to_string();
+        store_missing(app, &cache_key, &levels, mtime, &why);
+        return Err(why);
+    };
+
+    let mut wanted = None;
+    for (l, e) in encoded {
+        store(app, &cache_key, l, mtime, &e);
+        if l == size {
+            wanted = Some(e);
+        }
+    }
+    wanted.map(|w| (w, "image/jpeg")).ok_or_else(|| "No thumbnail".into())
+}
+
+// POST /api/archive-thumbnails {archive, subPath, files: [names], size}
+// Streams application/x-ndjson lines identical to /api/thumbnails.
+pub async fn archive_batch(State(app): State<AppRef>, ctx: Ctx) -> ApiResult {
+    let archive_rel = ctx.b_str("archive").filter(|s| !s.is_empty()).ok_or_else(|| ApiError::bad_request("archive is required"))?;
+    let archive_full = crate::browse::resolve_safe_path(&app, archive_rel)?;
+    let sub_path = ctx.b_str("subPath").unwrap_or("").trim_matches('/').to_string();
+    let names: Vec<String> = ctx
+        .b("files")
+        .and_then(Value::as_array)
+        .ok_or_else(|| ApiError::bad_request("files is required"))?
+        .iter()
+        .filter_map(|v| v.as_str().map(String::from))
+        .take(5000)
+        .collect();
+    let size = size_param(ctx.b("size"));
+    let mtime = std::fs::metadata(&archive_full)
+        .and_then(|m| m.modified())
+        .map(epoch_ms)
+        .map_err(|_| ApiError::not_found("Archive not found"))?;
+
+    let (tx, mut rx) = mpsc::channel::<String>(64);
+    for name in names {
+        let (app, tx, archive_full, sub_path) = (app.clone(), tx.clone(), archive_full.clone(), sub_path.clone());
+        tokio::spawn(async move {
+            let line = if name.is_empty() || name.contains(['/', '\\']) || name == ".." {
+                json!({ "name": name, "error": "Invalid name" })
+            } else if tx.is_closed() {
+                return;
+            } else {
+                let entry = if sub_path.is_empty() { name.clone() } else { format!("{}/{}", sub_path, name) };
+                let made = tokio::time::timeout(
+                    Duration::from_secs(120),
+                    make_archive_entry(&app, &archive_full, &entry, size, mtime),
+                )
+                .await
+                .unwrap_or_else(|_| Err("Timed out".into()));
+                match made {
+                    Ok((data, mime)) => json!({ "name": name, "type": mime, "data": base64::engine::general_purpose::STANDARD.encode(data) }),
+                    Err(e) => json!({ "name": name, "error": e }),
+                }
+            };
+            let _ = tx.send(format!("{}\n", line)).await;
+        });
+    }
+    drop(tx);
+    let stream = futures_util::stream::poll_fn(move |cx| rx.poll_recv(cx).map(|o| o.map(Ok::<_, std::io::Error>)));
+    Ok(Response::builder()
+        .status(200)
+        .header(header::CONTENT_TYPE, "application/x-ndjson")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from_stream(stream))
+        .unwrap())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

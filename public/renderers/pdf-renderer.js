@@ -16,12 +16,37 @@ class PDFRenderer {
         this.isTruncatedView = false;
         this.outline = null; // PDF outline/TOC
         this.outlineVisible = false;
+        this.onAdjacentFile = null;
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.panelNavBusy = false;
+        this.aiPanelAbort = null;
+        this.panView = null;
+        this.drag = null;
+        this.prevDoublePageMode = null;
+        this.handleMouseDown = null;
+        this.handleMouseMove = null;
+        this.handleMouseUp = null;
+        this.handleWingsChanged = null;
     }
 
     cleanup() {
+        this.exitPanelMode({ reload: false });
         if (this.handleKeyDown) {
             document.removeEventListener('keydown', this.handleKeyDown);
             this.handleKeyDown = null;
+        }
+        if (this.handleMouseDown) {
+            document.removeEventListener('mousedown', this.handleMouseDown);
+            document.removeEventListener('mousemove', this.handleMouseMove);
+            document.removeEventListener('mouseup', this.handleMouseUp);
+            this.handleMouseDown = this.handleMouseMove = this.handleMouseUp = null;
+        }
+        if (this.handleWingsChanged) {
+            window.removeEventListener('wings-changed', this.handleWingsChanged);
+            this.handleWingsChanged = null;
         }
         if (this.handleWheel) {
             document.removeEventListener('wheel', this.handleWheel);
@@ -73,11 +98,12 @@ class PDFRenderer {
         this.pdfDoc = null;
     }
 
-    async render(filePath, fileName, contentCode, contentOther) {
+    async render(filePath, fileName, contentCode, contentOther, options = {}) {
         try {
             this.cleanup();
             this.filePath = filePath;
             this.fileName = fileName; // Store for error messages
+            this.onAdjacentFile = options.onAdjacentFile || null;
 
             const pdfContainer = this.uiManager.createPDFContainer();
             const controls = this.uiManager.createControls(pdfContainer);
@@ -153,19 +179,36 @@ class PDFRenderer {
                 case 'N':
                 case 'p':
                 case 'P':
-                    // n / p: next / previous PDF in the folder
+                    // n / p: next / previous PDF in the folder (or inside the open ZIP archive)
                     if (e.ctrlKey || e.altKey || e.metaKey) break;
                     e.preventDefault();
-                    if (window.fileExplorer && window.fileExplorer.openAdjacentFile) {
-                        window.fileExplorer.openAdjacentFile(this.fileName, e.key.toLowerCase() === 'n' ? 1 : -1, ['pdf']);
+                    const step = e.key.toLowerCase() === 'n' ? 1 : -1;
+                    if (this.onAdjacentFile) {
+                        this.onAdjacentFile(step);
+                    } else if (window.fileExplorer && window.fileExplorer.openAdjacentFile) {
+                        window.fileExplorer.openAdjacentFile(this.fileName, step, ['pdf']);
                     }
+                    break;
+                case '.':
+                    e.preventDefault();
+                    this.nextPanel();
+                    break;
+                case ',':
+                    e.preventDefault();
+                    this.previousPanel();
+                    break;
+                case '0':
+                    e.preventDefault();
+                    this.firstPanel();
                     break;
                 case 'Home':
                     e.preventDefault();
+                    if (this.panelMode) this.exitPanelMode({ reload: false });
                     this.loadPage(1);
                     break;
                 case 'End':
                     e.preventDefault();
+                    if (this.panelMode) this.exitPanelMode({ reload: false });
                     if (this.uiManager.totalPages) this.loadPage(this.uiManager.totalPages);
                     break;
                 case 'f':
@@ -174,8 +217,11 @@ class PDFRenderer {
                     this.toggleFullscreen();
                     break;
                 case 'Escape':
-                    e.preventDefault();
-                    if (this.isFullscreen) {
+                    if (this.panelMode) {
+                        e.preventDefault();
+                        this.exitPanelMode({ reload: true });
+                    } else if (this.isFullscreen) {
+                        e.preventDefault();
                         this.exitFullscreen();
                     }
                     break;
@@ -228,8 +274,195 @@ class PDFRenderer {
             }
         };
 
+        this.handleMouseDown = (e) => {
+            if (e.button !== 0 || !this.panelMode || !this.panView) return;
+            const canvas = document.getElementById('pdf-page-left');
+            if (!canvas || !canvas.parentElement || !canvas.parentElement.contains(e.target)) return;
+            e.preventDefault();
+            this.drag = { x: e.clientX, y: e.clientY, tx: this.panView.tx, ty: this.panView.ty };
+            canvas.style.transition = 'none';
+            canvas.style.cursor = 'grabbing';
+        };
+        this.handleMouseMove = (e) => {
+            if (!this.drag) return;
+            const canvas = document.getElementById('pdf-page-left');
+            if (!canvas) return;
+            this.panView.tx = this.drag.tx + e.clientX - this.drag.x;
+            this.panView.ty = this.drag.ty + e.clientY - this.drag.y;
+            canvas.style.transform = `translate(${this.panView.tx}px, ${this.panView.ty}px) scale(${this.panView.scale})`;
+        };
+        this.handleMouseUp = () => {
+            if (!this.drag) return;
+            this.drag = null;
+            const canvas = document.getElementById('pdf-page-left');
+            if (canvas) {
+                canvas.style.transition = 'transform 0.25s ease';
+                canvas.style.cursor = this.panelMode ? 'grab' : '';
+            }
+        };
+        this.handleWingsChanged = () => {
+            if (this.panelMode && this.panels) {
+                setTimeout(() => this.showPanel(this.panelIndex), 0);
+            }
+        };
+
         document.addEventListener('keydown', this.handleKeyDown);
         document.addEventListener('wheel', this.handleWheel, { passive: false });
+        document.addEventListener('mousedown', this.handleMouseDown);
+        document.addEventListener('mousemove', this.handleMouseMove);
+        document.addEventListener('mouseup', this.handleMouseUp);
+        window.addEventListener('wings-changed', this.handleWingsChanged);
+    }
+
+    async enterPanelMode() {
+        const helper = window.ComicPanelHelper;
+        const canvas = document.getElementById('pdf-page-left');
+        if (!helper || !canvas || !canvas.width) return;
+
+        this.panelMode = true;
+        if (this.prevDoublePageMode === null) {
+            this.prevDoublePageMode = this.uiManager.doublePageMode;
+        }
+        if (this.uiManager.doublePageMode) {
+            this.uiManager.doublePageMode = false;
+            await this.loadPage(this.uiManager.currentPage);
+        }
+        const rightWrap = document.getElementById('pdf-container-right');
+        if (rightWrap) rightWrap.style.display = 'none';
+        const leftWrap = document.getElementById('pdf-container-left');
+        if (leftWrap) {
+            leftWrap.style.overflow = 'hidden';
+            leftWrap.style.height = '100%';
+            leftWrap.style.alignItems = 'center';
+        }
+        await this.preparePanels();
+        this.showPanel(0);
+    }
+
+    exitPanelMode({ reload = false } = {}) {
+        if (this.aiPanelAbort) {
+            this.aiPanelAbort.abort('exit');
+            this.aiPanelAbort = null;
+        }
+        const canvas = document.getElementById('pdf-page-left');
+        if (canvas) {
+            canvas.style.transform = '';
+            canvas.style.transition = '';
+            canvas.style.cursor = '';
+        }
+        const leftWrap = document.getElementById('pdf-container-left');
+        if (leftWrap) {
+            leftWrap.style.overflow = 'auto';
+            leftWrap.style.height = '';
+            leftWrap.style.alignItems = 'flex-start';
+        }
+        const rightWrap = document.getElementById('pdf-container-right');
+        if (rightWrap) rightWrap.style.display = 'flex';
+        this.drag = null;
+        this.panView = null;
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        if (this.prevDoublePageMode !== null) {
+            this.uiManager.doublePageMode = this.prevDoublePageMode;
+            this.prevDoublePageMode = null;
+            if (reload && this.pdfDoc) this.loadPage(this.uiManager.currentPage);
+        }
+        this.uiManager.setStatus('');
+    }
+
+    async preparePanels() {
+        const helper = window.ComicPanelHelper;
+        const canvas = document.getElementById('pdf-page-left');
+        if (!helper || !canvas) return;
+        canvas.style.transition = 'transform 0.25s ease';
+        this.panels = helper.detectPanels(canvas);
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.requestAIPanels(canvas);
+    }
+
+    async requestAIPanels(canvas) {
+        const helper = window.ComicPanelHelper;
+        if (!helper) return;
+        if (this.aiPanelAbort) this.aiPanelAbort.abort('superseded');
+        const abort = new AbortController();
+        this.aiPanelAbort = abort;
+        const page = this.uiManager.currentPage;
+        const filePath = this.filePath;
+        const key = `pdf:${filePath}:${page}`;
+        try {
+            const res = await helper.fetchAIPanels(canvas, key, { signal: abort.signal });
+            if (abort.signal.aborted || !this.panelMode || this.uiManager.currentPage !== page || this.filePath !== filePath) return;
+            if (res && res.panels) {
+                this.panels = res.panels;
+                this.panelsFromAI = true;
+                this.showPanel(Math.min(Math.max(this.panelIndex, 0), res.panels.length - 1));
+            }
+        } catch (err) {
+            if (err?.name !== 'AbortError') window.logger.warn('[PDFRenderer] AI panels failed:', err?.message || err);
+        }
+    }
+
+    async nextPanel() {
+        if (!this.panelMode) {
+            await this.enterPanelMode();
+            return;
+        }
+        if (this.panels && this.panelIndex + 1 < this.panels.length) {
+            this.showPanel(this.panelIndex + 1);
+            return;
+        }
+        if (this.uiManager.totalPages && this.uiManager.currentPage >= this.uiManager.totalPages) return;
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            await this.loadPage(this.uiManager.currentPage + 1);
+            await this.preparePanels();
+            this.showPanel(0);
+        } finally {
+            this.panelNavBusy = false;
+        }
+    }
+
+    async previousPanel() {
+        if (!this.panelMode) {
+            await this.enterPanelMode();
+            return;
+        }
+        if (this.panelIndex > 0) {
+            this.showPanel(this.panelIndex - 1);
+            return;
+        }
+        if (this.uiManager.currentPage <= 1) return;
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            await this.loadPage(this.uiManager.currentPage - 1);
+            await this.preparePanels();
+            this.showPanel(this.panels.length - 1);
+        } finally {
+            this.panelNavBusy = false;
+        }
+    }
+
+    async firstPanel() {
+        if (!this.panelMode) {
+            await this.enterPanelMode();
+            return;
+        }
+        this.showPanel(0);
+    }
+
+    showPanel(index) {
+        const helper = window.ComicPanelHelper;
+        const canvas = document.getElementById('pdf-page-left');
+        const container = document.getElementById('pdf-container-left');
+        if (!helper || !canvas || !container || !this.panels || !this.panels.length) return;
+        this.panelIndex = Math.max(0, Math.min(index, this.panels.length - 1));
+        this.panView = helper.applyPanelTransform(canvas, container, this.panels[this.panelIndex]);
+        this.uiManager.setStatus(`Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`);
     }
 
     showPDFError(pagesContainer, error, fileName, filePath) {
@@ -807,6 +1040,7 @@ class PDFRenderer {
     }
 
     previousPage() {
+        if (this.panelMode) this.exitPanelMode({ reload: false });
         const newPage = this.uiManager.calculatePreviousPage();
         if (newPage !== this.uiManager.currentPage) {
             this.loadPage(newPage);
@@ -814,6 +1048,7 @@ class PDFRenderer {
     }
 
     nextPage() {
+        if (this.panelMode) this.exitPanelMode({ reload: false });
         const newPage = this.uiManager.calculateNextPage();
         if (newPage !== this.uiManager.currentPage) {
             this.loadPage(newPage);

@@ -225,9 +225,10 @@ pub fn build_router(state: AppRef) -> Router {
         // AI
         .route("/api/summarize-file", post(ai::summarize_file))
         .route("/api/analyze-files", limited(post(ai::analyze_files), &heavy))
-        // Library thumbnails: one file, or a whole folder streamed in one request
+        // Library thumbnails: one file, or a whole folder / archive streamed in one request
         .route("/api/thumbnail", get(thumbs::one))
         .route("/api/thumbnails", post(thumbs::batch))
+        .route("/api/archive-thumbnails", post(thumbs::archive_batch))
         // Cache
         .route("/api/cache/stats", get(cache::routes::stats))
         .route("/api/cache/clear", post(cache::routes::clear))

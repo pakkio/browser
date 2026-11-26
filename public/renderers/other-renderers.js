@@ -308,9 +308,58 @@ class ArchiveRenderer {
         this.bodyArea = null;
         this.subPdfRenderer = null;
         this.thumbAbortController = null;
+        this.previewObjectUrl = null;
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.panelImg = null;
+        this.panelStage = null;
+        this.panelStatusEl = null;
+        this.panelKey = null;
+        this.panelNavBusy = false;
+        this.aiPanelAbort = null;
+        this.panView = null;
+        this.drag = null;
+        this.panelMouseDown = null;
+        this.panelMouseMove = null;
+        this.panelMouseUp = null;
+        this.panelWingsHandler = null;
+    }
+
+    cleanupPreviewPanel() {
+        if (this.aiPanelAbort) {
+            this.aiPanelAbort.abort('cleanup');
+            this.aiPanelAbort = null;
+        }
+        if (this.panelMouseDown) {
+            document.removeEventListener('mousedown', this.panelMouseDown);
+            document.removeEventListener('mousemove', this.panelMouseMove);
+            document.removeEventListener('mouseup', this.panelMouseUp);
+            this.panelMouseDown = this.panelMouseMove = this.panelMouseUp = null;
+        }
+        if (this.panelWingsHandler) {
+            window.removeEventListener('wings-changed', this.panelWingsHandler);
+            this.panelWingsHandler = null;
+        }
+        if (this.previewObjectUrl) {
+            URL.revokeObjectURL(this.previewObjectUrl);
+            this.previewObjectUrl = null;
+        }
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.panelImg = null;
+        this.panelStage = null;
+        this.panelStatusEl = null;
+        this.panelKey = null;
+        this.panView = null;
+        this.drag = null;
     }
 
     cleanup() {
+        this.cleanupPreviewPanel();
         this.currentPath = '';
         this.currentArchive = null;
         this.selectedIndex = -1;
@@ -816,18 +865,123 @@ class ArchiveRenderer {
 
         updateProgress();
 
-        // Concurrency-limited thumbnail rendering (2 at a time; skip PDFs > 8MB so network drives don't saturate)
-        const MAX_INLINE_PDF_THUMB_BYTES = 8 * 1024 * 1024;
+        const showThumb = (thumbEl, url) => {
+            let img = thumbEl.querySelector('img.library-thumb-img');
+            if (!img) {
+                img = document.createElement('img');
+                img.className = 'library-thumb-img';
+                img.onload = () => {
+                    if (img.naturalWidth && img.naturalHeight) {
+                        const ratio = Math.min(1.8, Math.max(0.5, img.naturalWidth / img.naturalHeight));
+                        thumbEl.closest('.library-book')?.style.setProperty('--thumb-ratio', ratio.toFixed(3));
+                    }
+                    const icon = thumbEl.querySelector('.library-placeholder-icon');
+                    if (icon) icon.style.display = 'none';
+                };
+                thumbEl.insertBefore(img, thumbEl.firstChild);
+            }
+            img.src = url;
+        };
+
+        // Fast server-side two-pass LOD thumbnails (handles PDFs of any size & images, cached on disk)
+        const jobs = [];
+        for (const thumbEl of items) {
+            const type = thumbEl.dataset.type;
+            if (type === 'image' || type === 'pdf') {
+                jobs.push({ el: thumbEl, name: thumbEl.dataset.file, ok: false, done: false });
+            } else {
+                loaded++;
+            }
+        }
+        updateProgress();
+        if (jobs.length === 0) return;
+
+        const byName = new Map(jobs.map(j => [j.name, j]));
+        const streamBatch = async (batchJobs, size, onThumb) => {
+            for (const j of batchJobs) j.done = false;
+            let resp;
+            try {
+                resp = await window.authManager.authenticatedFetch('/api/archive-thumbnails', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        archive: archivePath,
+                        subPath: currentPath || '',
+                        files: batchJobs.map(j => j.name),
+                        size,
+                    }),
+                    signal,
+                });
+            } catch (e) {
+                return signal.aborted ? 'aborted' : 'unsupported';
+            }
+            if (!resp || resp.status === 404 || resp.status === 405) return 'unsupported';
+            if (!resp.ok || !resp.body) return 'failed';
+
+            const reader = resp.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            const handle = (line) => {
+                if (!line.trim()) return;
+                let msg;
+                try { msg = JSON.parse(line); } catch { return; }
+                const job = byName.get(msg.name);
+                if (!job || job.done) return;
+                job.done = true;
+                onThumb(job, msg.data ? `data:${msg.type};base64,${msg.data}` : null);
+            };
+            try {
+                for (;;) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
+                    let nl;
+                    while ((nl = buffer.indexOf('\n')) >= 0) {
+                        handle(buffer.slice(0, nl));
+                        buffer = buffer.slice(nl + 1);
+                    }
+                }
+                handle(buffer);
+            } catch (e) {
+                if (!signal.aborted) window.logger.debug?.('Archive thumb stream interrupted:', e);
+            }
+            return 'ok';
+        };
+
+        const tinyStatus = await streamBatch(jobs, 96, (job, url) => {
+            if (url) {
+                job.ok = true;
+                showThumb(job.el, url);
+            }
+            loaded++;
+            updateProgress();
+        });
+        if (tinyStatus === 'ok') {
+            if (signal.aborted || !shelf.isConnected) return;
+            for (const j of jobs) if (!j.done) { j.done = true; loaded++; }
+            updateProgress();
+            const sharp = jobs.filter(j => j.ok);
+            if (sharp.length) {
+                await streamBatch(sharp, 400, (job, url) => {
+                    if (url) showThumb(job.el, url);
+                });
+            }
+            return;
+        }
+        if (signal.aborted || !shelf.isConnected) return;
+
+        // Fallback for servers without /api/archive-thumbnails: client-side rendering
+        const MAX_INLINE_PDF_THUMB_BYTES = 64 * 1024 * 1024;
         let nextIdx = 0;
         const worker = async () => {
-            while (nextIdx < items.length) {
-                const idx = nextIdx++;
-                const thumbEl = items[idx];
+            while (nextIdx < jobs.length) {
+                const job = jobs[nextIdx++];
+                const thumbEl = job.el;
                 if (signal.aborted || !shelf.isConnected) return;
 
                 const type = thumbEl.dataset.type;
                 const fileName = thumbEl.dataset.file;
-                const fileMeta = this.archiveFiles[idx];
+                const fileMeta = this.archiveFiles.find(f => f.name === fileName);
                 const entryPath = currentPath ? `${currentPath}/${fileName}` : fileName;
                 const rawUrl = `/archive-file?archive=${encodeURIComponent(archivePath)}&file=${encodeURIComponent(entryPath)}`;
 
@@ -870,16 +1024,7 @@ class ArchiveRenderer {
                                 canvas.height = vp.height;
                                 await page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise;
 
-                                const img = document.createElement('img');
-                                img.className = 'library-thumb-img';
-                                img.src = canvas.toDataURL('image/jpeg', 0.82);
-                                if (vp.width && vp.height) {
-                                    const ratio = Math.min(1.8, Math.max(0.5, vp.width / vp.height));
-                                    thumbEl.closest('.library-book')?.style.setProperty('--thumb-ratio', ratio.toFixed(3));
-                                }
-                                const icon = thumbEl.querySelector('.library-placeholder-icon');
-                                if (icon) icon.style.display = 'none';
-                                thumbEl.insertBefore(img, thumbEl.firstChild);
+                                showThumb(thumbEl, canvas.toDataURL('image/jpeg', 0.82));
                                 pdf.destroy?.();
                             }
                         }
@@ -895,7 +1040,7 @@ class ArchiveRenderer {
             }
         };
 
-        await Promise.all(Array.from({ length: Math.min(2, items.length) }, () => worker()));
+        await Promise.all(Array.from({ length: Math.min(2, jobs.length) }, () => worker()));
     }
 
     getBaseName(path) {
@@ -910,8 +1055,9 @@ class ArchiveRenderer {
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
-    async previewFile(archivePath, filePath, fileName, fileIndex, { fullView = false } = {}) {
-        // Clean up any existing full-view preview handlers or active PDF renderer
+    async previewFile(archivePath, filePath, fileName, fileIndex, { fullView = false, enterPanelMode = null } = {}) {
+        // Clean up any existing full-view preview handlers, panel mode, or active PDF renderer
+        this.cleanupPreviewPanel();
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
@@ -987,7 +1133,9 @@ class ArchiveRenderer {
 
                 if (typeof PDFRenderer !== 'undefined') {
                     this.subPdfRenderer = new PDFRenderer();
-                    await this.subPdfRenderer.render(rawUrl, fileName, document.createElement('pre'), pdfHost);
+                    await this.subPdfRenderer.render(rawUrl, fileName, document.createElement('pre'), pdfHost, {
+                        onAdjacentFile: (step) => this.navigateArchiveEntry(step, ['pdf'], archivePath, targetContainer, { fullView: !isInline }),
+                    });
                 } else {
                     const iframe = document.createElement('iframe');
                     iframe.style.cssText = `width: 100%; height: 100%; border: 1px solid #444; background: #fff; border-radius: 4px;`;
@@ -997,6 +1145,7 @@ class ArchiveRenderer {
 
                 if (!isInline) {
                     this.previewKeydownHandler = (e) => {
+                        if (e.defaultPrevented) return;
                         if (e.key === 'Escape' || e.key === 'Backspace') {
                             e.preventDefault();
                             this.revertToListView(archivePath, targetContainer);
@@ -1241,18 +1390,39 @@ class ArchiveRenderer {
                         document.addEventListener('keydown', this.previewKeydownHandler);
                     }
                 } else {
+                    const statusSpan = document.createElement('span');
+                    statusSpan.className = 'archive-panel-status';
+                    statusSpan.style.cssText = 'font-style: italic; color: #4ecdc4; font-size: 12px; margin-left: 8px; white-space: nowrap;';
+                    controls.appendChild(statusSpan);
+
+                    const stage = document.createElement('div');
+                    stage.className = 'archive-image-stage';
+                    stage.style.cssText = 'flex: 1; min-height: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; position: relative;';
                     const img = document.createElement('img');
-                    img.style.cssText = `max-width: 100%; max-height: calc(100% - 50px); object-fit: contain; display: block; margin: auto; border: 1px solid #444; border-radius: 4px;`;
-                    previewContainer.appendChild(img);
+                    img.style.cssText = `max-width: 100%; max-height: 100%; object-fit: contain; display: block; border: 1px solid #444; border-radius: 4px; transform-origin: 0 0; transition: transform 0.25s ease;`;
+                    stage.appendChild(img);
+                    previewContainer.appendChild(stage);
 
                     const blob = await response.blob();
                     const url = URL.createObjectURL(blob);
+                    this.previewObjectUrl = url;
+                    this.panelImg = img;
+                    this.panelStage = stage;
+                    this.panelStatusEl = statusSpan;
+                    this.panelKey = `zip:${archivePath}:${filePath}`;
                     img.src = url;
+
+                    this.setupImagePanelInteractions();
                     if (!isInline) {
                         this.previewKeydownHandler = (e) => this.handlePreviewKeys(e, archivePath, targetContainer, url, fileIndex);
                         document.addEventListener('keydown', this.previewKeydownHandler);
                     }
-                    img.onload = () => URL.revokeObjectURL(url);
+                    if (enterPanelMode) {
+                        try { await img.decode(); } catch (e) { /* decode fallback */ }
+                        if (this.panelImg === img) {
+                            await this.enterImagePanelMode(enterPanelMode === 'last' ? -1 : 0);
+                        }
+                    }
                 }
             }
 
@@ -1263,6 +1433,168 @@ class ArchiveRenderer {
             } else {
                 alert(`Error previewing file: ${error.message}`);
             }
+        }
+    }
+
+    navigateArchiveEntry(step, extensions, archivePath, targetContainer, { fullView = true, enterPanelMode = null } = {}) {
+        const files = this.archiveFiles;
+        if (!files || !files.length || this.previewIndex < 0) return false;
+        const extOf = (name) => (name.includes('.') ? name.split('.').pop().toLowerCase() : '');
+        for (let k = 1; k < files.length; k++) {
+            const idx = (((this.previewIndex + step * k) % files.length) + files.length) % files.length;
+            const file = files[idx];
+            if (file.isDirectory) continue;
+            if (extensions && extensions.length && !extensions.includes(extOf(file.name))) continue;
+            const nextFilePath = this.currentPath ? `${this.currentPath}/${file.name}` : file.name;
+            this.previewFile(archivePath, nextFilePath, file.name, idx, { fullView, enterPanelMode });
+            return true;
+        }
+        return false;
+    }
+
+    setupImagePanelInteractions() {
+        this.panelMouseDown = (e) => {
+            if (e.button !== 0 || !this.panelMode || !this.panView || !this.panelImg || !this.panelStage) return;
+            if (!this.panelStage.contains(e.target)) return;
+            e.preventDefault();
+            this.drag = { x: e.clientX, y: e.clientY, tx: this.panView.tx, ty: this.panView.ty };
+            this.panelImg.style.transition = 'none';
+            this.panelImg.style.cursor = 'grabbing';
+        };
+        this.panelMouseMove = (e) => {
+            if (!this.drag || !this.panelImg) return;
+            this.panView.tx = this.drag.tx + e.clientX - this.drag.x;
+            this.panView.ty = this.drag.ty + e.clientY - this.drag.y;
+            this.panelImg.style.transform = `translate(${this.panView.tx}px, ${this.panView.ty}px) scale(${this.panView.scale})`;
+        };
+        this.panelMouseUp = () => {
+            if (!this.drag) return;
+            this.drag = null;
+            if (this.panelImg) {
+                this.panelImg.style.transition = 'transform 0.25s ease';
+                this.panelImg.style.cursor = this.panelMode ? 'grab' : '';
+            }
+        };
+        this.panelWingsHandler = () => {
+            if (this.panelMode && this.panels) {
+                setTimeout(() => this.showImagePanel(this.panelIndex), 0);
+            }
+        };
+        document.addEventListener('mousedown', this.panelMouseDown);
+        document.addEventListener('mousemove', this.panelMouseMove);
+        document.addEventListener('mouseup', this.panelMouseUp);
+        window.addEventListener('wings-changed', this.panelWingsHandler);
+    }
+
+    async enterImagePanelMode(startIndex = 0) {
+        const helper = window.ComicPanelHelper;
+        const img = this.panelImg;
+        if (!helper || !img || !img.src) return;
+        try { await img.decode(); } catch (e) { /* keep going */ }
+        if (this.panelImg !== img) return;
+
+        this.panelMode = true;
+        this.panels = helper.detectPanels(img);
+        this.panelsFromAI = false;
+        const idx = startIndex < 0 ? this.panels.length - 1 : startIndex;
+        this.showImagePanel(idx);
+        this.requestImageAIPanels(img, startIndex < 0);
+    }
+
+    exitImagePanelMode() {
+        if (this.aiPanelAbort) {
+            this.aiPanelAbort.abort('exit');
+            this.aiPanelAbort = null;
+        }
+        if (this.panelImg) {
+            this.panelImg.style.transform = '';
+            this.panelImg.style.cursor = '';
+        }
+        if (this.panelStatusEl) this.panelStatusEl.textContent = '';
+        this.panelMode = false;
+        this.panels = null;
+        this.panelIndex = -1;
+        this.panelsFromAI = false;
+        this.panView = null;
+        this.drag = null;
+    }
+
+    async requestImageAIPanels(img, jumpToLast = false) {
+        const helper = window.ComicPanelHelper;
+        if (!helper || !this.panelKey) return;
+        if (this.aiPanelAbort) this.aiPanelAbort.abort('superseded');
+        const abort = new AbortController();
+        this.aiPanelAbort = abort;
+        const key = this.panelKey;
+        if (this.panelStatusEl) this.panelStatusEl.textContent = `${this.panelStatusEl.textContent} · AI…`;
+        try {
+            const res = await helper.fetchAIPanels(img, key, { signal: abort.signal });
+            if (abort.signal.aborted || !this.panelMode || this.panelImg !== img) return;
+            if (res && res.panels) {
+                this.panels = res.panels;
+                this.panelsFromAI = true;
+                const targetIdx = jumpToLast ? res.panels.length - 1 : Math.min(Math.max(this.panelIndex, 0), res.panels.length - 1);
+                this.showImagePanel(targetIdx);
+            } else {
+                this.showImagePanel(this.panelIndex);
+            }
+        } catch (err) {
+            if (err?.name !== 'AbortError') {
+                window.logger.warn('[ArchiveRenderer] AI panels failed:', err?.message || err);
+                if (this.panelMode && this.panelImg === img) this.showImagePanel(this.panelIndex);
+            }
+        }
+    }
+
+    showImagePanel(index) {
+        const helper = window.ComicPanelHelper;
+        if (!helper || !this.panelImg || !this.panelStage || !this.panels || !this.panels.length) return;
+        this.panelIndex = Math.max(0, Math.min(index, this.panels.length - 1));
+        this.panView = helper.applyPanelTransform(this.panelImg, this.panelStage, this.panels[this.panelIndex]);
+        if (this.panelStatusEl) {
+            this.panelStatusEl.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`;
+        }
+    }
+
+    async nextImagePanel(archivePath, contentOther) {
+        if (!this.panelImg) return;
+        if (!this.panelMode) {
+            await this.enterImagePanelMode(0);
+            return;
+        }
+        if (this.panels && this.panelIndex + 1 < this.panels.length) {
+            this.showImagePanel(this.panelIndex + 1);
+            return;
+        }
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            const imgExts = ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp'];
+            const fullView = Boolean(this.previewKeydownHandler);
+            this.navigateArchiveEntry(1, imgExts, archivePath, contentOther, { fullView, enterPanelMode: 'first' });
+        } finally {
+            this.panelNavBusy = false;
+        }
+    }
+
+    async previousImagePanel(archivePath, contentOther) {
+        if (!this.panelImg) return;
+        if (!this.panelMode) {
+            await this.enterImagePanelMode(0);
+            return;
+        }
+        if (this.panelIndex > 0) {
+            this.showImagePanel(this.panelIndex - 1);
+            return;
+        }
+        if (this.panelNavBusy) return;
+        this.panelNavBusy = true;
+        try {
+            const imgExts = ['jpg', 'jpeg', 'jfif', 'pjpeg', 'pjp', 'png', 'gif', 'webp', 'bmp'];
+            const fullView = Boolean(this.previewKeydownHandler);
+            this.navigateArchiveEntry(-1, imgExts, archivePath, contentOther, { fullView, enterPanelMode: 'last' });
+        } finally {
+            this.panelNavBusy = false;
         }
     }
 
@@ -1299,22 +1631,63 @@ class ArchiveRenderer {
 
         switch (e.key) {
             case 'Escape':
+                e.preventDefault();
+                if (this.panelMode) {
+                    this.exitImagePanelMode();
+                } else {
+                    this.revertToListView(archivePath, contentOther);
+                }
+                break;
             case 'Backspace':
                 e.preventDefault();
                 this.revertToListView(archivePath, contentOther);
                 break;
+            case '.':
+                if (this.panelImg) {
+                    e.preventDefault();
+                    this.nextImagePanel(archivePath, contentOther);
+                }
+                break;
+            case ',':
+                if (this.panelImg) {
+                    e.preventDefault();
+                    this.previousImagePanel(archivePath, contentOther);
+                }
+                break;
+            case '0':
+                if (this.panelImg) {
+                    e.preventDefault();
+                    if (!this.panelMode) this.enterImagePanelMode(0);
+                    else this.showImagePanel(0);
+                }
+                break;
             case 'ArrowLeft':
+            case 'a':
                 e.preventDefault();
                 navigate('prev');
                 break;
             case 'ArrowRight':
+            case 'd':
                 e.preventDefault();
                 navigate('next');
+                break;
+            case 'n':
+            case 'N':
+                if (e.ctrlKey || e.altKey || e.metaKey) break;
+                e.preventDefault();
+                this.navigateArchiveEntry(1, null, archivePath, contentOther, { fullView: true });
+                break;
+            case 'p':
+            case 'P':
+                if (e.ctrlKey || e.altKey || e.metaKey) break;
+                e.preventDefault();
+                this.navigateArchiveEntry(-1, null, archivePath, contentOther, { fullView: true });
                 break;
         }
     }
 
     async revertToListView(archivePath, contentOther) {
+        this.cleanupPreviewPanel();
         if (this.previewKeydownHandler) {
             document.removeEventListener('keydown', this.previewKeydownHandler);
             this.previewKeydownHandler = null;
@@ -1377,6 +1750,46 @@ class ArchiveRenderer {
                     if (this.currentPath !== '') {
                         const parentPath = this.currentPath.split('/').slice(0, -1).join('/');
                         this.loadArchiveContents(this.currentArchive, parentPath, contentArea, pathDisplay, backBtn);
+                    }
+                    return;
+                case '.':
+                    if (this.panelImg) {
+                        event.preventDefault();
+                        this.nextImagePanel(this.currentArchive || archivePath, this.previewPane || document.getElementById('content-other'));
+                        return;
+                    }
+                    break;
+                case ',':
+                    if (this.panelImg) {
+                        event.preventDefault();
+                        this.previousImagePanel(this.currentArchive || archivePath, this.previewPane || document.getElementById('content-other'));
+                        return;
+                    }
+                    break;
+                case '0':
+                    if (this.panelImg) {
+                        event.preventDefault();
+                        if (!this.panelMode) this.enterImagePanelMode(0);
+                        else this.showImagePanel(0);
+                        return;
+                    }
+                    break;
+                case 'Escape':
+                    if (this.panelMode) {
+                        event.preventDefault();
+                        this.exitImagePanelMode();
+                        return;
+                    }
+                    break;
+                case 'n':
+                case 'N':
+                case 'p':
+                case 'P':
+                    if (event.ctrlKey || event.altKey || event.metaKey) break;
+                    event.preventDefault();
+                    if (window.fileExplorer && window.fileExplorer.openAdjacentFile) {
+                        const name = this.getBaseName(this.currentArchive || archivePath);
+                        window.fileExplorer.openAdjacentFile(name, event.key.toLowerCase() === 'n' ? 1 : -1, ['cbz', 'cbr', 'zip', 'rar', '7z']);
                     }
                     return;
             }
