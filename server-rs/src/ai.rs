@@ -231,6 +231,8 @@ impl Analyzer {
                 "total_time": started.elapsed().as_secs_f64(),
                 "input_tokens": result.pointer("/usage/prompt_tokens").and_then(Value::as_u64).unwrap_or(0),
                 "output_tokens": result.pointer("/usage/completion_tokens").and_then(Value::as_u64).unwrap_or(0),
+                // USD, when the provider reports it (OpenRouter does)
+                "cost": result.pointer("/usage/cost").and_then(Value::as_f64),
                 "cached": choice.get("finish_reason").and_then(Value::as_str) == Some("cached"),
             })),
             ..Default::default()

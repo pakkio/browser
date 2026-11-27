@@ -1553,6 +1553,7 @@ class ArchiveRenderer {
             if (res && res.panels) {
                 this.panels = res.panels;
                 this.panelsFromAI = true;
+                this.panelsCost = res.cost;
                 const targetIdx = jumpToLast ? res.panels.length - 1 : Math.min(Math.max(this.panelIndex, 0), res.panels.length - 1);
                 this.showImagePanel(targetIdx);
             } else {
@@ -1572,7 +1573,7 @@ class ArchiveRenderer {
         this.panelIndex = Math.max(0, Math.min(index, this.panels.length - 1));
         this.panView = helper.applyPanelTransform(this.panelImg, this.panelStage, this.panels[this.panelIndex]);
         if (this.panelStatusEl) {
-            this.panelStatusEl.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`;
+            this.panelStatusEl.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${window.ComicPanelHelper.aiLabel(this.panelsFromAI, this.panelsCost)}`;
         }
     }
 

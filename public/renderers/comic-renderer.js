@@ -21,6 +21,8 @@ class ComicRenderer {
         this.panelIndex = -1;
         this.panelsFromAI = false;
         this.aiPanelCache = new Map(); // "path:page" -> panels the AI found
+        this.aiPanelCost = new Map(); // "path:page" -> what finding them cost, in USD
+        this.panelsCost = null; // cost of the panels shown now, when the provider reported one
         this.busyTasks = new Map(); // id -> { text, since }: what the hourglass badge is showing
         this.busyTimer = null;
     }
@@ -266,6 +268,7 @@ class ComicRenderer {
         this.panels = this.detectPanels(img);
         this.panelIndex = -1;
         this.panelsFromAI = false;
+        this.panelsCost = null;
         this.requestAIPanels(img);
     }
 
@@ -320,12 +323,17 @@ class ComicRenderer {
                     setTimeout(() => this.clearBusy('ai-note'), 10000);
                     return;
                 }
-                panels = (await response.json()).panels;
+                const answer = await response.json();
+                panels = answer.panels;
                 if (!Array.isArray(panels) || panels.length === 0) {
                     clearBusy();
                     return;
                 }
                 this.aiPanelCache.set(key, panels);
+                if (typeof answer.cost === 'number') {
+                    this.aiPanelCost.set(key, answer.cost);
+                    window.ComicPanelHelper.addCost(answer.cost);
+                }
             } catch (error) {
                 clearBusy();
                 if (error.name !== 'AbortError') {
@@ -342,6 +350,7 @@ class ComicRenderer {
         if (this.isCleaningUp || !this.panelMode || this.currentPage !== page || this.currentFilePath !== filePath) return;
         this.panels = panels;
         this.panelsFromAI = true;
+        this.panelsCost = this.aiPanelCost.get(key) ?? null;
         this.showPanel(Math.min(Math.max(this.panelIndex, 0), panels.length - 1));
     }
 
@@ -471,7 +480,8 @@ class ComicRenderer {
 
         const statusElement = document.querySelector('#comic-status');
         if (statusElement) {
-            statusElement.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`;
+            const source = window.ComicPanelHelper.aiLabel(this.panelsFromAI, this.panelsCost);
+            statusElement.textContent = `Panel ${this.panelIndex + 1}/${this.panels.length}${source}`;
         }
     }
 
@@ -1680,7 +1690,26 @@ class ComicRenderer {
 // Shared panel detection and zoom helpers reused by ArchiveRenderer (images in ZIP) and PDFRenderer
 window.ComicPanelHelper = (() => {
     const cache = new Map();
+    const costs = new Map(); // key -> what the AI charged for that page, in USD
     let pausedUntil = 0;
+    let sessionCost = 0; // USD spent on AI panel detection since the page was loaded
+
+    function addCost(usd) {
+        sessionCost += usd;
+    }
+
+    /** "$0", "$0.00021", "$0.012": enough digits to see what a cheap call cost. */
+    function formatCost(usd) {
+        if (!usd) return '$0';
+        return `$${usd < 0.01 ? usd.toPrecision(2).replace(/\.?0+$/, '') : usd.toFixed(3)}`;
+    }
+
+    /** Status suffix for panels: " (AI)", or " (AI · $0.0002, session $0.0011)" when the cost is known. */
+    function aiLabel(fromAI, cost) {
+        if (!fromAI) return '';
+        if (typeof cost !== 'number') return ' (AI)';
+        return ` (AI · ${formatCost(cost)}, session ${formatCost(sessionCost)})`;
+    }
 
     function detectPanels(el) {
         return ComicRenderer.prototype.detectPanels.call(null, el);
@@ -1723,7 +1752,7 @@ window.ComicPanelHelper = (() => {
 
     async function fetchAIPanels(el, key, { signal } = {}) {
         const hit = cache.get(key);
-        if (hit) return { panels: hit, cached: true };
+        if (hit) return { panels: hit, cached: true, cost: costs.get(key) ?? null };
         if (pausedUntil > Date.now()) return { panels: null, paused: true };
         const blob = await elementToJpeg(el);
         const response = await fetch('/api/comic-panels', {
@@ -1742,8 +1771,12 @@ window.ComicPanelHelper = (() => {
         const data = await response.json();
         const panels = data && Array.isArray(data.panels) && data.panels.length ? data.panels : null;
         if (panels) cache.set(key, panels);
-        return { panels };
+        if (panels && typeof data.cost === 'number') {
+            costs.set(key, data.cost);
+            addCost(data.cost);
+        }
+        return { panels, cost: costs.get(key) ?? null };
     }
 
-    return { detectPanels, elementToJpeg, ensureStyles, applyPanelTransform, fetchAIPanels };
+    return { detectPanels, elementToJpeg, ensureStyles, applyPanelTransform, fetchAIPanels, addCost, formatCost, aiLabel };
 })();

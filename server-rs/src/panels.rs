@@ -1,5 +1,6 @@
 //! Comic panel detection for guided reading (lib/comic-panels.js, panel-gutters.js,
-//! panel-decisions.js): gutters first (no AI), then an OpenRouter decision model, then vision LLMs.
+//! panel-decisions.js, panel-opencv.js): gutters first (no AI), then the comics-panel OpenCV
+//! detector, then an OpenRouter decision model, then vision LLMs.
 
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -313,6 +314,7 @@ pub struct PanelState {
 struct Found {
     panels: Vec<Value>,
     model: Value,
+    cost: Option<f64>,
 }
 
 /// Ask the models in turn until one gives usable panels. A single full-page panel from a light
@@ -321,13 +323,18 @@ async fn ask_models(a: &Analyzer, messages: &Value, models: Vec<Option<String>>,
     let mut queue: std::collections::VecDeque<Option<String>> = models.into();
     let mut full_page: Option<Found> = None;
     let mut last_error = "No AI provider configured".to_string();
+    let mut cost: Option<f64> = None;
+    let priced = |f: Option<Found>, cost: Option<f64>| f.map(|f| Found { cost, ..f });
     while let Some(model) = queue.pop_front() {
         let r = a
             .request(messages, &Options { model: model.clone(), temperature: Some(0.1), max_tokens: Some(4000), json_object: true })
             .await;
+        if let Some(c) = r.stats.as_ref().and_then(|s| s["cost"].as_f64()) {
+            cost = Some(cost.unwrap_or(0.0) + c);
+        }
         let panels = if r.success { r.content.as_deref().and_then(parse_panels) } else { None };
         if let Some(panels) = panels {
-            let found = Found { panels, model: r.stats.as_ref().map(|s| s["model"].clone()).unwrap_or(Value::Null) };
+            let found = Found { panels, model: r.stats.as_ref().map(|s| s["model"].clone()).unwrap_or(Value::Null), cost: None };
             if let Some(s) = strong.as_ref() {
                 if is_full_page(&found.panels) && full_page.is_none() && model.as_ref() != Some(s) {
                     crate::info!("Comic panel detection: one full-page panel, asking {}", s);
@@ -338,7 +345,7 @@ async fn ask_models(a: &Analyzer, messages: &Value, models: Vec<Option<String>>,
                     continue;
                 }
             }
-            return (Some(found), last_error);
+            return (priced(Some(found), cost), last_error);
         }
         last_error = if r.success { "The AI reply held no usable panels".into() } else { r.error.unwrap_or_default() };
         crate::warn!("Comic panel detection with {} failed: {}", model.as_deref().unwrap_or("default model"), last_error);
@@ -347,7 +354,7 @@ async fn ask_models(a: &Analyzer, messages: &Value, models: Vec<Option<String>>,
             break;
         }
     }
-    (full_page, last_error)
+    (priced(full_page, cost), last_error)
 }
 
 fn cache_dir() -> std::path::PathBuf {
@@ -358,7 +365,7 @@ fn env(k: &str) -> Option<String> {
     std::env::var(k).ok().filter(|v| !v.is_empty())
 }
 
-async fn decisions(app: &crate::app::App, image: &[u8]) -> Option<Vec<Value>> {
+async fn decisions(app: &crate::app::App, image: &[u8]) -> Option<(Vec<Value>, Option<f64>)> {
     let model = env("AI_VISION_DECISION_MODEL")?;
     let key = env("OPENROUTER_API_KEY")?.trim().to_string();
     if app.panels.decisions_blocked_until.lock().unwrap().map(|t| Instant::now() < t).unwrap_or(false) {
@@ -374,7 +381,7 @@ async fn decisions(app: &crate::app::App, image: &[u8]) -> Option<Vec<Value>> {
     match resp {
         Ok(r) if r.status().is_success() => {
             let v: Value = r.json().await.ok()?;
-            parse_decisions(&v["answers"])
+            parse_decisions(&v["answers"]).map(|p| (p, v.pointer("/usage/cost").and_then(Value::as_f64)))
         }
         Ok(r) => {
             *app.panels.decisions_blocked_until.lock().unwrap() = Some(Instant::now() + Duration::from_secs(600));
@@ -386,6 +393,144 @@ async fn decisions(app: &crate::app::App, image: &[u8]) -> Option<Vec<Value>> {
             None
         }
     }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Tier 1b: the comics-panel OpenCV detector (lib/panel-opencv.js)
+
+const DETECTOR_TIMEOUT: Duration = Duration::from_secs(90);
+
+/// Width and height from a JPEG's start-of-frame marker.
+pub fn jpeg_size(buf: &[u8]) -> Option<(f64, f64)> {
+    if buf.len() < 4 || buf[0] != 0xff || buf[1] != 0xd8 {
+        return None;
+    }
+    let mut i = 2;
+    while i + 9 < buf.len() {
+        if buf[i] != 0xff {
+            i += 1;
+            continue;
+        }
+        let marker = buf[i + 1];
+        if (0xc0..=0xcf).contains(&marker) && ![0xc4, 0xc8, 0xcc].contains(&marker) {
+            let h = u16::from_be_bytes([buf[i + 5], buf[i + 6]]);
+            let w = u16::from_be_bytes([buf[i + 7], buf[i + 8]]);
+            return Some((w as f64, h as f64));
+        }
+        if marker == 0xd8 || marker == 0x01 || (0xd0..=0xd7).contains(&marker) {
+            i += 2;
+            continue;
+        }
+        i += 2 + u16::from_be_bytes([buf[i + 2], buf[i + 3]]) as usize;
+    }
+    None
+}
+
+/// The detector's pixel boxes as page fractions; a cover or ad page is one full-page panel.
+pub fn convert_detected(detected: &Value, page_info: &Value, size: Option<(f64, f64)>) -> Option<Vec<Value>> {
+    if let Some(t) = page_info["page_type"].as_str() {
+        if t != "comic" {
+            return Some(vec![json!({ "x": 0, "y": 0, "w": 1, "h": 1 })]);
+        }
+    }
+    let (width, height) = size?;
+    let mut panels = Vec::new();
+    for p in detected.as_array()? {
+        let Some(b) = p["bbox"].as_array().filter(|b| b.len() == 4) else { continue };
+        let v: Vec<f64> = b.iter().map(js_number).collect();
+        let x = (v[0] / width).clamp(0.0, 1.0);
+        let y = (v[1] / height).clamp(0.0, 1.0);
+        let w = (1.0 - x).min(v[2] / width);
+        let h = (1.0 - y).min(v[3] / height);
+        if [x, y, w, h].iter().all(|n| n.is_finite()) && w >= MIN_SIDE && h >= MIN_SIDE {
+            panels.push(panel_json(round4(x), round4(y), round4(w), round4(h)));
+        }
+    }
+    if panels.is_empty() { None } else { Some(panels) }
+}
+
+fn detector_script(setting: &str) -> std::path::PathBuf {
+    let p = std::path::absolute(setting).unwrap_or_else(|_| setting.into());
+    if p.extension().map(|e| e.eq_ignore_ascii_case("py")).unwrap_or(false) { p } else { p.join("panel_detector.py") }
+}
+
+async fn opencv_detector(image: &[u8], hash: &str) -> Option<(Vec<Value>, Option<f64>)> {
+    let script = detector_script(&env("COMIC_PANELS_DETECTOR")?);
+    if !script.is_file() {
+        return None;
+    }
+    let size = jpeg_size(image)?;
+    let work = std::env::temp_dir().join(format!("comic-panel-{}-{}", std::process::id(), hash));
+    tokio::fs::create_dir_all(&work).await.ok()?;
+    let result = run_detector(&script, &work, image, size).await;
+    let _ = tokio::fs::remove_dir_all(&work).await;
+    result
+}
+
+async fn run_detector(script: &std::path::Path, work: &std::path::Path, image: &[u8], size: (f64, f64)) -> Option<(Vec<Value>, Option<f64>)> {
+    let image_path = work.join("page.jpg");
+    tokio::fs::write(&image_path, image).await.ok()?;
+    let python = env("COMIC_PANELS_PYTHON").unwrap_or_else(|| if cfg!(windows) { "python".into() } else { "python3".into() });
+    let mut cmd = crate::util::command(&python);
+    cmd.arg(script).arg(&image_path).arg("-o").arg(work).args(["--json", "--no-crops"]);
+    cmd.env("PYTHONIOENCODING", "utf-8").env_remove("OPENROUTER_API_KEY");
+    if let Some(script_dir) = script.parent() {
+        cmd.current_dir(script_dir);
+    }
+    if let Some(key) = env("OPENROUTER_API_KEY").map(|k| k.trim().to_string()).filter(|k| !k.is_empty()) {
+        let llm_cache = cache_dir().join("llm");
+        cmd.args(["--llm-verify", "--llm-page-type", "--llm-cache"]).arg(llm_cache).env("OPENROUTER_API_KEY", key);
+        if let Some(model) = env("COMIC_PANELS_DETECTOR_MODEL") {
+            cmd.args(["--llm-model", &model]);
+        }
+    }
+    let child = cmd.stdout(std::process::Stdio::null()).stderr(std::process::Stdio::piped()).spawn();
+    let out = match child {
+        Ok(c) => tokio::time::timeout(DETECTOR_TIMEOUT, c.wait_with_output()).await,
+        Err(e) => {
+            crate::warn!("Comic panel OpenCV detector failed: {}", e);
+            return None;
+        }
+    };
+    let cost = match out {
+        Ok(Ok(o)) if o.status.success() => parse_llm_cost(&String::from_utf8_lossy(&o.stderr)),
+        Ok(Ok(o)) => {
+            let err = String::from_utf8_lossy(&o.stderr);
+            crate::warn!("Comic panel OpenCV detector failed: {}", err.trim().lines().last().unwrap_or(""));
+            return None;
+        }
+        Ok(Err(e)) => {
+            crate::warn!("Comic panel OpenCV detector failed: {}", e);
+            return None;
+        }
+        Err(_) => {
+            crate::warn!("Comic panel OpenCV detector timed out");
+            return None;
+        }
+    };
+    let read = |name: &str| {
+        std::fs::read_to_string(work.join(name)).ok().and_then(|s| serde_json::from_str::<Value>(&s).ok()).unwrap_or(Value::Null)
+    };
+    let panels = convert_detected(&read("page_panels.json"), &read("page_page.json"), Some(size));
+    if panels.is_none() {
+        crate::info!("Comic panel OpenCV detector found no panels");
+    }
+    panels.map(|p| (p, cost))
+}
+
+/// USD spent by the detector's model, from its "LLM: 2 call(s), 1 cache hit(s), ~$0.00031" log line.
+pub fn parse_llm_cost(log: &str) -> Option<f64> {
+    let re = regex::Regex::new(r"LLM: (\d+) call\(s\), \d+ cache hit\(s\), (?:~\$([\d.]+)|\$0)").unwrap();
+    let c = re.captures(log)?;
+    Some(c.get(2).and_then(|m| m.as_str().parse().ok()).unwrap_or(0.0))
+}
+
+/// Add what the AI cost (USD) to a reply, when the provider reported it.
+fn with_cost(mut body: Value, cost: Option<f64>) -> Value {
+    if let Some(c) = cost {
+        body["cost"] = json!(c);
+    }
+    body
 }
 
 // POST /api/comic-panels (body: the page as image/jpeg)
@@ -417,9 +562,14 @@ pub async fn detect(State(app): State<AppRef>, ctx: Ctx) -> Response {
             return json_resp(&json!({ "panels": panels, "cached": false, "source": "gutters" }));
         }
     }
-    if let Some(panels) = decisions(&app, &image).await {
+    if let Some((panels, cost)) = opencv_detector(&image, &hash).await {
         save(&panels);
-        return json_resp(&json!({ "panels": panels, "cached": false, "source": "decision", "model": env("AI_VISION_DECISION_MODEL") }));
+        return json_resp(&with_cost(json!({ "panels": panels, "cached": false, "source": "opencv" }), cost));
+    }
+    if let Some((panels, cost)) = decisions(&app, &image).await {
+        save(&panels);
+        let body = json!({ "panels": panels, "cached": false, "source": "decision", "model": env("AI_VISION_DECISION_MODEL") });
+        return json_resp(&with_cost(body, cost));
     }
 
     let mut a = Analyzer::new(app.http.clone());
@@ -480,7 +630,7 @@ pub async fn detect(State(app): State<AppRef>, ctx: Ctx) -> Response {
 
     if let Some(f) = found {
         save(&f.panels);
-        return json_resp(&json!({ "panels": f.panels, "cached": false, "model": f.model }));
+        return json_resp(&with_cost(json!({ "panels": f.panels, "cached": false, "model": f.model }), f.cost));
     }
     if is_auth_error(&last_error) {
         let detail = regex::Regex::new(r"^.*?Error:\s*").unwrap().replace(&last_error, "").trim_end_matches('.').to_string();
@@ -547,6 +697,25 @@ mod tests {
             "exists4": {"noul": 0.1}
         });
         assert_eq!(parse_decisions(&answers).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn opencv_detector_output() {
+        assert_eq!(jpeg_size(&grid_page()), Some((600.0, 800.0)));
+        assert!(jpeg_size(b"not a jpeg").is_none());
+        let detected = json!([{ "bbox": [60, 80, 300, 400] }, { "bbox": [0, 0, 2, 800] }, { "bbox": "bad" }]);
+        let p = convert_detected(&detected, &Value::Null, Some((600.0, 800.0))).unwrap();
+        assert_eq!(p, vec![json!({ "x": 0.1, "y": 0.1, "w": 0.5, "h": 0.5 })]);
+        assert!(convert_detected(&json!([]), &Value::Null, Some((1.0, 1.0))).is_none());
+        let cover = convert_detected(&json!([]), &json!({ "page_type": "cover" }), None).unwrap();
+        assert_eq!(cover, vec![json!({ "x": 0, "y": 0, "w": 1, "h": 1 })]);
+    }
+
+    #[test]
+    fn detector_llm_cost() {
+        assert_eq!(parse_llm_cost("a - INFO - LLM: 2 call(s), 1 cache hit(s), ~$0.00031 [answered by q x2]"), Some(0.00031));
+        assert_eq!(parse_llm_cost("a - INFO - LLM: 0 call(s), 3 cache hit(s), $0 [q]"), Some(0.0));
+        assert_eq!(parse_llm_cost("nothing"), None);
     }
 
     #[test]

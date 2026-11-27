@@ -398,6 +398,7 @@ class PDFRenderer {
             if (res && res.panels) {
                 this.panels = res.panels;
                 this.panelsFromAI = true;
+                this.panelsCost = res.cost;
                 this.showPanel(Math.min(Math.max(this.panelIndex, 0), res.panels.length - 1));
             }
         } catch (err) {
@@ -462,7 +463,7 @@ class PDFRenderer {
         if (!helper || !canvas || !container || !this.panels || !this.panels.length) return;
         this.panelIndex = Math.max(0, Math.min(index, this.panels.length - 1));
         this.panView = helper.applyPanelTransform(canvas, container, this.panels[this.panelIndex]);
-        this.uiManager.setStatus(`Panel ${this.panelIndex + 1}/${this.panels.length}${this.panelsFromAI ? ' (AI)' : ''}`);
+        this.uiManager.setStatus(`Panel ${this.panelIndex + 1}/${this.panels.length}${window.ComicPanelHelper.aiLabel(this.panelsFromAI, this.panelsCost)}`);
     }
 
     showPDFError(pagesContainer, error, fileName, filePath) {

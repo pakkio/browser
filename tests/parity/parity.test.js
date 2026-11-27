@@ -42,6 +42,16 @@ function pdfTools() {
   }
 }
 
+function havePython() {
+  try {
+    require('child_process').execFileSync(process.platform === 'win32' ? 'python' : 'python3', ['--version'], { stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+}
+const FAKE_DETECTOR = path.join(__dirname, 'fake_panel_detector.py');
+
 const NODE_PORT = 39101;
 const RUST_PORT = 39102;
 const haveRust = fs.existsSync(EXE);
@@ -57,7 +67,7 @@ let rust;
 
 function serverEnv(port) {
   const extra = process.env.PARITY_TOOLS_PATH ? { PATH: `${process.env.PARITY_TOOLS_PATH}${path.delimiter}${process.env.PATH}` } : {};
-  const env = { ...process.env, ...extra, PORT: String(port), AUTH: 'FALSE', AI_PROVIDER: 'none', OPENROUTER_API_KEY: '', OPENCODEGO_API_KEY: '', LMSTUDIO_URL: '', AI_VISION_DECISION_MODEL: '', SESSION_SECRET: 'parity-secret', LOG_LEVEL: 'error' };
+  const env = { ...process.env, ...extra, PORT: String(port), AUTH: 'FALSE', AI_PROVIDER: 'none', OPENROUTER_API_KEY: '', OPENCODEGO_API_KEY: '', LMSTUDIO_URL: '', AI_VISION_DECISION_MODEL: '', SESSION_SECRET: 'parity-secret', LOG_LEVEL: 'error', COMIC_PANELS_DETECTOR: havePython() ? FAKE_DETECTOR : '' };
   delete env.NODE_ENV;
   return env;
 }
@@ -404,6 +414,19 @@ describeIf('Rust server parity with the Node server', () => {
         expect(normalise(r.res.body, '')).toEqual(normalise(n.res.body, ''));
       }
       await same(a => a.post('/api/comic-panels').set('Content-Type', 'text/plain').send('x'));
+    });
+
+    (havePython() ? test : test.skip)('panel detection with the OpenCV detector', async () => {
+      // One panel filling the page has no gutters to cut, so the detector is asked
+      const page = Buffer.from(pageJpeg(1, 1, 35));
+      const hash = crypto.createHash('sha1').update(page).digest('hex');
+      const cached = path.join(os.homedir(), '.browser', 'cache', 'comic-panels', `${hash}.json`);
+      const [n, r] = await both(a => { fs.rmSync(cached, { force: true }); return a.post('/api/comic-panels').set('Content-Type', 'image/jpeg').send(page); });
+      expect(r.res.status).toBe(200);
+      expect(n.res.body.source).toBe('opencv');
+      expect(n.res.body.panels).toHaveLength(2);
+      expect(n.res.body.cost).toBe(0.0002);
+      expect(normalise(r.res.body, '')).toEqual(normalise(n.res.body, ''));
     });
   });
 

@@ -57,6 +57,13 @@ describe('panel decisions', () => {
         expect(body.questions.exists8.type).toBe('noul');
     });
 
+    test('reports what the request cost', async () => {
+        global.fetch = jest.fn().mockResolvedValue({ ok: true, json: async () => ({ answers: THREE, usage: { cost: 0.0012 } }) });
+        const onCost = jest.fn();
+        await detectPanelsByDecisions(Buffer.from('jpeg'), { model: 'm', apiKey: 'k', onCost });
+        expect(onCost).toHaveBeenCalledWith(0.0012);
+    });
+
     test('does nothing without a model or a key', async () => {
         global.fetch = jest.fn();
         expect(await detectPanelsByDecisions(Buffer.from('x'), { model: '', apiKey: 'k' })).toBeNull();

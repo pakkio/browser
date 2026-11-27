@@ -57,6 +57,23 @@ describe('comic panel detection', () => {
         expect(panels).toHaveLength(1);
     });
 
+    test('the reply carries the cost of every model call made for the page', async () => {
+        process.env.AI_VISION_MODEL = 'light';
+        process.env.AI_VISION_STRONG_MODEL = 'strong';
+        const priced = (panels, model, cost) => ({ ...reply(panels, model), stats: { model, cost } });
+        mockMakeAIRequest.mockResolvedValueOnce(priced(FULL, 'light', 0.0001)).mockResolvedValueOnce(priced(SIX, 'strong', 0.002));
+
+        const res = await runDetect();
+
+        expect(res.json.mock.calls[0][0].cost).toBeCloseTo(0.0021);
+    });
+
+    test('no cost is reported when the provider gives none', async () => {
+        mockMakeAIRequest.mockResolvedValueOnce(reply(SIX, 'light'));
+        const res = await runDetect();
+        expect(res.json.mock.calls[0][0]).not.toHaveProperty('cost');
+    });
+
     test('a full-page answer is re-asked of the strong model, whose answer wins', async () => {
         process.env.AI_VISION_MODEL = 'light';
         process.env.AI_VISION_STRONG_MODEL = 'strong';
